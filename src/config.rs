@@ -37,7 +37,26 @@ pub struct ToBinaryOpt{
 #[command(author, version, about)]
 pub enum CmdChooser{
     ToBinary(ToBinaryOpt),
-    DegreeDist(DegreeDist)
+    DegreeDist(DegreeDist),
+    MaxWeight(DegreeDist)
+}
+
+pub fn max_weight(opt: DegreeDist)
+{
+    let file = File::open(opt.input).unwrap();
+    let reader = BufReader::new(file);
+    let mut networks: Vec<Network> = bincode::deserialize_from(reader).expect("unable to deserialize");
+
+    if opt.invert{
+        networks.iter_mut().for_each(
+            |n|
+            {
+                *n = n.invert();
+            }
+        );
+    }
+
+    crate::parser::weight_dist(&mut networks, &opt.out);
 }
 
 pub fn to_binary(opt: ToBinaryOpt)

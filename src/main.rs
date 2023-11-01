@@ -11,7 +11,8 @@ fn main() {
         CmdChooser::ToBinary(opt) => {
             config::to_binary(opt)
         },
-        CmdChooser::DegreeDist(opt) => config::degree_dist(opt)
+        CmdChooser::DegreeDist(opt) => config::degree_dist(opt),
+        CmdChooser::MaxWeight(opt) => config::max_weight(opt)
     }
 }
 

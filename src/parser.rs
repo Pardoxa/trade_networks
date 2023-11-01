@@ -1,4 +1,7 @@
 use std::io::BufWriter;
+use rayon::prelude::*;
+
+use sampling::HistF64;
 
 use crate::config::write_commands_and_version;
 
@@ -216,6 +219,73 @@ impl Network{
         }
         Network { nodes: all }
     }
+
+    pub fn normalize(&mut self)
+    {
+        self.nodes.iter_mut()
+            .for_each(
+                |node|
+                {
+                    if !node.adj.is_empty() {
+                        let sum: f64 = node.adj.iter().map(|e| e.amount).sum();
+                        node.adj.iter_mut()
+                            .for_each(
+                                |e| 
+                                {
+                                    e.amount /= sum;
+                                }
+                            );
+                    }
+                }
+            )
+    }
+}
+
+pub fn weight_dist(networks: &mut [Network], out: &str){
+    let hist = HistF64::new(0.0, 1.1, 50).unwrap();
+
+    let mut hists: Vec<_> = (0..networks.len()).map(|_| hist.clone()).collect();
+
+    networks.par_iter_mut()
+        .zip(hists.par_iter_mut())
+        .for_each(
+            |(network, hist)|
+            {
+                network.normalize();
+                network.nodes.iter()
+                    .for_each(
+                        |node|
+                        {
+                            let max = node.adj.iter()
+                                .map(|v| v.amount)
+                                .max_by(f64::total_cmp);
+                            if let Some(max) = max{
+                                hist.increment_quiet(max);
+                            }
+                        }
+                    )
+            }
+        );
+
+    let file = File::create(out).expect("unable to create file");
+    let mut buf = BufWriter::new(file);
+
+    write_commands_and_version(&mut buf).unwrap();
+
+    let first = hists.first().unwrap();
+
+    for (index, (bins, hits)) in first.bin_hits_iter().enumerate()
+    {
+        let bin = bins[0] + (bins[1]-bins[0]) / 2.0;
+        write!(buf, "{bin} {hits}").unwrap();
+        for hist in hists[1..].iter()
+        {
+            let hit = hist.hist()[index];
+            write!(buf, " {hit}").unwrap();
+        }
+        writeln!(buf).unwrap();
+    }
+    println!("years: {}", networks.len());
 }
 
 pub fn degree_dist(networks: &[Network], out: &str)

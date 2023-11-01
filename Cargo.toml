@@ -11,3 +11,4 @@ serde={version="^1.0.189", features = ["derive"] }
 clap = {version = "4.4.7", features=["derive", "cargo", "color", "help"]}
 bincode = "1.3.3"
 sampling = { git = "https://github.com/Pardoxa/sampling.git", rev = "c5dc731ce2b0bb45efe2cec76553e9bdf49cb02d", default-features = false  }
+rayon = "1.8.0"
