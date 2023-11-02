@@ -1,7 +1,6 @@
 use std::{fs::File, io::{BufWriter, Write, BufReader}};
 use clap::Parser;
-
-use crate::parser::{Network, country_networks};
+use crate::network::*;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -88,7 +87,7 @@ pub fn to_binary(opt: ToBinaryOpt)
 pub fn to_country_file(opt: ToCountryBinOpt)
 {
     let networks = read_networks(&opt.bin_file);
-    let country_networks = country_networks(&networks, opt.country_file);
+    let country_networks = crate::parser::country_networks(&networks, opt.country_file);
     let file = File::create(&opt.out).unwrap();
     let buf = BufWriter::new(file);
     bincode::serialize_into(buf, &country_networks)

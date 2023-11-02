@@ -3,6 +3,7 @@ use clap::Parser;
 mod parser;
 mod config;
 use config::CmdChooser;
+mod network;
 
 fn main() {
     let option = CmdChooser::parse();
