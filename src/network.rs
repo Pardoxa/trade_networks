@@ -91,4 +91,89 @@ impl Network{
     {
         self.nodes.iter().map(|n| n.adj.len()).sum()
     }
+
+    #[allow(dead_code)]
+    /// NOTE: Untested, but should work
+    /// Only Intended for normalized networks
+    pub fn dikstra_normalized(&self, initial_node: usize) -> (Vec<f64>, Vec<DikstraState>)
+    {
+        let mut distances = vec![f64::INFINITY; self.node_count()];
+        distances[initial_node] = 0.0;
+
+        let mut visit_state = vec![false; self.node_count()];
+        
+        let mut current_index = initial_node;
+        let mut from_whom = vec![DikstraState::Unreachable; self.node_count()];
+        from_whom[initial_node] = DikstraState::Initial;
+
+        loop{
+            let current_node = &self.nodes[current_index];
+            for neighbors in current_node.adj.iter(){
+                let id = neighbors.index;
+                if !visit_state[id]{
+                    let d = distances[current_index] + (1.0 - neighbors.amount);
+                    if d < distances[id]{
+                        distances[id] = d;
+                        from_whom[id] = DikstraState::From(current_index);
+                    }
+                }
+            }
+            visit_state[current_index] = true;
+
+            let mut min_dist = f64::INFINITY;
+            let mut min_index = usize::MAX;
+            distances.iter()
+                .zip(visit_state.iter())
+                .enumerate()
+                .for_each(
+                    |(index, (&distance, visited))|
+                    {
+                        if !visited && distance < min_dist{
+                            
+                            min_dist = distance;
+                            min_index = index;
+                            
+                        }
+                    }
+                );
+            if min_dist.is_finite(){
+                current_index = min_index;
+            } else {
+                break;
+            }
+        }
+        (distances, from_whom)
+    }
+
+    /// only for normalized networks
+    pub fn my_centrality_normalized(&self) -> Vec<u32>
+    {
+        let mut centrality = vec![0; self.node_count()];
+        for i in 0..self.node_count(){
+            let (dists, path_helper) = self.dikstra_normalized(i);
+            #[allow(clippy::needless_range_loop)]
+            for j in 0..self.node_count(){
+                if dists[j].is_finite(){
+                    let mut current_id = j;
+                    loop{
+                        centrality[current_id] += 1;
+                        match path_helper[current_id] {
+                            DikstraState::From(from) => current_id = from,
+                            DikstraState::Initial => break,
+                            DikstraState::Unreachable => unreachable!()
+                        }
+                    }
+                }
+            }
+        }
+        centrality
+    }
+
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum DikstraState{
+    Unreachable,
+    Initial,
+    From(usize)
 }

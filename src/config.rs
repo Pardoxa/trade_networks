@@ -156,7 +156,7 @@ pub fn misc(opt: MiscOpt)
 
     write_commands_and_version(&mut buf).unwrap();
 
-    writeln!(buf, "#year_id node_count nodes_with_neighbors edge_count density").unwrap();
+    writeln!(buf, "#year_id node_count nodes_with_neighbors edge_count density max_my_centrality").unwrap();
 
     for (id, n) in networks.iter().enumerate()
     {
@@ -166,6 +166,12 @@ pub fn misc(opt: MiscOpt)
 
         let max = (nodes_with_neighbors-1) * nodes_with_neighbors;
         let density = edge_count as f64 / max as f64;
-        writeln!(buf, "{id} {node_count} {nodes_with_neighbors} {edge_count} {density}").unwrap();
+
+        let mut normalized = n.clone();
+        normalized.normalize();
+        let centrality = normalized.my_centrality_normalized();
+        let max_c = centrality.iter().max().unwrap();
+
+        writeln!(buf, "{id} {node_count} {nodes_with_neighbors} {edge_count} {density} {max_c}").unwrap();
     }
 }
