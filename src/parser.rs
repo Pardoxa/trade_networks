@@ -127,7 +127,7 @@ pub fn network_parser(file_name: &str, item_code: &str) -> Vec<Network>
         .for_each(
             |(id, item)|
             {
-                let code = &item.country_code;
+                let code = &item.identifier;
                 id_map.insert(code.to_owned(), id);
             }
         );
@@ -200,7 +200,7 @@ impl Network{
                 |item|
                 {
                     Node{
-                        country_code: item.country_code.clone(),
+                        identifier: item.identifier.clone(),
                         adj: Vec::new()
                     }
                 }
@@ -238,6 +238,21 @@ impl Network{
                     }
                 }
             )
+    }
+
+    pub fn node_count(&self) -> usize
+    {
+        self.nodes.len()
+    }
+
+    pub fn nodes_with_neighbors(&self) -> usize
+    {
+        self.nodes.iter().filter(|n| !n.adj.is_empty()).count()
+    }
+
+    pub fn edge_count(&self) -> usize
+    {
+        self.nodes.iter().map(|n| n.adj.len()).sum()
     }
 }
 
@@ -335,9 +350,117 @@ pub fn degree_dist(networks: &[Network], out: &str)
 
 }
 
+
+pub fn country_networks(networks: &[Network], code_file: String) -> Vec<Network>
+{
+    let file = File::open(code_file)
+        .unwrap();
+    let buf_reader = BufReader::new(file);
+    let lines = buf_reader
+        .lines()
+        .map(|r| r.unwrap())
+        .skip(1);
+
+    let mut code_country_map: BTreeMap<_,_> = BTreeMap::new();
+    let mut country_set: BTreeSet<_> = BTreeSet::new();
+
+    for line in lines {
+        let mut s_iter = line.split(',');
+        let code = s_iter.next().unwrap();
+        let name = s_iter.nth(1).unwrap();
+
+        code_country_map.insert(code.to_owned(), name.to_owned());
+    }
+
+    for n in networks.iter()
+    {
+        for node in n.nodes.iter(){
+            let country = code_country_map.get(node.identifier.as_str()).unwrap();
+            country_set.insert(country.as_str());
+        }
+    }
+
+    let country_network = country_set
+        .into_iter()
+        .map(
+            |entry|
+            {
+                Node{
+                    identifier: entry.to_string(),
+                    adj: Vec::new()
+                }
+            }
+        ).collect();
+    let network = Network{
+        nodes: country_network
+    };
+
+    let mut index_map = BTreeMap::new();
+    for (idx, node) in network.nodes.iter().enumerate()
+    {
+        index_map.insert(node.identifier.as_str(), idx);
+    }
+
+    networks
+        .iter()
+        .map(
+            |old_network|
+            {
+                let mut n = network.clone();
+
+                for node in old_network.nodes.iter()
+                {
+                    let this_country = code_country_map.get(&node.identifier)
+                        .expect("identifyer invalid");
+                    let this_index = *index_map.get(this_country.as_str())
+                        .expect("invalid identifier");
+                    let adj = &mut n.nodes.get_mut(this_index).unwrap().adj;
+                    for others in node.adj.iter(){
+                        let other_code = old_network
+                            .nodes[others.index]
+                            .identifier.as_str();
+                        let other_country = code_country_map.get(other_code)
+                            .expect("country_code_unknown");
+                        let index = *index_map.get(other_country.as_str())
+                            .expect("other country identifier invalid");
+                        adj.push(
+                            Edge { index, amount: others.amount }
+                        );
+                    }
+                }
+
+                n.nodes.iter_mut()
+                    .for_each(
+                        |node|
+                        {
+                            if !node.adj.is_empty(){
+                                node.adj.sort_unstable_by_key(|item| item.index);
+                                
+                                let mut iter = node.adj.iter();
+                                let first = iter.next().unwrap();
+                                let mut new_adj = vec![first.to_owned()];
+                                for edge in iter 
+                                {
+                                    let last_entry = new_adj.last_mut().unwrap();
+                                    if edge.index == last_entry.index{
+                                        last_entry.amount += edge.amount;
+                                    } else {
+                                        new_adj.push(edge.to_owned());
+                                    }
+                                }
+                                node.adj = new_adj;
+                            }
+                        }
+                    );
+                n
+            }
+        ).collect()
+
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node{
-    country_code: String,
+    identifier: String,
     adj: Vec<Edge>
 }
 
@@ -345,7 +468,7 @@ impl Node {
     pub fn new(code: String) -> Self
     {
         Self{
-            country_code: code,
+            identifier: code,
             adj: Vec::new()
         }
     }

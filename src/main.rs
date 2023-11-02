@@ -12,7 +12,9 @@ fn main() {
             config::to_binary(opt)
         },
         CmdChooser::DegreeDist(opt) => config::degree_dist(opt),
-        CmdChooser::MaxWeight(opt) => config::max_weight(opt)
+        CmdChooser::MaxWeight(opt) => config::max_weight(opt),
+        CmdChooser::ToCountryNetwork(opt) => config::to_country_file(opt),
+        CmdChooser::Misc(misc_opt) => config::misc(misc_opt)
     }
 }
 
