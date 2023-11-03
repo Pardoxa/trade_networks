@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -30,6 +32,46 @@ pub struct Network{
 }
 
 impl Network{
+    pub fn without_unconnected_nodes(&self) -> Self
+    {
+        let nodes = self.nodes
+            .iter()
+            .filter_map(
+                |node|
+                {
+                    if node.adj.is_empty(){
+                        None
+                    } else {
+                        Some(
+                            Node{identifier: node.identifier.clone(), adj: Vec::new()}
+                        )
+                    }
+                }
+            ).collect();
+        // I still need to add the nodes that are pointed to but point at noone!
+
+        let mut network = Network{nodes};
+        let mut new_map = BTreeMap::new();
+
+        for (index, node) in network.nodes.iter().enumerate(){
+            new_map.insert(node.identifier.clone(), index);
+        }
+
+        for old_node in self.nodes.iter(){
+            if old_node.adj.is_empty(){
+                continue;
+            }
+            let this_id = *new_map.get(old_node.identifier.as_str()).unwrap();
+            let mut adj = &mut network.nodes[this_id].adj;
+            for edge in old_node.adj.iter()
+            {
+
+            }
+        }
+
+        todo!()
+    }
+
     pub fn invert(&self) -> Self
     {
         let mut all: Vec<_> = self.nodes.iter()
