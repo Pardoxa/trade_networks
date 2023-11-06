@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, num::NonZeroU32};
 use net_ensembles::Graph;
 use serde::{Serialize, Deserialize};
 
@@ -19,7 +19,7 @@ impl Node {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Edge{
     pub index: usize,
     pub amount: f64
@@ -327,6 +327,161 @@ impl Network{
         max_size
     }
 
+    /*pub fn scc(&self){
+        //tarjan 
+        let mut counter = NonZeroU32::new(1).unwrap();
+        let mut next_counter = || {
+            let c = counter;
+            counter = counter.saturating_add(1);
+            TarjanNumberHelper::Visited(c)
+        };
+
+        let mut stack = Vec::new();
+        let mut numbers = vec![TarjanNumberHelper::NotVisited; self.node_count()];
+        let mut low_link = vec![0_u32; self.node_count()];
+
+        let mut fronds = Vec::new();
+        let mut cross_links = Vec::new();
+        let mut tree_roots = Vec::new();
+
+        for i in 0..self.node_count(){
+            if numbers[i].is_not_visited(){
+                // new search tree
+                tree_roots.push(i);
+                stack.push(i);
+                numbers[i] = next_counter();
+                let number_border = match numbers[i] {
+                    TarjanNumberHelper::NotVisited => unreachable!(),
+                    TarjanNumberHelper::Visited(v) => v   
+                };
+                while let Some(index) = stack.pop()
+                {
+                    let node = &self.nodes[index];
+                    for edge in node.adj.iter() {
+                        match numbers[edge.index]{
+                            TarjanNumberHelper::NotVisited => {
+                                numbers[edge.index] = next_counter();
+                                stack.push(edge.index);
+                            },
+                            TarjanNumberHelper::Visited(num) => if num >= number_border {
+                                // connects to ancestor -> is frond
+                                fronds.push(DirectedEdge{from: index, to: edge.index});
+                            },
+                            _ => {
+                                // not part of this search tree, was part of previous search, i think this is now a crosslink
+                                cross_links.push(DirectedEdge{from: index, to: edge.index});
+                            }
+                        }
+                    }
+                }
+            }
+            
+        }
+        todo!()
+    }*/
+
+    pub fn scc_recursive(&self) -> Vec<Vec<usize>>
+    {
+        let mut counter = NonZeroU32::new(1).unwrap();
+        
+
+        let mut stack: Vec<usize> = Vec::new();
+        let mut numbers = vec![TarjanNumberHelper::NotVisited; self.node_count()];
+        let mut low_link = vec![u32::MAX; self.node_count()];
+
+        let mut components: Vec<Vec<usize>> = Vec::new();
+
+        fn rec(n: &Network, id: usize, counter: &mut NonZeroU32, low: &mut [u32], num: &mut [TarjanNumberHelper], stack: &mut Vec<usize>, components: &mut Vec<Vec<usize>>) {
+            let this_num = *counter;
+            *counter = counter.saturating_add(1);
+            low[id] = this_num.get();
+            num[id] = TarjanNumberHelper::Visited(this_num);
+            stack.push(id);
+
+            for edge in n.nodes[id].adj.iter(){
+                match num[edge.index]{
+                    TarjanNumberHelper::NotVisited => {
+                        rec(n, edge.index, counter, low, num, stack, components);
+                        low[id] = low[id].min(low[edge.index]);
+                    },
+                    TarjanNumberHelper::Visited(num) if num < this_num => {
+                        // is frond or cross-link
+                        if stack.contains(&edge.index) {
+                            low[id] = low[id].min(num.get())
+                        }
+                    },
+                    _ => {
+                        // edge is to be ignored
+                        
+                    }
+                }
+            }
+
+            if low[id] == this_num.get(){
+                // id is root!
+
+                let mut comp = Vec::new();
+
+                while let Some(top) = stack.pop() {
+                    if num[top].get_num() < this_num {
+                        stack.push(top);
+                        break;
+                    }
+                    comp.push(top);
+                }
+                components.push(comp);   
+            }
+        }
+
+        for i in 0..self.node_count(){
+            if numbers[i].is_not_visited(){
+                rec(
+                    self, 
+                    0, 
+                    &mut counter, 
+                    &mut low_link, 
+                    &mut numbers, 
+                    &mut stack, 
+                    &mut components
+                );
+                stack.clear();
+            }
+            
+        }
+
+        let all: usize = components.iter()
+            .map(|entry| entry.len())
+            .sum();
+        assert_eq!(self.node_count(), all);
+
+        components
+        
+    }
+
+}
+
+
+
+#[derive(Clone, Copy, Debug)]
+pub enum TarjanNumberHelper{
+    NotVisited,
+    Visited(NonZeroU32)
+}
+
+impl TarjanNumberHelper {
+    pub fn is_not_visited(&self) -> bool 
+    {
+        matches!(self, TarjanNumberHelper::NotVisited)
+    }
+
+    #[inline]
+    pub fn get_num(&self) -> NonZeroU32
+    {
+        match self {
+            Self::NotVisited => unreachable!(),
+            Self::Visited(num) => *num    
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -397,3 +552,8 @@ pub struct ReducedNode{
     id: String
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct DirectedEdge{
+    pub from: usize,
+    pub to: usize
+}

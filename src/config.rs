@@ -156,7 +156,7 @@ pub fn misc(opt: MiscOpt)
 
     write_commands_and_version(&mut buf).unwrap();
 
-    writeln!(buf, "#year_id node_count nodes_with_neighbors edge_count density max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size").unwrap();
+    writeln!(buf, "#year_id node_count nodes_with_neighbors edge_count density max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size num_scc largest_scc").unwrap();
 
     for (id, n) in networks.iter().enumerate()
     {
@@ -182,11 +182,20 @@ pub fn misc(opt: MiscOpt)
         let inverted = n.invert();
         let in_size = inverted.largest_out_component(ComponentChoice::ExcludingSelf);
 
+        let scc_components = n.scc_recursive();
+
+        let largest_scc = scc_components.iter()
+            .map(|c| c.len())
+            .max()
+            .unwrap();
+
         writeln!(buf, 
-            "{id} {node_count} {nodes_with_neighbors} {edge_count} {density} {max_c} {} {giant_comp_edge_count} {} {}",
+            "{id} {node_count} {nodes_with_neighbors} {edge_count} {density} {max_c} {} {giant_comp_edge_count} {} {} {} {}",
             component.size_of_largest_component,
             out_size,
-            in_size
+            in_size,
+            scc_components.len(),
+            largest_scc
         ).unwrap();
     }
 }
