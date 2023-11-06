@@ -32,44 +32,68 @@ pub struct Network{
 }
 
 impl Network{
+    #[allow(dead_code)]
     pub fn without_unconnected_nodes(&self) -> Self
     {
-        let nodes = self.nodes
-            .iter()
-            .filter_map(
-                |node|
+
+        let mut list_of_connected = vec![false; self.node_count()];
+        self.nodes.iter()
+            .enumerate()
+            .for_each(
+                |(index, node)|
                 {
-                    if node.adj.is_empty(){
-                        None
-                    } else {
-                        Some(
-                            Node{identifier: node.identifier.clone(), adj: Vec::new()}
-                        )
+                    if !node.adj.is_empty(){
+                        list_of_connected[index] = true;
+                        node.adj
+                            .iter()
+                            .for_each(
+                                |edge|
+                                {
+                                    list_of_connected[edge.index] = true;
+                                }
+                            )
                     }
                 }
-            ).collect();
-        // I still need to add the nodes that are pointed to but point at noone!
+            );
 
-        let mut network = Network{nodes};
-        let mut new_map = BTreeMap::new();
+        if list_of_connected.iter().all(|x| *x){
+            eprintln!("All connected, nothing to do");
+            self.clone()
+        } else {
+            eprintln!("Not all connected, something to do");
+            let nodes: Vec<Node> = self.nodes
+                .iter()
+                .zip(list_of_connected.iter())
+                .filter_map(
+                    |(node, in_list)|
+                    {
+                        in_list.then(
+                            || Node{identifier: node.identifier.clone(), adj: Vec::new()}
+                        )
+                    }
+                ).collect();
+        
+            let mut network = Network{nodes};
+            let mut new_map = BTreeMap::new();
 
-        for (index, node) in network.nodes.iter().enumerate(){
-            new_map.insert(node.identifier.clone(), index);
-        }
-
-        for old_node in self.nodes.iter(){
-            if old_node.adj.is_empty(){
-                continue;
+            for (index, node) in network.nodes.iter().enumerate(){
+                new_map.insert(node.identifier.clone(), index);
             }
-            let this_id = *new_map.get(old_node.identifier.as_str()).unwrap();
-            let mut adj = &mut network.nodes[this_id].adj;
-            for edge in old_node.adj.iter()
-            {
 
+            for (old_node, connected) in self.nodes.iter().zip(list_of_connected){
+                if !connected{
+                    continue;
+                }
+                let this_id = *new_map.get(old_node.identifier.as_str()).unwrap();
+                let adj = &mut network.nodes[this_id].adj;
+                for edge in old_node.adj.iter()
+                {
+                    let new_index = *new_map.get(self.nodes[edge.index].identifier.as_str()).unwrap();
+                    adj.push(Edge { index: new_index, amount: edge.amount }); 
+                }
             }
+            network
         }
-
-        todo!()
     }
 
     pub fn invert(&self) -> Self
