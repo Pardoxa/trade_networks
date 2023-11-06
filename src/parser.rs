@@ -1,7 +1,7 @@
 use std::io::BufWriter;
 use rayon::prelude::*;
 
-use sampling::HistF64;
+use net_ensembles::sampling::HistF64;
 
 use crate::network::*;
 use crate::config::write_commands_and_version;
@@ -19,7 +19,7 @@ use{
             BTreeSet
         }
     },
-    sampling::{HistUsizeFast, histogram::Histogram}
+    net_ensembles::sampling::{HistUsizeFast, histogram::Histogram}
 };
 
 fn line_to_vec(line: &str) -> Vec<String>

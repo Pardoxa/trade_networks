@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-
+use net_ensembles::Graph;
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -64,14 +64,9 @@ impl Network{
             let nodes: Vec<Node> = self.nodes
                 .iter()
                 .zip(list_of_connected.iter())
-                .filter_map(
-                    |(node, in_list)|
-                    {
-                        in_list.then(
-                            || Node{identifier: node.identifier.clone(), adj: Vec::new()}
-                        )
-                    }
-                ).collect();
+                .filter(|(_, &in_list)| in_list)
+                .map(|(node, _)| Node{identifier: node.identifier.clone(), adj: Vec::new()})
+                .collect();
         
             let mut network = Network{nodes};
             let mut new_map = BTreeMap::new();
@@ -143,6 +138,7 @@ impl Network{
             )
     }
 
+    #[inline]
     pub fn node_count(&self) -> usize
     {
         self.nodes.len()
@@ -235,6 +231,157 @@ impl Network{
         centrality
     }
 
+    pub fn to_undirected(&self) -> Graph<ReducedNode>
+    {
+        let mut g = Graph::from_iter(
+            self.nodes.iter()
+                .map(|node| ReducedNode { id: node.identifier.clone() })
+        );
+        self.nodes.iter()
+            .enumerate()
+            .for_each(
+                |(index, node)|
+                {
+                    node.adj.iter()
+                        .for_each(
+                            |edge|
+                            {
+                                let _ = g.add_edge(index, edge.index);
+                            }
+                        )
+                }
+            );
+        g
+    }
+
+    pub fn filtered_network(&self, indices: &[usize]) -> Self
+    {
+        let mut nodes = Vec::with_capacity(indices.len());
+        let mut new_map = BTreeMap::new();
+        for (new_index, i) in indices.iter().copied().enumerate() {
+            let node = Node{identifier: self.nodes[i].identifier.clone(), adj: Vec::new()};
+            new_map.insert(node.identifier.clone(), new_index);
+            nodes.push(node);
+        }
+
+        for old_node in self.nodes.iter(){
+            if let Some(this_idx) = new_map.get(old_node.identifier.as_str()) {
+                let adj = &mut nodes[*this_idx].adj;
+                for edge in old_node.adj.iter(){
+                    if let Some(other_idx) = new_map.get(self.nodes[edge.index].identifier.as_str()){
+                        let new_edge = Edge{
+                            amount: edge.amount,
+                            index: *other_idx
+                        };
+                        adj.push(new_edge);
+                    }
+                }  
+            }
+        }
+
+        Network { nodes }
+    }
+
+    /// Note: out component of imports should be equal to in component of exports
+    pub fn out_component(&self, start: usize, including_self: ComponentChoice) -> Vec<usize>
+    {
+        let mut processed = vec![false; self.node_count()];
+
+        processed[start] = true;
+        let mut stack = vec![start];
+
+        let mut component = Vec::new();
+        if including_self.includes_self(){
+            component.push(start);
+        }
+
+        while let Some(index) = stack.pop() {
+            for edge in self.nodes[index].adj.iter(){
+                if !processed[edge.index]{
+                    processed[edge.index] = true;
+                    component.push(edge.index);
+                    stack.push(edge.index);
+                }
+            }
+        }
+        component
+    }
+
+    pub fn largest_out_component(&self, including_self: ComponentChoice) -> usize 
+    {
+        let mut checked = vec![false; self.node_count()];
+        let mut max_size = 0;
+        for i in 0..self.node_count(){
+            if !checked[i] {
+                checked[i] = true;
+                let comp = self.out_component(i, including_self);
+                for &j in comp.iter(){
+                    checked[j] = true;
+                }
+                let size = comp.len();
+                if size > max_size {
+                    max_size = size;
+                }
+            }
+        }
+        max_size
+    }
+
+}
+
+#[derive(Clone, Copy, Debug)]
+#[allow(dead_code)]
+pub enum ComponentChoice{
+    IncludingSelf,
+    ExcludingSelf
+}
+
+impl ComponentChoice{
+    pub fn includes_self(&self) -> bool {
+        matches!(self, ComponentChoice::IncludingSelf)
+    }
+}
+
+/// Returns size of largest component and indizes of members of largest component
+pub fn largest_component(network: &Network) -> LargestComponents
+{
+    let g = network.to_undirected();
+    let (num_components, ids) = g.connected_components_ids();
+    let mut sizes = vec![0; num_components];
+    for id in ids.iter()
+    {
+        sizes[*id as usize] += 1;
+    }
+    let mut max = 0;
+    let mut max_id = 0;
+    for (&size, index) in sizes.iter().zip(0..){
+        if max < size {
+            max = size;
+            max_id = index;
+        }
+    }
+    let entries: Vec<_> = ids.iter()
+        .enumerate()
+        .filter(|(_, &id)| id == max_id)
+        .map(|(index, _)| index)
+        .collect();
+
+    assert_eq!(max, entries.len());
+
+    LargestComponents { 
+        ids, 
+        members_of_largest_component: entries, 
+        num_components, 
+        size_of_largest_component: max 
+    }
+
+}
+
+pub struct LargestComponents{
+    pub ids: Vec<isize>,
+    pub members_of_largest_component: Vec<usize>,
+    pub num_components: usize,
+    pub size_of_largest_component: usize
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -243,3 +390,10 @@ pub enum DikstraState{
     Initial,
     From(usize)
 }
+
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ReducedNode{
+    id: String
+}
+
