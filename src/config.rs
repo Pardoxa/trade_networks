@@ -156,16 +156,17 @@ pub fn misc(opt: MiscOpt)
 
     write_commands_and_version(&mut buf).unwrap();
 
-    writeln!(buf, "#year_id node_count nodes_with_neighbors edge_count density max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size num_scc largest_scc").unwrap();
+    writeln!(buf, "#year_id exporting_nodes importing_nodes edge_count trading_nodes max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size num_scc largest_scc").unwrap();
 
     for (id, n) in networks.iter().enumerate()
     {
-        let node_count = n.node_count();
-        let nodes_with_neighbors = n.nodes_with_neighbors();
+        let no_unconnected = n.without_unconnected_nodes();
+        let trading_nodes = no_unconnected.node_count();
+        let inverted = n.invert();
+        let node_count = inverted.nodes_with_non_empty_adj();
+        let importing_nodes = n.nodes_with_non_empty_adj();
         let edge_count = n.edge_count();
-
-        let max = (nodes_with_neighbors-1) * nodes_with_neighbors;
-        let density = edge_count as f64 / max as f64;
+     
 
         let mut normalized = n.clone();
         normalized.normalize();
@@ -179,10 +180,18 @@ pub fn misc(opt: MiscOpt)
 
         let out_size = n.largest_out_component(ComponentChoice::ExcludingSelf);
 
-        let inverted = n.invert();
+        
         let in_size = inverted.largest_out_component(ComponentChoice::ExcludingSelf);
 
-        let scc_components = n.scc_recursive();
+        let scc_components = no_unconnected.scc_recursive();
+        let mut check = vec![false; no_unconnected.node_count()];
+        for &i in scc_components.iter().flat_map(|e| e.iter())
+        {
+            check[i] = true;
+        }
+        assert!(check.iter().all(|x| *x));
+        let total: usize = scc_components.iter().map(|e| e.len()).sum();
+        assert_eq!(total, no_unconnected.node_count());
 
         let largest_scc = scc_components.iter()
             .map(|c| c.len())
@@ -190,12 +199,12 @@ pub fn misc(opt: MiscOpt)
             .unwrap();
 
         writeln!(buf, 
-            "{id} {node_count} {nodes_with_neighbors} {edge_count} {density} {max_c} {} {giant_comp_edge_count} {} {} {} {}",
+            "{id} {node_count} {importing_nodes} {edge_count} {trading_nodes} {max_c} {} {giant_comp_edge_count} {} {} {} {}",
             component.size_of_largest_component,
             out_size,
             in_size,
+            largest_scc,
             scc_components.len(),
-            largest_scc
         ).unwrap();
     }
 }

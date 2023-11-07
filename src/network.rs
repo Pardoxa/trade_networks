@@ -32,7 +32,7 @@ pub struct Network{
 }
 
 impl Network{
-    #[allow(dead_code)]
+    
     pub fn without_unconnected_nodes(&self) -> Self
     {
 
@@ -60,7 +60,6 @@ impl Network{
             eprintln!("All connected, nothing to do");
             self.clone()
         } else {
-            eprintln!("Not all connected, something to do");
             let nodes: Vec<Node> = self.nodes
                 .iter()
                 .zip(list_of_connected.iter())
@@ -144,7 +143,7 @@ impl Network{
         self.nodes.len()
     }
 
-    pub fn nodes_with_neighbors(&self) -> usize
+    pub fn nodes_with_non_empty_adj(&self) -> usize
     {
         self.nodes.iter().filter(|n| !n.adj.is_empty()).count()
     }
@@ -361,6 +360,10 @@ impl Network{
                     },
                     TarjanNumberHelper::Visited(num) if num < this_num => {
                         // is frond or cross-link
+                        // If this function is ever to slow:
+                        // I should be able to exchange the 'contains' by just checking wheather the number 
+                        // is larger or equal to a threshold, which is determined when the function is first called,
+                        // i.e., before the recursion
                         if stack.contains(&edge.index) {
                             low[id] = low[id].min(TarjanNumberHelper::Visited(num));
                         }
