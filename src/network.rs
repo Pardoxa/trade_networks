@@ -327,59 +327,6 @@ impl Network{
         max_size
     }
 
-    /*pub fn scc(&self){
-        //tarjan 
-        let mut counter = NonZeroU32::new(1).unwrap();
-        let mut next_counter = || {
-            let c = counter;
-            counter = counter.saturating_add(1);
-            TarjanNumberHelper::Visited(c)
-        };
-
-        let mut stack = Vec::new();
-        let mut numbers = vec![TarjanNumberHelper::NotVisited; self.node_count()];
-        let mut low_link = vec![0_u32; self.node_count()];
-
-        let mut fronds = Vec::new();
-        let mut cross_links = Vec::new();
-        let mut tree_roots = Vec::new();
-
-        for i in 0..self.node_count(){
-            if numbers[i].is_not_visited(){
-                // new search tree
-                tree_roots.push(i);
-                stack.push(i);
-                numbers[i] = next_counter();
-                let number_border = match numbers[i] {
-                    TarjanNumberHelper::NotVisited => unreachable!(),
-                    TarjanNumberHelper::Visited(v) => v   
-                };
-                while let Some(index) = stack.pop()
-                {
-                    let node = &self.nodes[index];
-                    for edge in node.adj.iter() {
-                        match numbers[edge.index]{
-                            TarjanNumberHelper::NotVisited => {
-                                numbers[edge.index] = next_counter();
-                                stack.push(edge.index);
-                            },
-                            TarjanNumberHelper::Visited(num) => if num >= number_border {
-                                // connects to ancestor -> is frond
-                                fronds.push(DirectedEdge{from: index, to: edge.index});
-                            },
-                            _ => {
-                                // not part of this search tree, was part of previous search, i think this is now a crosslink
-                                cross_links.push(DirectedEdge{from: index, to: edge.index});
-                            }
-                        }
-                    }
-                }
-            }
-            
-        }
-        todo!()
-    }*/
-
     pub fn scc_recursive(&self) -> Vec<Vec<usize>>
     {
         let mut counter = NonZeroU32::new(1).unwrap();
@@ -437,7 +384,7 @@ impl Network{
             if numbers[i].is_not_visited(){
                 rec(
                     self, 
-                    0, 
+                    i, 
                     &mut counter, 
                     &mut low_link, 
                     &mut numbers, 
@@ -556,4 +503,51 @@ pub struct ReducedNode{
 pub struct DirectedEdge{
     pub from: usize,
     pub to: usize
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::*;
+    #[test]
+    fn test_scc_recursive_tree() {
+        let mut networks = read_networks("tree.bincode");
+        dbg!(&networks);
+        let network = networks.pop().unwrap();
+        let g = network.to_undirected();
+
+        let (comp_num, ids) = g.connected_components_ids();
+        dbg!(ids);
+        assert_eq!(comp_num, 1);
+
+        let scc = network.scc_recursive();
+        assert_eq!(scc.len(), network.node_count());
+
+        
+    }
+
+    #[test]
+    fn test_scc_recursive_example() {
+        let mut networks = read_networks("scc_test.bincode");
+        dbg!(&networks);
+        let network = networks.pop().unwrap();
+        let g = network.to_undirected();
+
+        let (comp_num, ids) = g.connected_components_ids();
+        dbg!(ids);
+        assert_eq!(comp_num, 1);
+
+        let mut scc = network.scc_recursive();
+        
+
+        scc.sort_by_cached_key(|el| *el.iter().min().unwrap());
+        scc.iter_mut().for_each(|el| el.sort_unstable());
+
+        dbg!(&scc);
+        assert_eq!(scc.len(), 4);
+
+        assert_eq!(&scc[0], &[0,1,2]);
+        assert_eq!(&scc[1], &[3,4]);
+        assert_eq!(&scc[2], &[5,6]);
+        assert_eq!(&scc[3], &[7]);
+    }
 }
