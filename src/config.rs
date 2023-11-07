@@ -156,7 +156,10 @@ pub fn misc(opt: MiscOpt)
 
     write_commands_and_version(&mut buf).unwrap();
 
-    writeln!(buf, "#year_id exporting_nodes importing_nodes edge_count trading_nodes max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size num_scc largest_scc").unwrap();
+    writeln!(
+        buf, 
+        "#year_id exporting_nodes importing_nodes edge_count trading_nodes max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size num_scc largest_scc largest_scc_diameter"
+    ).unwrap();
 
     for (id, n) in networks.iter().enumerate()
     {
@@ -193,18 +196,32 @@ pub fn misc(opt: MiscOpt)
         let total: usize = scc_components.iter().map(|e| e.len()).sum();
         assert_eq!(total, no_unconnected.node_count());
 
-        let largest_scc = scc_components.iter()
-            .map(|c| c.len())
-            .max()
-            .unwrap();
+        let mut index_largest_scc = 0;
+        let mut size_largest_scc = 0;
+        
+        scc_components.iter()
+            .enumerate()
+            .for_each(
+                |(index, comp)|
+                {
+                    if comp.len() > size_largest_scc {
+                        size_largest_scc = comp.len();
+                        index_largest_scc = index;
+                    }
+                }
+            );
+
+        let scc_network = no_unconnected.filtered_network(&scc_components[index_largest_scc]);
+        let largest_scc_diameter = scc_network.diameter();
 
         writeln!(buf, 
-            "{id} {node_count} {importing_nodes} {edge_count} {trading_nodes} {max_c} {} {giant_comp_edge_count} {} {} {} {}",
+            "{id} {node_count} {importing_nodes} {edge_count} {trading_nodes} {max_c} {} {giant_comp_edge_count} {} {} {} {} {}",
             component.size_of_largest_component,
             out_size,
             in_size,
-            largest_scc,
+            size_largest_scc,
             scc_components.len(),
+            largest_scc_diameter.unwrap()
         ).unwrap();
     }
 }

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, num::NonZeroU32};
+use std::{collections::{BTreeMap, VecDeque}, num::NonZeroU32};
 use net_ensembles::Graph;
 use serde::{Serialize, Deserialize};
 
@@ -251,6 +251,43 @@ impl Network{
                 }
             );
         g
+    }
+
+    pub fn diameter(&self) -> Option<usize>
+    {
+        let mut diameter = 0;
+        let mut processed = vec![false; self.node_count()];
+        let mut current_queue = VecDeque::new();
+        let mut next_queue = VecDeque::new();
+        for i in 0..self.node_count(){
+            processed.iter_mut().for_each(|e| *e = false);
+            current_queue.push_back(i);
+            processed[i] = true;
+            let mut level = 0;
+            loop{
+                while let Some(current_index) = current_queue.pop_front() {
+                    let node = &self.nodes[current_index];
+                    for edge in node.adj.iter(){
+                        if !processed[edge.index] {
+                            processed[edge.index] = true;
+                            next_queue.push_back(edge.index);
+                        }
+                    }
+                }
+                if next_queue.is_empty(){
+                    break;
+                }
+                std::mem::swap(&mut current_queue, &mut next_queue);
+                level += 1;
+            }
+            diameter = diameter.max(level);
+            if processed.iter().any(|x| !x) {
+                dbg!(&processed);
+                dbg!(self);
+                return None;
+            }
+        }
+        Some(diameter)
     }
 
     pub fn filtered_network(&self, indices: &[usize]) -> Self
@@ -565,5 +602,10 @@ mod tests {
         assert_eq!(&scc[1], &[3,4]);
         assert_eq!(&scc[2], &[5,6]);
         assert_eq!(&scc[3], &[7]);
+
+        for c in scc.iter(){
+            let filtered = network.filtered_network(c);
+            assert!(filtered.diameter().is_some());
+        }
     }
 }
