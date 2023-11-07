@@ -334,15 +334,23 @@ impl Network{
 
         let mut stack: Vec<usize> = Vec::new();
         let mut numbers = vec![TarjanNumberHelper::NotVisited; self.node_count()];
-        let mut low_link = vec![u32::MAX; self.node_count()];
+        let mut low_link = vec![TarjanNumberHelper::NotVisited; self.node_count()];
 
         let mut components: Vec<Vec<usize>> = Vec::new();
 
-        fn rec(n: &Network, id: usize, counter: &mut NonZeroU32, low: &mut [u32], num: &mut [TarjanNumberHelper], stack: &mut Vec<usize>, components: &mut Vec<Vec<usize>>) {
+        fn rec(
+            n: &Network, 
+            id: usize, 
+            counter: &mut NonZeroU32, 
+            low: &mut [TarjanNumberHelper], 
+            num: &mut [TarjanNumberHelper], 
+            stack: &mut Vec<usize>, 
+            components: &mut Vec<Vec<usize>>
+        ) {
             let this_num = *counter;
             *counter = counter.saturating_add(1);
-            low[id] = this_num.get();
             num[id] = TarjanNumberHelper::Visited(this_num);
+            low[id] = num[id];
             stack.push(id);
 
             for edge in n.nodes[id].adj.iter(){
@@ -354,7 +362,7 @@ impl Network{
                     TarjanNumberHelper::Visited(num) if num < this_num => {
                         // is frond or cross-link
                         if stack.contains(&edge.index) {
-                            low[id] = low[id].min(num.get())
+                            low[id] = low[id].min(TarjanNumberHelper::Visited(num));
                         }
                     },
                     _ => {
@@ -364,7 +372,7 @@ impl Network{
                 }
             }
 
-            if low[id] == this_num.get(){
+            if low[id] == num[id] {
                 // id is root!
 
                 let mut comp = Vec::new();
@@ -409,7 +417,7 @@ impl Network{
 
 
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TarjanNumberHelper{
     NotVisited,
     Visited(NonZeroU32)
@@ -428,6 +436,11 @@ impl TarjanNumberHelper {
             Self::NotVisited => unreachable!(),
             Self::Visited(num) => *num    
         }
+    }
+
+    pub fn min(&self, other: Self) -> Self
+    {
+        TarjanNumberHelper::Visited(self.get_num().min(other.get_num()))
     }
 }
 
