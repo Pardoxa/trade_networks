@@ -1,4 +1,5 @@
 use std::io::Write;
+use indicatif::{ProgressBar, ProgressStyle};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -11,4 +12,15 @@ pub fn write_commands_and_version<W: Write>(mut w: W) -> std::io::Result<()>
         write!(w, " {arg}")?;
     }
     writeln!(w)
+}
+
+pub fn indication_bar(len: u64) -> ProgressBar
+{
+        // for indication on when it is finished
+        let bar = ProgressBar::new(len);
+        bar.set_style(ProgressStyle::default_bar()
+            .template("{msg} [{elapsed_precise} - {eta_precise}] {wide_bar}")
+            .unwrap()
+        );
+        bar
 }

@@ -20,7 +20,7 @@ pub struct ToCountryBinOpt{
 
 #[derive(Parser, Debug)]
 pub struct ToBinaryOpt{
-    #[arg(short, long)]
+    #[arg(long)]
     /// Path to csv to read in
     pub in_file: String,
 
@@ -28,9 +28,25 @@ pub struct ToBinaryOpt{
     /// Name of output
     pub out: String,
     
-    #[arg(short, long)]
+    #[arg(long)]
     /// Item code, e.g. 27 for Rice
     pub item_code: String
+}
+
+#[derive(Parser, Debug)]
+pub struct AllToBinaryOpt{
+    #[arg(long)]
+    /// Path to csv to read in
+    pub in_file: String,
+
+    #[arg(long)]
+    /// Name of the file with all item codes etc
+    pub item_file: String,
+
+    #[arg(short, long)]
+    /// Instead of one file containing all networks do one file per item code
+    pub seperate_output: bool
+    
 }
 
 /// Created by Yannick Feld
@@ -39,6 +55,7 @@ pub struct ToBinaryOpt{
 #[command(author, version, about)]
 pub enum CmdChooser{
     ToBinary(ToBinaryOpt),
+    ToBinaryAll(AllToBinaryOpt),
     ToCountryNetwork(ToCountryBinOpt),
     DegreeDist(DegreeDist),
     MaxWeight(DegreeDist),

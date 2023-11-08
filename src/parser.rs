@@ -13,7 +13,7 @@ use{
     crate::network::*
 };
 
-fn line_to_vec(line: &str) -> Vec<String>
+pub fn line_to_vec(line: &str) -> Vec<String>
 {
     let mut w = String::new();
     let mut all = Vec::new();
@@ -35,7 +35,7 @@ fn line_to_vec(line: &str) -> Vec<String>
 
 
 
-pub fn network_parser(file_name: &str, item_code: &str) -> Vec<Network>
+pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> Vec<Network>
 {
 
     let wanted_transaction_type = "Import Quantity";
@@ -50,10 +50,12 @@ pub fn network_parser(file_name: &str, item_code: &str) -> Vec<Network>
     let entry_names: Vec<_> = entry_iter.collect();
 
     // Reporter country, partner country, item code
-
-    for (idx, &entry) in entry_names.iter().enumerate() {
-        println!("Entry {idx} is {entry}");
+    if !silent{
+        for (idx, &entry) in entry_names.iter().enumerate() {
+            println!("Entry {idx} is {entry}");
+        }
     }
+
 
     let mut map = BTreeMap::new();
     for (idx, &entry) in entry_names.iter().enumerate()

@@ -1,7 +1,13 @@
+use std::collections::BTreeSet;
+
+use indicatif::ProgressIterator;
+
+use crate::parser;
+
 use {
     std::{
         fs::File,
-        io::{BufWriter, Write}
+        io::{BufWriter, Write, BufRead, BufReader}
     },
     super::{*, helper_structs::*},
     crate::{config::*, misc::*},
@@ -11,12 +17,49 @@ use {
 
 pub fn to_binary(opt: ToBinaryOpt)
 {
-    let networks = crate::parser::network_parser(&opt.in_file, &opt.item_code);
+    let networks = crate::parser::network_parser(&opt.in_file, &opt.item_code, false);
 
     let file = File::create(&opt.out).unwrap();
     let buf = BufWriter::new(file);
     bincode::serialize_into(buf, &networks)
         .expect("serialization issue");
+}
+
+pub fn to_binary_all(opt: AllToBinaryOpt)
+{
+
+    let item_file = File::open(&opt.item_file)
+        .unwrap();
+    let buf_reader = BufReader::new(item_file);
+
+    let lines = buf_reader.lines().skip(1);
+
+    let mut item_codes = BTreeSet::new();
+
+    for item_line in lines{
+        let l = item_line.unwrap();
+        let split = parser::line_to_vec(&l);
+        assert_eq!(split.len(), 3);
+        item_codes.insert(split[0].clone());
+    }
+
+    if opt.seperate_output {
+        println!("Found {} item codes", item_codes.len());
+        let bar = crate::misc::indication_bar(item_codes.len() as u64);
+        for item_code in item_codes.iter().progress_with(bar){
+            let networks = crate::parser::network_parser(&opt.in_file, item_code, true);
+            let output_name = format!("{item_code}.bincode");
+            let file = File::create(&output_name).unwrap();
+            let buf = BufWriter::new(file);
+            bincode::serialize_into(buf, &networks)
+                .expect("serialization issue");
+        }
+    } else {
+        unimplemented!()
+    }
+    
+
+    
 }
 
 pub fn to_country_file(opt: ToCountryBinOpt)
