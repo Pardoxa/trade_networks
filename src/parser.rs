@@ -1,17 +1,8 @@
-use std::io::BufWriter;
-use rayon::prelude::*;
-
-use net_ensembles::sampling::HistF64;
-
-use crate::network::*;
-use crate::config::write_commands_and_version;
-
 use{
     std::{
         io::{
             BufReader, 
-            BufRead,
-            Write
+            BufRead
         },
         fs::File,
         collections::{
@@ -19,7 +10,7 @@ use{
             BTreeSet
         }
     },
-    net_ensembles::sampling::{HistUsizeFast, histogram::Histogram}
+    crate::network::*
 };
 
 fn line_to_vec(line: &str) -> Vec<String>
@@ -188,101 +179,6 @@ pub fn network_parser(file_name: &str, item_code: &str) -> Vec<Network>
 }
 
 
-pub fn weight_dist(networks: &mut [Network], out: &str){
-    let hist = HistF64::new(0.0, 1.1, 50).unwrap();
-
-    let mut hists: Vec<_> = (0..networks.len()).map(|_| hist.clone()).collect();
-
-    networks.par_iter_mut()
-        .zip(hists.par_iter_mut())
-        .for_each(
-            |(network, hist)|
-            {
-                network.normalize();
-                network.nodes.iter()
-                    .for_each(
-                        |node|
-                        {
-                            let max = node.adj.iter()
-                                .map(|v| v.amount)
-                                .max_by(f64::total_cmp);
-                            if let Some(max) = max{
-                                hist.increment_quiet(max);
-                            }
-                        }
-                    )
-            }
-        );
-
-    let file = File::create(out).expect("unable to create file");
-    let mut buf = BufWriter::new(file);
-
-    write_commands_and_version(&mut buf).unwrap();
-
-    let first = hists.first().unwrap();
-
-    for (index, (bins, hits)) in first.bin_hits_iter().enumerate()
-    {
-        let bin = bins[0] + (bins[1]-bins[0]) / 2.0;
-        write!(buf, "{bin} {hits}").unwrap();
-        for hist in hists[1..].iter()
-        {
-            let hit = hist.hist()[index];
-            write!(buf, " {hit}").unwrap();
-        }
-        writeln!(buf).unwrap();
-    }
-    println!("years: {}", networks.len());
-}
-
-pub fn degree_dist(networks: &[Network], out: &str)
-{
-    let max_degree = networks.iter()
-        .flat_map(
-            |network|
-            {
-                network.nodes.iter().map(|node| node.adj.len())
-            }
-        ).max().unwrap();
-    
-    let hist = HistUsizeFast::new_inclusive(0, max_degree).unwrap();
-
-    let mut hists: Vec<_> = (0..networks.len()).map(|_| hist.clone()).collect();
-
-    networks.iter()
-        .zip(hists.iter_mut())
-        .for_each(
-            |(network, hist)|
-            {
-                for node in network.nodes.iter()
-                {
-                    hist.increment_quiet(node.adj.len());
-                }
-            }
-        );
-
-    let file = File::create(out).expect("unable to create file");
-    let mut buf = BufWriter::new(file);
-
-    write_commands_and_version(&mut buf).unwrap();
-
-    let first = hists.first().unwrap();
-
-    for (index, (bin, hits)) in first.bin_hits_iter().enumerate()
-    {
-        write!(buf, "{bin} {hits}").unwrap();
-        for hist in hists[1..].iter()
-        {
-            let hit = hist.hist()[index];
-            write!(buf, " {hit}").unwrap();
-        }
-        writeln!(buf).unwrap();
-    }
-    println!("years: {}", networks.len());
-
-}
-
-
 pub fn country_networks(networks: &[Network], code_file: String) -> Vec<Network>
 {
     let file = File::open(code_file)
@@ -389,4 +285,3 @@ pub fn country_networks(networks: &[Network], code_file: String) -> Vec<Network>
         ).collect()
 
 }
-

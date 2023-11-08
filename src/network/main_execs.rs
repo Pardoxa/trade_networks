@@ -1,0 +1,236 @@
+use {
+    std::{
+        fs::File,
+        io::{BufWriter, Write}
+    },
+    super::{*, helper_structs::*},
+    crate::{config::*, misc::*},
+    rayon::prelude::*,
+    net_ensembles::sampling::*
+};
+
+pub fn to_binary(opt: ToBinaryOpt)
+{
+    let networks = crate::parser::network_parser(&opt.in_file, &opt.item_code);
+
+    let file = File::create(&opt.out).unwrap();
+    let buf = BufWriter::new(file);
+    bincode::serialize_into(buf, &networks)
+        .expect("serialization issue");
+}
+
+pub fn to_country_file(opt: ToCountryBinOpt)
+{
+    let networks = read_networks(&opt.bin_file);
+    let country_networks = crate::parser::country_networks(&networks, opt.country_file);
+    let file = File::create(&opt.out).unwrap();
+    let buf = BufWriter::new(file);
+    bincode::serialize_into(buf, &country_networks)
+        .expect("serialization issue");
+}
+
+pub fn max_weight(opt: DegreeDist)
+{
+    let mut networks: Vec<Network> = read_networks(&opt.input);
+
+    if opt.invert{
+        networks.iter_mut().for_each(
+            |n|
+            {
+                *n = n.invert();
+            }
+        );
+    }
+
+    max_weight_dist(&mut networks, &opt.out);
+}
+
+fn max_weight_dist(networks: &mut [Network], out: &str){
+    let hist = HistF64::new(0.0, 1.1, 50).unwrap();
+
+    let mut hists: Vec<_> = (0..networks.len()).map(|_| hist.clone()).collect();
+
+    networks.par_iter_mut()
+        .zip(hists.par_iter_mut())
+        .for_each(
+            |(network, hist)|
+            {
+                network.normalize();
+                network.nodes.iter()
+                    .for_each(
+                        |node|
+                        {
+                            let max = node.adj.iter()
+                                .map(|v| v.amount)
+                                .max_by(f64::total_cmp);
+                            if let Some(max) = max{
+                                hist.increment_quiet(max);
+                            }
+                        }
+                    )
+            }
+        );
+
+    let file = File::create(out).expect("unable to create file");
+    let mut buf = BufWriter::new(file);
+
+    write_commands_and_version(&mut buf).unwrap();
+
+    let first = hists.first().unwrap();
+
+    for (index, (bins, hits)) in first.bin_hits_iter().enumerate()
+    {
+        let bin = bins[0] + (bins[1]-bins[0]) / 2.0;
+        write!(buf, "{bin} {hits}").unwrap();
+        for hist in hists[1..].iter()
+        {
+            let hit = hist.hist()[index];
+            write!(buf, " {hit}").unwrap();
+        }
+        writeln!(buf).unwrap();
+    }
+    println!("years: {}", networks.len());
+}
+
+pub fn degree_dists(opt: DegreeDist)
+{
+    let mut networks: Vec<Network> = read_networks(&opt.input);
+
+    if opt.invert{
+        networks.iter_mut().for_each(
+            |n|
+            {
+                *n = n.invert();
+            }
+        );
+    }
+
+    degree_dists_helper(&networks, &opt.out);
+}
+
+fn degree_dists_helper(networks: &[Network], out: &str)
+{
+    let max_degree = networks.iter()
+        .flat_map(
+            |network|
+            {
+                network.nodes.iter().map(|node| node.adj.len())
+            }
+        ).max().unwrap();
+    
+    let hist = HistUsizeFast::new_inclusive(0, max_degree).unwrap();
+
+    let mut hists: Vec<_> = (0..networks.len()).map(|_| hist.clone()).collect();
+
+    networks.iter()
+        .zip(hists.iter_mut())
+        .for_each(
+            |(network, hist)|
+            {
+                for node in network.nodes.iter()
+                {
+                    hist.increment_quiet(node.adj.len());
+                }
+            }
+        );
+
+    let file = File::create(out).expect("unable to create file");
+    let mut buf = BufWriter::new(file);
+
+    write_commands_and_version(&mut buf).unwrap();
+
+    let first = hists.first().unwrap();
+
+    for (index, (bin, hits)) in first.bin_hits_iter().enumerate()
+    {
+        write!(buf, "{bin} {hits}").unwrap();
+        for hist in hists[1..].iter()
+        {
+            let hit = hist.hist()[index];
+            write!(buf, " {hit}").unwrap();
+        }
+        writeln!(buf).unwrap();
+    }
+    println!("years: {}", networks.len());
+
+}
+
+
+pub fn misc(opt: MiscOpt)
+{
+    let networks = read_networks(&opt.input);
+
+    let file = File::create(opt.out).expect("unable to create file");
+    let mut buf = BufWriter::new(file);
+
+    write_commands_and_version(&mut buf).unwrap();
+
+    writeln!(
+        buf, 
+        "#year_id exporting_nodes importing_nodes edge_count trading_nodes max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size num_scc largest_scc largest_scc_diameter"
+    ).unwrap();
+
+    for (id, n) in networks.iter().enumerate()
+    {
+        let no_unconnected = n.without_unconnected_nodes();
+        let trading_nodes = no_unconnected.node_count();
+        let inverted = n.invert();
+        let node_count = inverted.nodes_with_non_empty_adj();
+        let importing_nodes = n.nodes_with_non_empty_adj();
+        let edge_count = n.edge_count();
+     
+
+        let mut normalized = n.clone();
+        normalized.normalize();
+        let centrality = normalized.my_centrality_normalized();
+        let max_c = centrality.iter().max().unwrap();
+
+        let component = largest_component(n);
+
+        let reduced = n.filtered_network(&component.members_of_largest_component);
+        let giant_comp_edge_count = reduced.edge_count();
+
+        let out_size = n.largest_out_component(ComponentChoice::ExcludingSelf);
+
+        
+        let in_size = inverted.largest_out_component(ComponentChoice::ExcludingSelf);
+
+        let scc_components = no_unconnected.scc_recursive();
+        let mut check = vec![false; no_unconnected.node_count()];
+        for &i in scc_components.iter().flat_map(|e| e.iter())
+        {
+            check[i] = true;
+        }
+        assert!(check.iter().all(|x| *x));
+        let total: usize = scc_components.iter().map(|e| e.len()).sum();
+        assert_eq!(total, no_unconnected.node_count());
+
+        let mut index_largest_scc = 0;
+        let mut size_largest_scc = 0;
+        
+        scc_components.iter()
+            .enumerate()
+            .for_each(
+                |(index, comp)|
+                {
+                    if comp.len() > size_largest_scc {
+                        size_largest_scc = comp.len();
+                        index_largest_scc = index;
+                    }
+                }
+            );
+
+        let scc_network = no_unconnected.filtered_network(&scc_components[index_largest_scc]);
+        let largest_scc_diameter = scc_network.diameter();
+
+        writeln!(buf, 
+            "{id} {node_count} {importing_nodes} {edge_count} {trading_nodes} {max_c} {} {giant_comp_edge_count} {} {} {} {} {}",
+            component.size_of_largest_component,
+            out_size,
+            in_size,
+            size_largest_scc,
+            scc_components.len(),
+            largest_scc_diameter.unwrap()
+        ).unwrap();
+    }
+}
