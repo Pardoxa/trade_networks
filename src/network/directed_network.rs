@@ -49,6 +49,40 @@ pub struct Network{
 
 impl Network{
 
+    pub fn effective_trade_only(&self) -> Self
+    {
+        let mut effective_network: Vec<_> = self.nodes
+            .iter()
+            .map(|n| Node{identifier: n.identifier.clone(), adj: Vec::new()})
+            .collect();
+
+        // create edge map
+        let mut edge_map = BTreeMap::new();
+        for (i, node) in self.nodes.iter().enumerate(){
+            for e in node.adj.iter(){
+                edge_map.insert((i, e.index), e.amount);
+            }
+        }
+
+        for (&(from, to), &amount) in edge_map.iter(){
+            match edge_map.get(&(to, from)){
+                Some(other_amount) => {
+                    // other edge exists
+                    if amount > *other_amount {
+                        let new_edge = Edge{index: to, amount: amount - *other_amount};
+                        effective_network[from].adj.push(new_edge);
+                    }
+                },
+                None => {
+                    // other edge does not exist
+                    let edge = Edge{index: to, amount};
+                    effective_network[from].adj.push(edge);
+                }
+            }
+        }
+        Network { nodes: effective_network }
+    }
+
     pub fn list_of_trading_nodes(&self) -> Vec<usize>
     {
         let mut list_of_connected = vec![false; self.node_count()];

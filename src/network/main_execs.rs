@@ -233,13 +233,17 @@ pub fn export_out_comp(opt: MiscOpt)
         if no_unconnected.node_count() < 10 {
             continue;
         } 
-        let graphs = if !opt.invert{
+        let mut digraph = if !opt.invert{
             no_unconnected.invert()
         } else{
             no_unconnected
         };
 
-        let mut for_sorting: Vec<(_,f64)> = graphs.nodes
+        if opt.effective_trade{
+            digraph = digraph.effective_trade_only();
+        }
+
+        let mut for_sorting: Vec<(_,f64)> = digraph.nodes
             .iter()
             .enumerate()
             .map(
@@ -256,7 +260,7 @@ pub fn export_out_comp(opt: MiscOpt)
         write!(buf, "{id} ").unwrap();
         for &(i, a) in for_sorting[0..10].iter(){
             if a > 0.0 {
-                let out = graphs.out_component(i, ComponentChoice::IncludingSelf).len();
+                let out = digraph.out_component(i, ComponentChoice::IncludingSelf).len();
                 write!(buf, " {out}").unwrap();
             } else {
                 write!(buf, " NaN").unwrap();
@@ -269,7 +273,7 @@ pub fn export_out_comp(opt: MiscOpt)
 
 pub fn misc(opt: MiscOpt)
 {
-    let networks = read_networks(&opt.input);
+    let mut networks = read_networks(&opt.input);
 
     let file = File::create(opt.out).expect("unable to create file");
     let mut buf = BufWriter::new(file);
@@ -302,11 +306,14 @@ pub fn misc(opt: MiscOpt)
         buf
     ).unwrap();
 
+    if opt.effective_trade{
+        networks.iter_mut()
+            .for_each(|n| *n = n.effective_trade_only());
+    }
     
 
     for (id, n) in networks.iter().enumerate()
     {
-        
         let no_unconnected = n.without_unconnected_nodes();
 
         if no_unconnected.node_count() == 0{

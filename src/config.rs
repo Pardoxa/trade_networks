@@ -98,4 +98,9 @@ pub struct MiscOpt{
     #[arg(short, long)]
     /// Verbose output
     pub verbose: bool,
+
+    #[arg(short, long)]
+    /// only use effective trade, i.e.,
+    /// if a -> b and b -> a only the effective result is taken
+    pub effective_trade: bool
 }
