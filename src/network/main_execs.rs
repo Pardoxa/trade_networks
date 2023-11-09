@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::{collections::{BTreeSet, BTreeMap}, fmt::Display};
 
 use indicatif::ProgressIterator;
 
@@ -219,37 +219,83 @@ pub fn misc(opt: MiscOpt)
 
     write_commands_and_version(&mut buf).unwrap();
 
+    let entries = [
+        "year_id",
+        "exporting_nodes",
+        "importing_nodes",
+        "trading_nodes",
+        "edge_count",
+        "max_my_centrality",
+        "component_count",
+        "largest_component",
+        "largest_component_edges",
+        "largest_out_size",
+        "largest_in_size",
+        "num_scc",
+        "largest_scc",
+        "largest_scc_diameter"
+    ];
+
+    write!(buf, "#{}_1", entries[0]).unwrap();
+    for (e, j) in entries[1..].iter().zip(2..) {
+        write!(buf, " {e}_{j}").unwrap();
+    }
     writeln!(
-        buf, 
-        "#year_id exporting_nodes importing_nodes edge_count trading_nodes max_my_centrality largest_component largest_component_edges largest_out_size, largest_in_size num_scc largest_scc largest_scc_diameter"
+        buf
     ).unwrap();
+
+    
 
     for (id, n) in networks.iter().enumerate()
     {
+        
         let no_unconnected = n.without_unconnected_nodes();
+
+        if no_unconnected.node_count() == 0{
+            if opt.verbose{
+                println!("Empty year {id}");
+            }
+            continue;
+        }
+        let mut res_map: BTreeMap<&str, Box<dyn Display>> = BTreeMap::new();
+        res_map.insert("year_id", Box::new(id));
+
         let trading_nodes = no_unconnected.node_count();
+        res_map.insert("trading_nodes", Box::new(trading_nodes));
         let inverted = n.invert();
         let node_count = inverted.nodes_with_non_empty_adj();
+        res_map.insert("exporting_nodes", Box::new(node_count));
         let importing_nodes = n.nodes_with_non_empty_adj();
+        res_map.insert("importing_nodes", Box::new(importing_nodes));
         let edge_count = n.edge_count();
-     
+        res_map.insert("edge_count", Box::new(edge_count));
 
         let mut normalized = n.clone();
         normalized.normalize();
         let centrality = normalized.my_centrality_normalized();
-        let max_c = centrality.iter().max().unwrap();
+        let max_c = *centrality.iter().max().unwrap();
+        res_map.insert("max_my_centrality", Box::new(max_c));
 
         let component = largest_component(n);
 
+        res_map.insert("component_count", Box::new(component.num_components));
+
         let reduced = n.filtered_network(&component.members_of_largest_component);
+        res_map.insert("largest_component", Box::new(component.size_of_largest_component));
+        
         let giant_comp_edge_count = reduced.edge_count();
+        res_map.insert("largest_component_edges", Box::new(giant_comp_edge_count));
 
         let out_size = n.largest_out_component(ComponentChoice::ExcludingSelf);
+        res_map.insert("largest_out_size", Box::new(out_size));
 
         
         let in_size = inverted.largest_out_component(ComponentChoice::ExcludingSelf);
+        res_map.insert("largest_in_size", Box::new(in_size));
 
         let scc_components = no_unconnected.scc_recursive();
+        res_map.insert("num_scc", Box::new(scc_components.len()));
+        
         let mut check = vec![false; no_unconnected.node_count()];
         for &i in scc_components.iter().flat_map(|e| e.iter())
         {
@@ -261,7 +307,7 @@ pub fn misc(opt: MiscOpt)
 
         let mut index_largest_scc = 0;
         let mut size_largest_scc = 0;
-        
+
         scc_components.iter()
             .enumerate()
             .for_each(
@@ -276,15 +322,20 @@ pub fn misc(opt: MiscOpt)
 
         let scc_network = no_unconnected.filtered_network(&scc_components[index_largest_scc]);
         let largest_scc_diameter = scc_network.diameter();
+        res_map.insert("largest_scc", Box::new(scc_network.node_count()));
+        let diam = if let Some(dia) = largest_scc_diameter {
+            format!("{}", dia)
+        } else {
+            "NaN".to_owned()
+        };
+        res_map.insert("largest_scc_diameter", Box::new(diam));
 
-        writeln!(buf, 
-            "{id} {node_count} {importing_nodes} {edge_count} {trading_nodes} {max_c} {} {giant_comp_edge_count} {} {} {} {} {}",
-            component.size_of_largest_component,
-            out_size,
-            in_size,
-            size_largest_scc,
-            scc_components.len(),
-            largest_scc_diameter.unwrap()
-        ).unwrap();
+        write!(buf, "{}", res_map.get(entries[0]).unwrap()).unwrap();
+        for e in entries[1..].iter()
+        {
+            write!(buf, " {}", res_map.get(e).expect(e)).unwrap();
+        }
+        writeln!(buf).unwrap();
+
     }
 }

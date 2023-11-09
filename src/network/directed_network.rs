@@ -72,7 +72,6 @@ impl Network{
             );
 
         if list_of_connected.iter().all(|x| *x){
-            eprintln!("All connected, nothing to do");
             (0..self.node_count()).collect()
         } else {
             list_of_connected.iter()

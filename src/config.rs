@@ -92,5 +92,9 @@ pub struct MiscOpt{
 
     #[arg(short, long)]
     /// Degree distribution of out-degree instead of in-degree
-    pub invert: bool
+    pub invert: bool,
+
+    #[arg(short, long)]
+    /// Verbose output
+    pub verbose: bool,
 }
