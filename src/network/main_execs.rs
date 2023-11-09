@@ -228,6 +228,7 @@ pub fn misc(opt: MiscOpt)
         "max_my_centrality",
         "component_count",
         "largest_component",
+        "largest_component_percent",
         "largest_component_edges",
         "largest_out_size",
         "largest_in_size",
@@ -276,11 +277,13 @@ pub fn misc(opt: MiscOpt)
         let max_c = *centrality.iter().max().unwrap();
         res_map.insert("max_my_centrality", Box::new(max_c));
 
-        let component = largest_component(n);
+        let component = largest_component(&no_unconnected);
 
+        let largest_component_percent = component.size_of_largest_component as f64 / no_unconnected.node_count() as f64;
+        res_map.insert("largest_component_percent", Box::new(largest_component_percent));
         res_map.insert("component_count", Box::new(component.num_components));
 
-        let reduced = n.filtered_network(&component.members_of_largest_component);
+        let reduced = no_unconnected.filtered_network(&component.members_of_largest_component);
         res_map.insert("largest_component", Box::new(component.size_of_largest_component));
         
         let giant_comp_edge_count = reduced.edge_count();
