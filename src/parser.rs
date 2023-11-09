@@ -35,7 +35,7 @@ pub fn line_to_vec(line: &str) -> Vec<String>
 
 
 
-pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> Vec<Network>
+pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow::Result<Vec<Network>>
 {
 
     let wanted_transaction_type = "Import Quantity";
@@ -78,8 +78,10 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> Vec<Net
 
     let y1986 = *map.get("Y1986").unwrap();
 
+    let line_len = map.len();
 
-    lines
+
+    let line_iter = lines
         .map(|line| {
             let line = line.unwrap();
             line_to_vec(&line)
@@ -89,24 +91,27 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> Vec<Net
             {
                 item[item_id] == item_code 
                 && item[transaction_type] == wanted_transaction_type
-            })
-        .for_each(
-            |line_vec|
-            {
-                let unit = line_vec.get(unit_id).unwrap();
-                if let Some(u) = &glob_unit{
-                    if !u.eq(unit){
-                        panic!("Unit error! old {} new {}", u, unit);
-                    }
-                } else {
-                    glob_unit = Some(unit.to_owned());
-                }
-                let rep_c = line_vec.get(reporter_country_id).unwrap();
-                countries.insert(rep_c.clone());
-                let part_c = line_vec.get(partner_country_id).unwrap();
-                countries.insert(part_c.clone());
+            });
+
+    for line_vec in line_iter{
+        let unit = line_vec.get(unit_id).unwrap();
+        if let Some(u) = &glob_unit{
+            if !u.eq(unit){
+                return Err(anyhow::anyhow!("Unit error! old {} new {}", u, unit));
             }
-        );
+        } else {
+            glob_unit = Some(unit.to_owned());
+        }
+
+        if line_vec.len() != line_len{
+            return Err(anyhow::anyhow!("Line error! old_len {line_len} new {}", line_vec.len()));
+        }
+
+        let rep_c = line_vec.get(reporter_country_id).unwrap();
+        countries.insert(rep_c.clone());
+        let part_c = line_vec.get(partner_country_id).unwrap();
+        countries.insert(part_c.clone());
+    }
 
     let all: Vec<_> = countries.iter()
         .map(
@@ -177,7 +182,7 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> Vec<Net
         }
     );
 
-    years
+    Ok(years)
 }
 
 

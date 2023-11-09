@@ -17,7 +17,11 @@ use {
 
 pub fn to_binary(opt: ToBinaryOpt)
 {
-    let networks = crate::parser::network_parser(&opt.in_file, &opt.item_code, false);
+    let networks = crate::parser::network_parser(
+        &opt.in_file, 
+        &opt.item_code, 
+        false
+    ).expect("unable to parse");
 
     let file = File::create(&opt.out).unwrap();
     let buf = BufWriter::new(file);
@@ -48,6 +52,13 @@ pub fn to_binary_all(opt: AllToBinaryOpt)
         let bar = crate::misc::indication_bar(item_codes.len() as u64);
         for item_code in item_codes.iter().progress_with(bar){
             let networks = crate::parser::network_parser(&opt.in_file, item_code, true);
+            let networks = match networks{
+                Err(e) => {
+                    println!("Error in {e} - Item code {item_code}");
+                    continue;
+                }, 
+                Ok(n) => n
+            };
             let output_name = format!("{item_code}.bincode");
             let file = File::create(&output_name).unwrap();
             let buf = BufWriter::new(file);
