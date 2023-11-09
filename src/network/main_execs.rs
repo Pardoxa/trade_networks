@@ -210,6 +210,63 @@ fn degree_dists_helper(networks: &[Network], out: &str)
 }
 
 
+pub fn export_out_comp(opt: MiscOpt)
+{
+    let networks = read_networks(&opt.input);
+
+    let file = File::create(opt.out).expect("unable to create file");
+    let mut buf = BufWriter::new(file);
+
+    write_commands_and_version(&mut buf).unwrap();
+
+    write!(buf, "#year").unwrap();
+    for i in 0..10
+    {
+        write!(buf, " {i}").unwrap();
+    }
+    writeln!(buf).unwrap();
+
+    for (id, n) in networks.iter().enumerate()
+    {
+        
+        let no_unconnected = n.without_unconnected_nodes();
+        if no_unconnected.node_count() < 10 {
+            continue;
+        } 
+        let graphs = if !opt.invert{
+            no_unconnected.invert()
+        } else{
+            no_unconnected
+        };
+
+        let mut for_sorting: Vec<(_,f64)> = graphs.nodes
+            .iter()
+            .enumerate()
+            .map(
+                |(i, n)|
+                {
+                    (i, n.adj.iter().map(|e| e.amount).sum())
+                }
+            ).collect();
+        for_sorting
+            .sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
+
+        assert!(for_sorting[0].1 >= for_sorting[1].1);
+
+        write!(buf, "{id} ").unwrap();
+        for &(i, a) in for_sorting[0..10].iter(){
+            if a > 0.0 {
+                let out = graphs.out_component(i, ComponentChoice::IncludingSelf).len();
+                write!(buf, " {out}").unwrap();
+            } else {
+                write!(buf, " NaN").unwrap();
+            }
+        }
+        writeln!(buf).unwrap();
+    }
+
+}
+
 pub fn misc(opt: MiscOpt)
 {
     let networks = read_networks(&opt.input);

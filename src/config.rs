@@ -59,7 +59,8 @@ pub enum CmdChooser{
     ToCountryNetwork(ToCountryBinOpt),
     DegreeDist(DegreeDist),
     MaxWeight(DegreeDist),
-    Misc(MiscOpt)
+    Misc(MiscOpt),
+    Out10(MiscOpt)
 }
 
 
