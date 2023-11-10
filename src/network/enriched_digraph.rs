@@ -103,21 +103,81 @@ impl EnrichmentInfos{
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct EnrichedDigraphHelper{
     nodes: Vec<EnrichedNodeHelper>
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnrichedDigraph{
+    units: Vec<String>,
+    extra_header: Vec<u8>,
+    nodes: Vec<EnrichedNode>
+}
+
+impl EnrichedDigraph{
+    pub fn get_idx(&self, id: u8) -> Option<usize>
+    {
+        self.extra_header
+            .iter()
+            .position(|&e| e == id)
+    }
+}
+
+impl From<EnrichedDigraphHelper> for EnrichedDigraph{
+    fn from(other: EnrichedDigraphHelper) -> Self {
+
+        let first = other.nodes.first()
+            .expect("Empty network!");
+        let mut units = Vec::with_capacity(first.extra.map.len());
+        let mut extra_header = Vec::with_capacity(units.len());
+        for (&id, e) in first.extra.map.iter(){
+            extra_header.push(id);
+            units.push(e.unit.clone());
+        }
+
+        let nodes: Vec<_> = other.nodes
+            .into_iter()
+            .map(
+                |n|
+                {
+                    assert_eq!(units.len(), n.extra.map.len());
+                    let mut extra_vec = Vec::with_capacity(extra_header.len());
+                    for (id, unit) in extra_header.iter().zip(units.iter()){
+                        let extra = n.extra.map.get(id)
+                            .expect("missing extra");
+                        assert_eq!(&extra.unit, unit);
+                        extra_vec.push(extra.amount);
+                    }
+                    EnrichedNode { 
+                        identifier: n.identifier, 
+                        extra: extra_vec, 
+                        adj: n.adj
+                    }
+                }
+            ).collect();
+
+        Self { units, extra_header, nodes }
+    }
+}
+
 pub struct EnrichedDigraphs{
-    pub digraphs: Vec<()>,
+    pub digraphs: Vec<EnrichedDigraph>,
     pub start_year: usize
 }
 
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct EnrichedNodeHelper{
     pub identifier: String,
     pub extra: ExtraInfo,
+    pub adj: Vec<Edge>
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EnrichedNode{
+    pub identifier: String,
+    pub extra: Vec<f64>,
     pub adj: Vec<Edge>
 }
 
@@ -154,10 +214,12 @@ pub fn enrich_networks(
                         }
                     ).collect();
                 EnrichedDigraphHelper{nodes: e_nodes}
+                    .into()
             }
         ).collect();
-    todo!("check the units. Also, all nodes should contain the same infos, check that");
-    // If they do contain the same infos: maybe I want to transform the BTreeMap into a Vec
-    // and attach a map to the digraph so that one knows what the indices mean.
-    //EnrichedDigraphs { digraphs, start_year: enrichments.starting_year }
+
+    EnrichedDigraphs { 
+        digraphs, 
+        start_year: enrichments.starting_year 
+    }
 }
