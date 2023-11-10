@@ -406,3 +406,21 @@ pub fn misc(opt: MiscOpt)
 
     }
 }
+
+pub fn enrich(opt: EnrichOpt){
+    let enrichments = crate::parser::parse_extra(
+        &opt.enrich_file, 
+        &opt.item_code
+    );
+    let networks = read_networks(&opt.bin_file);
+    let enriched = crate::network::enriched_digraph::enrich_networks(
+        1986, 
+        &networks, 
+        enrichments
+    );
+    let out_file = File::create(opt.out)
+        .unwrap();
+    let buf_writer = BufWriter::new(out_file);
+    bincode::serialize_into(buf_writer, &enriched)
+        .expect("unable to serialize");
+}

@@ -45,8 +45,26 @@ pub struct AllToBinaryOpt{
 
     #[arg(short, long)]
     /// Instead of one file containing all networks do one file per item code
-    pub seperate_output: bool
+    pub seperate_output: bool   
+}
+
+#[derive(Parser, Debug)]
+pub struct EnrichOpt{
+    #[arg(long)]
+    /// Path to binary network file
+    pub bin_file: String,
+
+    #[arg(short, long)]
+    /// Name of output
+    pub out: String,
     
+    #[arg(short, long)]
+    /// Path to csv containing enrichment data
+    pub enrich_file: String,
+
+    #[arg(long)]
+    /// Item code, e.g. 27 for Rice
+    pub item_code: String
 }
 
 /// Created by Yannick Feld
@@ -54,13 +72,14 @@ pub struct AllToBinaryOpt{
 #[derive(Parser)]
 #[command(author, version, about)]
 pub enum CmdChooser{
+    DegreeDist(DegreeDist),
+    Enrichment(EnrichOpt),
+    MaxWeight(DegreeDist),
+    Misc(MiscOpt),
+    Out10(MiscOpt),
     ToBinary(ToBinaryOpt),
     ToBinaryAll(AllToBinaryOpt),
     ToCountryNetwork(ToCountryBinOpt),
-    DegreeDist(DegreeDist),
-    MaxWeight(DegreeDist),
-    Misc(MiscOpt),
-    Out10(MiscOpt)
 }
 
 

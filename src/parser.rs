@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use{
     std::{
         io::{
@@ -37,7 +35,8 @@ pub fn line_to_vec(line: &str) -> Vec<String>
 }
 
 
-pub fn parse_extra(in_file: &str, target_item_code: &str){
+pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
+{
     const START_YEAR: usize = 2010;
     let year_start_str = format!("Y{START_YEAR}");
     let map = crate::network::enriched_digraph::NodeInfoMap::new();
@@ -93,6 +92,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &str){
             
         }
     }
+    enrichments
 }
 
 

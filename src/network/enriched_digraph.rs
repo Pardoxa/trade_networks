@@ -116,6 +116,7 @@ pub struct EnrichedDigraph{
 }
 
 impl EnrichedDigraph{
+    #[allow(dead_code)]
     pub fn get_idx(&self, id: u8) -> Option<usize>
     {
         self.extra_header
@@ -161,6 +162,7 @@ impl From<EnrichedDigraphHelper> for EnrichedDigraph{
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichedDigraphs{
     pub digraphs: Vec<EnrichedDigraph>,
     pub start_year: usize
@@ -198,6 +200,7 @@ pub fn enrich_networks(
         .map(
             |(network, enrichment)|
             {
+                let network = network.without_unconnected_nodes();
                 let e_nodes = network.nodes
                     .iter()
                     .map(
