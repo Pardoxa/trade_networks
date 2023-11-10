@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use{
     std::{
         io::{
@@ -10,7 +12,8 @@ use{
             BTreeSet
         }
     },
-    crate::network::*
+    crate::network::*,
+    crate::parser::enriched_digraph::*
 };
 
 pub fn line_to_vec(line: &str) -> Vec<String>
@@ -33,6 +36,64 @@ pub fn line_to_vec(line: &str) -> Vec<String>
     all
 }
 
+
+pub fn parse_extra(in_file: &str, target_item_code: &str){
+    const START_YEAR: usize = 2010;
+    let year_start_str = format!("Y{START_YEAR}");
+    let map = crate::network::enriched_digraph::NodeInfoMap::new();
+
+    let file = File::open(in_file)
+        .expect("unable to open file");
+    let buf = BufReader::new(file);
+    let mut lines = buf.lines()
+        .map(|l| l.expect("read error"));
+    let first_line = lines.next()
+        .unwrap();
+    let header = line_to_vec(&first_line);
+
+    let mut header_map = BTreeMap::new();
+    for (i, s) in header.into_iter().enumerate(){
+        header_map.insert(s, i);
+    }
+
+    let item_code_id = *header_map.get("Item Code")
+        .expect("no item codes available? Did you specify the correct file?");
+    let unit_id = *header_map.get("Unit")
+        .expect("Does not contain Unit");
+    let info_id = *header_map.get("Element")
+        .expect("Does not contain Element");
+    let country_id = *header_map.get("Area Code")
+        .expect("Does not contain Area code");
+
+    let start_year_id = *header_map.get(&year_start_str)
+        .expect(&year_start_str);
+    let total = header_map.len() - start_year_id;
+
+    let mut enrichments = EnrichmentInfos::new(total, START_YEAR);
+
+    for l in lines{
+        let v = line_to_vec(&l);
+        let item_code = &v[item_code_id];
+        if item_code == target_item_code{
+            let unit = &v[unit_id];
+            let info_type = &v[info_id];
+            let entry_id = map.get(info_type);
+            let country = &v[country_id];
+            
+            for (year_idx, amount_str) in v[start_year_id..].iter().enumerate(){
+                if amount_str.is_empty(){
+                    continue;
+                }
+                let amount: f64 = amount_str.parse()
+                    .expect("Error in parsing amount as float");
+                let extra = Extra{unit: unit.clone(), amount};
+                let country_info = enrichments.get_mut_inserting(year_idx, country);
+                country_info.push(entry_id, extra);
+            }
+            
+        }
+    }
+}
 
 
 pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow::Result<Vec<Network>>
