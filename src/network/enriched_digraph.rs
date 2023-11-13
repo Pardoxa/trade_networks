@@ -159,21 +159,20 @@ impl From<EnrichedDigraphHelper> for EnrichedDigraph{
             .map(
                 |n|
                 {
-                    let mut extra_vec = Vec::with_capacity(extra_header.len());
+                    let mut extra_map = BTreeMap::new();
                     for (id, unit) in extra_header.iter().zip(units.iter()){
                         let extra = n.extra.map.get(id);
                         if let Some(e) = extra{
                             assert_eq!(&e.unit, unit);
-                            extra_vec.push(Some(e.amount));
-                        } else {
-                            extra_vec.push(None);
+                            extra_map.insert(*id, e.amount);
                         }
                     }
+                    
                     EnrichedNode { 
                         identifier: n.identifier, 
-                        extra: extra_vec, 
+                        extra: extra_map, 
                         adj: n.adj
-                    }
+                    }                  
                 }
             ).collect();
 
@@ -198,7 +197,7 @@ pub struct EnrichedNodeHelper{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichedNode{
     pub identifier: String,
-    pub extra: Vec<Option<f64>>,
+    pub extra: BTreeMap<u8, f64>,
     pub adj: Vec<Edge>
 }
 
