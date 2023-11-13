@@ -121,13 +121,15 @@ impl EnrichmentInfos{
 
 #[derive(Clone, Debug)]
 pub struct EnrichedDigraphHelper{
-    nodes: Vec<EnrichedNodeHelper>
+    nodes: Vec<EnrichedNodeHelper>,
+    direction: Direction
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichedDigraph{
     units: Vec<String>,
     extra_header: Vec<u8>,
+    direction: Direction,
     nodes: Vec<EnrichedNode>
 }
 
@@ -184,7 +186,7 @@ impl From<EnrichedDigraphHelper> for EnrichedDigraph{
             ).collect();
 
 
-        Self { units, extra_header, nodes }
+        Self { units, extra_header, nodes, direction: other.direction }
     }
 }
 
@@ -265,7 +267,7 @@ pub fn enrich_networks(
                     }
                 ).collect();
                     
-                EnrichedDigraphHelper{nodes: e_nodes}
+                EnrichedDigraphHelper{nodes: e_nodes, direction: network.direction}
                     .into()
             }
         ).collect();

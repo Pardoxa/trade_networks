@@ -15,7 +15,7 @@ use {
     net_ensembles::sampling::*
 };
 
-pub fn to_binary(opt: ToBinaryOpt)
+pub fn parse_networks(opt: ParseNetworkOpt)
 {
     let networks = crate::parser::network_parser(
         &opt.in_file, 
@@ -25,11 +25,17 @@ pub fn to_binary(opt: ToBinaryOpt)
 
     let file = File::create(&opt.out).unwrap();
     let buf = BufWriter::new(file);
-    bincode::serialize_into(buf, &networks)
-        .expect("serialization issue");
+    if opt.json{
+        serde_json::to_writer_pretty(buf, &networks)
+            .expect("unable to create json");
+    } else {
+        bincode::serialize_into(buf, &networks)
+            .expect("serialization issue");
+    }
+    
 }
 
-pub fn to_binary_all(opt: AllToBinaryOpt)
+pub fn to_binary_all(opt: ParseAllNetworksOpt)
 {
 
     let item_file = File::open(&opt.item_file)

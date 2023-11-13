@@ -10,6 +10,20 @@ use{
     super::helper_structs::*
 };
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Direction{
+    ExportTo,
+    ImportFrom
+}
+
+impl Direction{
+    pub fn invert(self) -> Self{
+        match self{
+            Self::ExportTo => Self::ImportFrom,
+            Self::ImportFrom => Self::ExportTo
+        }
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node{
@@ -39,12 +53,15 @@ pub fn read_networks(file: &str) -> Vec<Network>
 {
     let file = File::open(file).unwrap();
     let reader = BufReader::new(file);
-    bincode::deserialize_from(reader).expect("unable to deserialize")
+    bincode::deserialize_from(reader)
+        .expect("unable to deserialize")
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Network{
-    pub nodes: Vec<Node>
+    pub direction: Direction,
+    pub nodes: Vec<Node>,
+    pub year: i32
 }
 
 impl Network{
@@ -80,7 +97,11 @@ impl Network{
                 }
             }
         }
-        Network { nodes: effective_network }
+        Network { 
+            nodes: effective_network, 
+            direction: self.direction, 
+            year: self.year 
+        }
     }
 
     pub fn sorted_by_largest_in(&self) -> Vec<(usize, f64)>
@@ -163,7 +184,11 @@ impl Network{
                 all[other_node.index].adj.push(edge);
             }
         }
-        Network { nodes: all }
+        Network { 
+            nodes: all, 
+            direction: self.direction.invert(),
+            year: self.year
+        }
     }
 
     pub fn normalize(&mut self)
@@ -364,7 +389,11 @@ impl Network{
             }
         }
 
-        Network { nodes }
+        Network { 
+            nodes, 
+            direction: self.direction,
+            year: self.year
+        }
     }
 
     /// Note: out component of imports should be equal to in component of exports

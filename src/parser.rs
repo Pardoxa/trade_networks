@@ -129,8 +129,13 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow:
 
 
     let mut map = BTreeMap::new();
+    let mut first_year: Option<usize> = None;
     for (idx, &entry) in entry_names.iter().enumerate()
     {
+        if first_year.is_none() && entry.starts_with('Y'){
+            let number = &entry[1..];
+            first_year = number.parse().ok();
+        }
         map.insert(entry, idx);
     }
     let item_id = *map.get("Item Code").unwrap();
@@ -147,7 +152,9 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow:
 
     let mut countries: BTreeSet<String> = BTreeSet::new();
 
-    let y1986 = *map.get("Y1986").unwrap();
+    let first_year = first_year.unwrap();
+    let year_head = format!("Y{}", first_year);
+    let start_year = *map.get(year_head.as_str()).unwrap();
 
     let line_len = map.len();
 
@@ -201,10 +208,21 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow:
             }
         );
 
-    let network = Network{nodes: all};
+    let network = Network{
+        nodes: all, 
+        direction: Direction::ImportFrom, 
+        year: first_year as i32
+    };
 
-    let mut years: Vec<_> = (y1986..map.len())
-        .map(|_| network.clone())
+    let mut years: Vec<_> = (start_year..map.len())
+        .zip(0..)
+        .map(|(_, i)| 
+            {
+                let mut n = network.clone();
+                n.year += i;
+                n
+            }
+        )
         .collect();
 
     let file = File::open(file_name)
@@ -233,7 +251,7 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow:
             let rep_id = *id_map.get(rep_c).unwrap();
             let part_id = *id_map.get(part_c).unwrap();
 
-            (y1986..).zip(years.iter_mut())
+            (start_year..).zip(years.iter_mut())
                 .for_each(
                     |(idx, network)|
                     {
@@ -259,6 +277,12 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow:
 
 pub fn country_networks(networks: &[Network], code_file: String) -> Vec<Network>
 {
+    assert!(
+        networks.windows(2)
+            .all(|a| a[0].direction == a[1].direction)
+    );
+    let direction = networks[0].direction;
+
     let file = File::open(code_file)
         .unwrap();
     let buf_reader = BufReader::new(file);
@@ -298,7 +322,9 @@ pub fn country_networks(networks: &[Network], code_file: String) -> Vec<Network>
             }
         ).collect();
     let network = Network{
-        nodes: country_network
+        nodes: country_network,
+        direction,
+        year: networks[0].year
     };
 
     let mut index_map = BTreeMap::new();
@@ -313,6 +339,7 @@ pub fn country_networks(networks: &[Network], code_file: String) -> Vec<Network>
             |old_network|
             {
                 let mut n = network.clone();
+                n.year = old_network.year;
 
                 for node in old_network.nodes.iter()
                 {

@@ -11,8 +11,8 @@ fn main() {
     let option = CmdChooser::parse();
 
     match option{
-        CmdChooser::ToBinary(opt) => to_binary(opt),
-        CmdChooser::ToBinaryAll(opt) => to_binary_all(opt),
+        CmdChooser::ParseNetworks(opt) => parse_networks(opt),
+        CmdChooser::ParseAllNetworks(opt) => to_binary_all(opt),
         CmdChooser::DegreeDist(opt) => degree_dists(opt),
         CmdChooser::MaxWeight(opt) => max_weight(opt),
         CmdChooser::ToCountryNetwork(opt) => to_country_file(opt),

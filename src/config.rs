@@ -21,7 +21,7 @@ pub struct ToCountryBinOpt{
 }
 
 #[derive(Parser, Debug)]
-pub struct ToBinaryOpt{
+pub struct ParseNetworkOpt{
     #[arg(long)]
     /// Path to csv to read in
     pub in_file: String,
@@ -32,11 +32,15 @@ pub struct ToBinaryOpt{
     
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
-    pub item_code: String
+    pub item_code: String,
+
+    #[arg(long, short)]
+    /// store it as json instead
+    pub json: bool
 }
 
 #[derive(Parser, Debug)]
-pub struct AllToBinaryOpt{
+pub struct ParseAllNetworksOpt{
     #[arg(long)]
     /// Path to csv to read in
     pub in_file: String,
@@ -83,8 +87,8 @@ pub enum CmdChooser{
     MaxWeight(DegreeDist),
     Misc(MiscOpt),
     Out10(MiscOpt),
-    ToBinary(ToBinaryOpt),
-    ToBinaryAll(AllToBinaryOpt),
+    ParseNetworks(ParseNetworkOpt),
+    ParseAllNetworks(ParseAllNetworksOpt),
     ToCountryNetwork(ToCountryBinOpt),
     Tests(Tests)
 }
