@@ -37,8 +37,6 @@ pub fn line_to_vec(line: &str) -> Vec<String>
 
 pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
 {
-    const START_YEAR: usize = 2010;
-    let year_start_str = format!("Y{START_YEAR}");
     let map = crate::network::enriched_digraph::NodeInfoMap::new();
 
     let file = File::open(in_file)
@@ -51,9 +49,16 @@ pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
     let header = line_to_vec(&first_line);
 
     let mut header_map = BTreeMap::new();
+    let mut start_year: Option<usize> = None;
     for (i, s) in header.into_iter().enumerate(){
+        if start_year.is_none() && s.starts_with('Y') {
+            let number = &s[1..];
+            start_year = number.parse().ok();
+        }
         header_map.insert(s, i);
     }
+    let start_year = start_year.unwrap();
+    let year_start_str = format!("Y{start_year}");
 
     let item_code_id = *header_map.get("Item Code")
         .expect("no item codes available? Did you specify the correct file?");
@@ -68,8 +73,8 @@ pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
         .expect(&year_start_str);
     let total = header_map.len() - start_year_id;
 
-    let mut enrichments = EnrichmentInfos::new(total, START_YEAR);
-
+    let mut enrichments = EnrichmentInfos::new(total, start_year);
+    let mut not_even_once = true;
     for l in lines{
         let v = line_to_vec(&l);
         let item_code = &v[item_code_id];
@@ -78,6 +83,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
             let info_type = &v[info_id];
             let entry_id = map.get(info_type);
             let country = &v[country_id];
+            not_even_once = false;
             
             for (year_idx, amount_str) in v[start_year_id..].iter().enumerate(){
                 if amount_str.is_empty(){
@@ -91,6 +97,10 @@ pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
             }
             
         }
+    }
+    if not_even_once{
+        dbg!(&enrichments);
+        panic!("Item code is not contained within the specified data set!");
     }
     enrichments
 }

@@ -1,11 +1,15 @@
 use {
     serde::{Serialize, Deserialize},
-    std::collections::BTreeMap,
+    std::{
+        collections::BTreeMap,
+        cmp::Ordering
+    },
     super::*
 };
 
 
-const POSSIBLE_NODE_INFO: [&str; 20] = [
+const POSSIBLE_NODE_INFO: [&str; 26] = [
+    "Area harvested",
     "Domestic supply quantity",
     "Export Quantity",
     "Fat supply quantity (g/capita/day)",
@@ -16,16 +20,21 @@ const POSSIBLE_NODE_INFO: [&str; 20] = [
     "Food supply (kcal/capita/day)",
     "Food supply quantity (kg/capita/yr)",
     "Import Quantity",
+    "Laying",
     "Losses",
     "Other uses (non-food)",
     "Processing",
     "Production",
+    "Producing Animals/Slaughtered",
     "Protein supply quantity (g/capita/day)",
     "Protein supply quantity (t)",
     "Residuals",
     "Seed",
+    "Stocks",
     "Stock Variation",
     "Total Population - Both sexes",
+    "Yield",
+    "Yield/Carcass Weight"
 ];
 
 pub struct NodeInfoMap{
@@ -128,27 +137,37 @@ impl EnrichedDigraph{
 impl From<EnrichedDigraphHelper> for EnrichedDigraph{
     fn from(other: EnrichedDigraphHelper) -> Self {
 
-        let first = other.nodes.first()
-            .expect("Empty network!");
-        let mut units = Vec::with_capacity(first.extra.map.len());
-        let mut extra_header = Vec::with_capacity(units.len());
-        for (&id, e) in first.extra.map.iter(){
-            extra_header.push(id);
-            units.push(e.unit.clone());
+        let mut unit_map: BTreeMap<u8, String> = BTreeMap::new();
+        
+        for node in other.nodes.iter(){
+            for (&id, e) in node.extra.map.iter(){
+                if let Some(unit) = unit_map.get(&id){
+                    if  !e.unit.eq(unit){
+                        panic!("unit error - {} ({}) vs {} ({})", unit, unit.len(), e.unit, e.unit.len());
+                    }
+                } else {
+                    unit_map.insert(id, e.unit.clone());
+                }
+            }
         }
+        let (extra_header, units): (Vec<_>, Vec<_>) = unit_map
+            .into_iter()
+            .unzip();
 
         let nodes: Vec<_> = other.nodes
             .into_iter()
             .map(
                 |n|
                 {
-                    assert_eq!(units.len(), n.extra.map.len());
                     let mut extra_vec = Vec::with_capacity(extra_header.len());
                     for (id, unit) in extra_header.iter().zip(units.iter()){
-                        let extra = n.extra.map.get(id)
-                            .expect("missing extra");
-                        assert_eq!(&extra.unit, unit);
-                        extra_vec.push(extra.amount);
+                        let extra = n.extra.map.get(id);
+                        if let Some(e) = extra{
+                            assert_eq!(&e.unit, unit);
+                            extra_vec.push(Some(e.amount));
+                        } else {
+                            extra_vec.push(None);
+                        }
                     }
                     EnrichedNode { 
                         identifier: n.identifier, 
@@ -179,7 +198,7 @@ pub struct EnrichedNodeHelper{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichedNode{
     pub identifier: String,
-    pub extra: Vec<f64>,
+    pub extra: Vec<Option<f64>>,
     pub adj: Vec<Edge>
 }
 
@@ -189,33 +208,55 @@ pub fn enrich_networks(
     enrichments: EnrichmentInfos
 ) -> EnrichedDigraphs
 {
-    if start_year_networks > enrichments.starting_year{
-        unimplemented!()
-    }
-    let start_idx = enrichments.starting_year - start_year_networks;
+    let (starting_year, networks, enrichments): (_, _, &[_]) = match start_year_networks
+        .cmp(&enrichments.starting_year)
+    {
+        Ordering::Equal => {
+            (start_year_networks, networks, &enrichments.enrichments)
+        },
+        Ordering::Less => {
+            let start_idx = enrichments.starting_year - start_year_networks;
+            (enrichments.starting_year, &networks[start_idx..], &enrichments.enrichments)
+        },
+        Ordering::Greater => {
+            let start_idx = start_year_networks - enrichments.starting_year;
+            (start_year_networks, networks, &enrichments.enrichments[start_idx..])
+        }
+    };
 
-    let digraphs: Vec<_> = networks[start_idx..]
+    assert_eq!(networks.len(), enrichments.len());
+
+    let digraphs: Vec<_> = networks
         .iter()
-        .zip(enrichments.enrichments.iter())
+        .zip(enrichments.iter())
         .map(
             |(network, enrichment)|
             {
-                let network = network.without_unconnected_nodes();
+                //let network = network.without_unconnected_nodes();
+                //if network.node_count() != enrichment.len(){
+                //    eprintln!("WARNING: Enrichment in index {index} - {} vs {}", network.node_count(), enrichment.len());
+                //}
                 let e_nodes = network.nodes
-                    .iter()
-                    .map(
-                        |node|
-                        {
-                            let extra = enrichment
-                                .get(node.identifier.as_str())
-                                .expect("No extra available!");
-                            EnrichedNodeHelper{
-                                identifier: node.identifier.clone(),
-                                extra: extra.clone(),
-                                adj: node.adj.clone()
-                            }
+                .iter()
+                .map(
+                    |node|
+                    {
+                        let extra = match enrichment
+                            .get(node.identifier.as_str()){
+                            Some(extra) => extra.clone(),
+                            None => {
+                                //println!("{index}, no extra for {}", &node.identifier);
+                                ExtraInfo::new()
+                            }        
+                        };
+                        EnrichedNodeHelper{
+                            identifier: node.identifier.clone(),
+                            extra: extra.clone(),
+                            adj: node.adj.clone()
                         }
-                    ).collect();
+                    }
+                ).collect();
+                    
                 EnrichedDigraphHelper{nodes: e_nodes}
                     .into()
             }
@@ -223,6 +264,6 @@ pub fn enrich_networks(
 
     EnrichedDigraphs { 
         digraphs, 
-        start_year: enrichments.starting_year 
+        start_year: starting_year 
     }
 }
