@@ -243,22 +243,12 @@ pub fn export_out_comp(opt: MiscOpt)
             digraph = digraph.effective_trade_only();
         }
 
-        let mut for_sorting: Vec<(_,f64)> = digraph.nodes
-            .iter()
-            .enumerate()
-            .map(
-                |(i, n)|
-                {
-                    (i, n.adj.iter().map(|e| e.amount).sum())
-                }
-            ).collect();
-        for_sorting
-            .sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
+        let sorted = digraph.sorted_by_largest_in();
 
-        assert!(for_sorting[0].1 >= for_sorting[1].1);
+        assert!(sorted[0].1 >= sorted[1].1);
 
         write!(buf, "{id} ").unwrap();
-        for &(i, a) in for_sorting[0..10].iter(){
+        for &(i, a) in sorted[0..10].iter(){
             if a > 0.0 {
                 let out = digraph.out_component(i, ComponentChoice::IncludingSelf).len();
                 write!(buf, " {out}").unwrap();
@@ -428,4 +418,68 @@ pub fn enrich(opt: EnrichOpt){
         bincode::serialize_into(buf_writer, &enriched)
             .expect("unable to serialize");
     }
+}
+
+pub fn test_chooser(in_file: &str, cmd: SubCommand){
+    match cmd
+    {
+        SubCommand::OutComp(o) => {
+            out_comparison(in_file, o)
+        },
+        SubCommand::C2 {..} => {
+            println!("C2");
+        }
+    }
+}
+
+pub fn out_comparison(in_file: &str, cmd: OutOpt){
+    let network = read_networks(in_file);
+    // for testing reasons I will only focus on the last year now
+    let last = network.last().unwrap();
+    let n = if cmd.invert{
+        last.invert()
+    } else {
+        last.clone()
+    };
+    let ordering = n.sorted_by_largest_in();
+    let sets: Vec<_> = ordering[0..cmd.top.get()]
+        .iter()
+        .map(
+            |&(index, _)|
+            {
+                let comps = n.out_component(
+                    index, 
+                    ComponentChoice::IncludingSelf
+                );
+                BTreeSet::from_iter(comps)
+            }
+        ).collect();
+    
+    let out = File::create(&cmd.out)
+        .expect("unable to create file");
+    let mut buf = BufWriter::new(out);
+    write_commands_and_version(&mut buf).unwrap();
+
+    let matrix: Vec<Vec<_>> = sets.iter()
+        .map(
+            |set|
+            {
+                sets.iter()
+                    .map(
+                        |other|
+                        {
+                            let inter = set.intersection(other);
+                            inter.count()
+                        }
+                    ).collect()
+            }
+        ).collect();
+
+    for row in matrix.iter(){
+        for val in row.iter(){
+            write!(buf, "{val} ").unwrap();
+        }
+        writeln!(buf).unwrap()
+    }
+
 }

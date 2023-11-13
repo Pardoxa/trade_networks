@@ -1,4 +1,6 @@
-use clap::Parser;
+use std::num::NonZeroUsize;
+
+use clap::{Parser, Subcommand};
 
 
 
@@ -84,6 +86,7 @@ pub enum CmdChooser{
     ToBinary(ToBinaryOpt),
     ToBinaryAll(AllToBinaryOpt),
     ToCountryNetwork(ToCountryBinOpt),
+    Tests(Tests)
 }
 
 
@@ -126,4 +129,41 @@ pub struct MiscOpt{
     /// only use effective trade, i.e.,
     /// if a -> b and b -> a only the effective result is taken
     pub effective_trade: bool
+}
+
+#[derive(Parser, Debug)]
+pub struct Tests{
+    /// input
+    #[arg(short, long)]
+    pub in_file: String,
+
+    #[command(subcommand)]
+    pub command: SubCommand
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SubCommand{
+    /// c
+    OutComp(OutOpt),
+    /// d
+    C2{
+        /// o
+        other_stuff: String,
+        /// f
+        flag: bool
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct OutOpt{
+    /// name of output file
+    #[arg(short, long)]
+    pub out: String,
+
+    /// How many countries to consider
+    #[arg(short, long)]
+    pub top: NonZeroUsize,
+
+    #[arg(short, long)]
+    pub invert: bool
 }

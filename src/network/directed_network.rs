@@ -83,6 +83,22 @@ impl Network{
         Network { nodes: effective_network }
     }
 
+    pub fn sorted_by_largest_in(&self) -> Vec<(usize, f64)>
+    {
+        let mut for_sorting: Vec<(_,f64)> = self.nodes
+            .iter()
+            .enumerate()
+            .map(
+                |(i, n)|
+                {
+                    (i, n.adj.iter().map(|e| e.amount).sum())
+                }
+            ).collect();
+        for_sorting
+            .sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
+        for_sorting
+    }
+
     pub fn list_of_trading_nodes(&self) -> Vec<usize>
     {
         let mut list_of_connected = vec![false; self.node_count()];
