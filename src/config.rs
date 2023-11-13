@@ -64,7 +64,11 @@ pub struct EnrichOpt{
 
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
-    pub item_code: String
+    pub item_code: String,
+
+    #[arg(short, long)]
+    /// Use json output format instead of bincode
+    pub json: bool
 }
 
 /// Created by Yannick Feld

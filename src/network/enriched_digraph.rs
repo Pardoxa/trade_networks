@@ -2,7 +2,8 @@ use {
     serde::{Serialize, Deserialize},
     std::{
         collections::BTreeMap,
-        cmp::Ordering
+        cmp::Ordering,
+        ops::Deref
     },
     super::*
 };
@@ -37,16 +38,22 @@ const POSSIBLE_NODE_INFO: [&str; 26] = [
     "Yield/Carcass Weight"
 ];
 
-pub struct NodeInfoMap{
-    pub map: BTreeMap<&'static str, u8>
+pub struct NodeInfoMap<'a>{
+    pub map: BTreeMap<&'a str, u8>
 }
 
-impl NodeInfoMap{
+impl<'a> NodeInfoMap<'a>{
     pub fn new() -> Self
     {
+        Self::from_slice(&POSSIBLE_NODE_INFO)
+    }
+
+    pub fn from_slice<S>(s: &'a [S]) -> Self
+    where S: Deref<Target = str>
+    {
         let mut map = BTreeMap::new();
-        for (&s, i) in POSSIBLE_NODE_INFO.iter().zip(0..){
-            map.insert(s, i);
+        for (s, i) in s.iter().zip(0..){
+            map.insert(s.deref(), i);
         }
         Self{map}
     }
@@ -176,12 +183,14 @@ impl From<EnrichedDigraphHelper> for EnrichedDigraph{
                 }
             ).collect();
 
+
         Self { units, extra_header, nodes }
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichedDigraphs{
+    pub extra_header_map: Vec<String>,
     pub digraphs: Vec<EnrichedDigraph>,
     pub start_year: usize
 }
@@ -260,9 +269,14 @@ pub fn enrich_networks(
                     .into()
             }
         ).collect();
+    
+    let extra_header_meaning = POSSIBLE_NODE_INFO.iter()
+        .map(|e| e.to_string())
+        .collect();
 
     EnrichedDigraphs { 
         digraphs, 
-        start_year: starting_year 
+        start_year: starting_year,
+        extra_header_map: extra_header_meaning
     }
 }

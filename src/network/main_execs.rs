@@ -421,6 +421,11 @@ pub fn enrich(opt: EnrichOpt){
     let out_file = File::create(opt.out)
         .unwrap();
     let buf_writer = BufWriter::new(out_file);
-    bincode::serialize_into(buf_writer, &enriched)
-        .expect("unable to serialize");
+    if opt.json{
+        serde_json::to_writer_pretty(buf_writer, &enriched)
+            .expect("unable to create json");
+    } else {
+        bincode::serialize_into(buf_writer, &enriched)
+            .expect("unable to serialize");
+    }
 }
