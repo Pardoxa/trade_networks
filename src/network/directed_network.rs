@@ -69,6 +69,14 @@ pub struct Network{
 
 impl Network{
 
+    #[inline]
+    pub fn force_direction(&mut self, direction: Direction)
+    {
+        if self.direction != direction{
+            *self = self.invert()
+        }
+    }
+
     pub fn effective_trade_only(&self) -> Self
     {
         let mut effective_network: Vec<_> = self.nodes

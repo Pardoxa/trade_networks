@@ -141,15 +141,10 @@ pub struct Tests{
 
 #[derive(Subcommand, Debug)]
 pub enum SubCommand{
-    /// c
+    /// Calculate out component overlap
     OutComp(OutOpt),
-    /// d
-    C2{
-        /// o
-        other_stuff: String,
-        /// f
-        flag: bool
-    }
+    /// Calculate overlap of first layer
+    FirstLayerOverlap(OutOpt)
 }
 
 #[derive(Parser, Debug)]
@@ -162,6 +157,11 @@ pub struct OutOpt{
     #[arg(short, long)]
     pub top: NonZeroUsize,
 
+    /// Will force this direction for all networks
     #[arg(short, long)]
-    pub direction: Direction
+    pub direction: Direction,
+
+    /// Which year to check
+    #[arg(short, long)]
+    pub year: i32
 }

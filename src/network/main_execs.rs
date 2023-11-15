@@ -27,14 +27,7 @@ fn force_direction(networks: &mut [Network], direction: Direction)
 {
     networks
         .iter_mut()
-        .for_each(
-            |n|
-            {
-                if n.direction != direction{
-                    *n = n.invert()
-                }
-            }
-        );
+        .for_each(|n| n.force_direction(direction));
 }
 
 pub fn parse_networks(opt: ParseNetworkOpt)
@@ -440,28 +433,33 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         SubCommand::OutComp(o) => {
             out_comparison(in_file, o)
         },
-        SubCommand::C2 {..} => {
-            println!("C2");
+        SubCommand::FirstLayerOverlap(o) => {
+            first_layer_overlap(in_file, o)
         }
     }
 }
 
 pub fn out_comparison(in_file: &str, cmd: OutOpt){
-    let mut networks = read_networks(in_file);
+    let networks = read_networks(in_file);
 
-    force_direction(&mut networks, cmd.direction);
+    let mut network = None;
+    for n in networks{
+        if n.year == cmd.year {
+            network = Some(n);
+            break;
+        }
+    }
+    let mut network = network
+        .expect("could not find specified year");
+    network.force_direction(cmd.direction);
 
-    // for testing reasons I will only focus on the last year now
-    let last = networks.last().unwrap();
-
-    let n = last;
-    let ordering = n.sorted_by_largest_in();
+    let ordering = network.sorted_by_largest_in();
     let sets: Vec<_> = ordering[0..cmd.top.get()]
         .iter()
         .map(
             |&(index, _)|
             {
-                let comps = n.out_component(
+                let comps = network.out_component(
                     index, 
                     ComponentChoice::IncludingSelf
                 );
@@ -494,6 +492,78 @@ pub fn out_comparison(in_file: &str, cmd: OutOpt){
             write!(buf, "{val} ").unwrap();
         }
         writeln!(buf).unwrap()
+    }
+
+}
+
+pub fn first_layer_overlap(in_file: &str, cmd: OutOpt){
+    let networks = read_networks(in_file);
+
+    let mut network = None;
+    for n in networks{
+        if n.year == cmd.year {
+            network = Some(n);
+            break;
+        }
+    }
+    let mut network = network
+        .expect("could not find specified year");
+    network.force_direction(cmd.direction);
+
+    let ordering = network.sorted_by_largest_in();
+    let layers: Vec<BTreeSet<usize>> = ordering.iter()
+        .take(cmd.top.get())
+        .map(
+            |(idx, _)|
+            {
+                network.nodes[*idx]
+                    .adj
+                    .iter()
+                    .map(|e| e.index)
+                    .collect()
+            }
+        ).collect();
+    
+    
+    
+
+    let create_file = |filename: &str| {
+        let out = File::create(filename)
+            .expect("unable to create file");
+        let mut buf_overlap = BufWriter::new(out);
+        write_commands_and_version(&mut buf_overlap).unwrap();
+        buf_overlap
+    };
+
+
+    let overlap_name = format!("layer_overlap_{}", cmd.out);
+    let mut buf_overlap = create_file(&overlap_name);
+    layers.iter()
+        .for_each(
+            |set|
+            {
+                layers.iter()
+                    .for_each(
+                        |other|
+                        {
+                            let inter = set.intersection(other);
+                            write!(buf_overlap, "{} ", inter.count()).unwrap();
+                        }
+                    );
+                writeln!(buf_overlap).unwrap();
+            }
+        );
+
+    let size_name = format!("layer_size_{}", cmd.out);
+    let mut buf_size = create_file(&size_name);
+
+    let d = match cmd.direction{
+        Direction::ExportTo => "Export",
+        Direction::ImportFrom => "Import"
+    };
+    writeln!(buf_size, "#layer1 index_of_parent {d}_amount_parent").unwrap();
+    for (l, (index, amount)) in layers.iter().zip(ordering.iter()){
+        writeln!(buf_size, "{} {index} {amount}", l.len()).unwrap();
     }
 
 }
