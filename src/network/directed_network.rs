@@ -7,12 +7,15 @@ use{
     },
     net_ensembles::Graph,
     serde::{Serialize, Deserialize},
-    super::helper_structs::*
+    super::helper_structs::*,
+    strum::EnumString
 };
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, EnumString)]
 pub enum Direction{
+    #[strum(ascii_case_insensitive)]
     ExportTo,
+    #[strum(ascii_case_insensitive)]
     ImportFrom
 }
 
@@ -536,8 +539,8 @@ impl Network{
 
 
 
-/// Returns size of largest component and indizes of members of largest component
-pub fn largest_component(network: &Network) -> LargestComponents
+/// Returns size of largest connected component and indizes of members of largest component
+pub fn largest_connected_component(network: &Network) -> LargestComponents
 {
     let g = network.to_undirected();
     let (num_components, ids) = g.connected_components_ids();

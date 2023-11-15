@@ -1,19 +1,41 @@
-use std::{collections::{BTreeSet, BTreeMap}, fmt::Display};
-
-use indicatif::ProgressIterator;
-
-use crate::parser;
-
 use {
     std::{
         fs::File,
-        io::{BufWriter, Write, BufRead, BufReader}
+        io::{BufWriter, Write, BufRead, BufReader},
+        collections::{BTreeSet, BTreeMap}, 
+        fmt::Display
     },
     super::{*, helper_structs::*},
-    crate::{config::*, misc::*},
+    crate::{config::*, misc::*, parser},
     rayon::prelude::*,
-    net_ensembles::sampling::*
+    net_ensembles::sampling::*,
+    indicatif::ProgressIterator,
 };
+
+fn assert_same_direction_write_direction<W>(networks: &[Network], mut writer: W)
+where W: Write
+{
+    assert!(
+        networks.windows(2)
+            .all(|slice| slice[0].direction == slice[1].direction)
+    );
+    writeln!(writer, "#Direction {:?}", networks[0].direction)
+        .unwrap();
+}
+
+fn force_direction(networks: &mut [Network], direction: Direction)
+{
+    networks
+        .iter_mut()
+        .for_each(
+            |n|
+            {
+                if n.direction != direction{
+                    *n = n.invert()
+                }
+            }
+        );
+}
 
 pub fn parse_networks(opt: ParseNetworkOpt)
 {
@@ -92,15 +114,7 @@ pub fn to_country_file(opt: ToCountryBinOpt)
 pub fn max_weight(opt: DegreeDist)
 {
     let mut networks: Vec<Network> = read_networks(&opt.input);
-
-    if opt.invert{
-        networks.iter_mut().for_each(
-            |n|
-            {
-                *n = n.invert();
-            }
-        );
-    }
+    force_direction(&mut networks, opt.direction);
 
     max_weight_dist(&mut networks, &opt.out);
 }
@@ -135,6 +149,7 @@ fn max_weight_dist(networks: &mut [Network], out: &str){
     let mut buf = BufWriter::new(file);
 
     write_commands_and_version(&mut buf).unwrap();
+    assert_same_direction_write_direction(networks, &mut buf);
 
     let first = hists.first().unwrap();
 
@@ -155,15 +170,7 @@ fn max_weight_dist(networks: &mut [Network], out: &str){
 pub fn degree_dists(opt: DegreeDist)
 {
     let mut networks: Vec<Network> = read_networks(&opt.input);
-
-    if opt.invert{
-        networks.iter_mut().for_each(
-            |n|
-            {
-                *n = n.invert();
-            }
-        );
-    }
+    force_direction(&mut networks, opt.direction);
 
     degree_dists_helper(&networks, &opt.out);
 }
@@ -198,6 +205,7 @@ fn degree_dists_helper(networks: &[Network], out: &str)
     let mut buf = BufWriter::new(file);
 
     write_commands_and_version(&mut buf).unwrap();
+    assert_same_direction_write_direction(networks, &mut buf);
 
     let first = hists.first().unwrap();
 
@@ -216,9 +224,12 @@ fn degree_dists_helper(networks: &[Network], out: &str)
 }
 
 
+/// Direction needs to be export to
 pub fn export_out_comp(opt: MiscOpt)
 {
-    let networks = read_networks(&opt.input);
+    let mut networks = read_networks(&opt.input);
+
+    force_direction(&mut networks, Direction::ExportTo);
 
     let file = File::create(opt.out).expect("unable to create file");
     let mut buf = BufWriter::new(file);
@@ -235,15 +246,10 @@ pub fn export_out_comp(opt: MiscOpt)
     for (id, n) in networks.iter().enumerate()
     {
         
-        let no_unconnected = n.without_unconnected_nodes();
-        if no_unconnected.node_count() < 10 {
+        let mut digraph = n.without_unconnected_nodes();
+        if digraph.node_count() < 10 {
             continue;
-        } 
-        let mut digraph = if !opt.invert{
-            no_unconnected.invert()
-        } else{
-            no_unconnected
-        };
+        }
 
         if opt.effective_trade{
             digraph = digraph.effective_trade_only();
@@ -282,13 +288,12 @@ pub fn misc(opt: MiscOpt)
         "importing_nodes",
         "trading_nodes",
         "edge_count",
-        "max_my_centrality",
-        "component_count",
-        "largest_component",
-        "largest_component_percent",
-        "largest_component_edges",
-        "largest_out_size",
-        "largest_in_size",
+        "connected_component_count",
+        "largest_connectd component",
+        "largest_connectd component_percent",
+        "largest_connectd component_edges",
+        "largest_exporting_out_comp",
+        "largest_importing_out_comp",
         "num_scc",
         "largest_scc",
         "largest_scc_diameter"
@@ -308,11 +313,16 @@ pub fn misc(opt: MiscOpt)
     }
     
 
-    for (id, n) in networks.iter().enumerate()
+    for (id, current_n) in networks.iter().enumerate()
     {
-        let no_unconnected = n.without_unconnected_nodes();
+        let inv = current_n.invert();
+        let (importing, exporting) = match current_n.direction{
+            Direction::ExportTo => (&inv, current_n),
+            Direction::ImportFrom => (current_n, &inv)
+        };
+        let no_unconnected_exporting = exporting.without_unconnected_nodes();
 
-        if no_unconnected.node_count() == 0{
+        if no_unconnected_exporting.node_count() == 0{
             if opt.verbose{
                 println!("Empty year {id}");
             }
@@ -321,52 +331,49 @@ pub fn misc(opt: MiscOpt)
         let mut res_map: BTreeMap<&str, Box<dyn Display>> = BTreeMap::new();
         res_map.insert("year_id", Box::new(id));
 
-        let trading_nodes = no_unconnected.node_count();
+        let trading_nodes = no_unconnected_exporting.node_count();
         res_map.insert("trading_nodes", Box::new(trading_nodes));
-        let inverted = n.invert();
-        let node_count = inverted.nodes_with_non_empty_adj();
+        
+        
+        let node_count = exporting.nodes_with_non_empty_adj();
         res_map.insert("exporting_nodes", Box::new(node_count));
-        let importing_nodes = n.nodes_with_non_empty_adj();
+        let importing_nodes = importing.nodes_with_non_empty_adj();
         res_map.insert("importing_nodes", Box::new(importing_nodes));
-        let edge_count = n.edge_count();
+        let edge_count = no_unconnected_exporting.edge_count();
         res_map.insert("edge_count", Box::new(edge_count));
 
-        let mut normalized = n.clone();
-        normalized.normalize();
-        let centrality = normalized.my_centrality_normalized();
-        let max_c = *centrality.iter().max().unwrap();
-        res_map.insert("max_my_centrality", Box::new(max_c));
+        let component = largest_connected_component(&no_unconnected_exporting);
 
-        let component = largest_component(&no_unconnected);
+        let largest_component_percent = 
+            component.size_of_largest_component as f64 / no_unconnected_exporting.node_count() as f64;
+        res_map.insert("largest_connected_component_percent", Box::new(largest_component_percent));
+        res_map.insert("connected_component_count", Box::new(component.num_components));
 
-        let largest_component_percent = component.size_of_largest_component as f64 / no_unconnected.node_count() as f64;
-        res_map.insert("largest_component_percent", Box::new(largest_component_percent));
-        res_map.insert("component_count", Box::new(component.num_components));
-
-        let reduced = no_unconnected.filtered_network(&component.members_of_largest_component);
+        let largest_connected_component = no_unconnected_exporting
+            .filtered_network(&component.members_of_largest_component);
         res_map.insert("largest_component", Box::new(component.size_of_largest_component));
         
-        let giant_comp_edge_count = reduced.edge_count();
-        res_map.insert("largest_component_edges", Box::new(giant_comp_edge_count));
+        let giant_comp_edge_count = largest_connected_component.edge_count();
+        res_map.insert("largest_connected_component_edges", Box::new(giant_comp_edge_count));
 
-        let out_size = n.largest_out_component(ComponentChoice::ExcludingSelf);
-        res_map.insert("largest_out_size", Box::new(out_size));
+        let out_size = exporting.largest_out_component(ComponentChoice::IncludingSelf);
+        res_map.insert("largest_exporting_out_comp", Box::new(out_size));
 
         
-        let in_size = inverted.largest_out_component(ComponentChoice::ExcludingSelf);
-        res_map.insert("largest_in_size", Box::new(in_size));
+        let in_size = importing.largest_out_component(ComponentChoice::IncludingSelf);
+        res_map.insert("largest_importing_out_comp", Box::new(in_size));
 
-        let scc_components = no_unconnected.scc_recursive();
+        let scc_components = no_unconnected_exporting.scc_recursive();
         res_map.insert("num_scc", Box::new(scc_components.len()));
         
-        let mut check = vec![false; no_unconnected.node_count()];
+        let mut check = vec![false; no_unconnected_exporting.node_count()];
         for &i in scc_components.iter().flat_map(|e| e.iter())
         {
             check[i] = true;
         }
         assert!(check.iter().all(|x| *x));
         let total: usize = scc_components.iter().map(|e| e.len()).sum();
-        assert_eq!(total, no_unconnected.node_count());
+        assert_eq!(total, no_unconnected_exporting.node_count());
 
         let mut index_largest_scc = 0;
         let mut size_largest_scc = 0;
@@ -383,7 +390,8 @@ pub fn misc(opt: MiscOpt)
                 }
             );
 
-        let scc_network = no_unconnected.filtered_network(&scc_components[index_largest_scc]);
+        let scc_network = no_unconnected_exporting
+            .filtered_network(&scc_components[index_largest_scc]);
         let largest_scc_diameter = scc_network.diameter();
         res_map.insert("largest_scc", Box::new(scc_network.node_count()));
         let diam = if let Some(dia) = largest_scc_diameter {
@@ -439,14 +447,14 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
 }
 
 pub fn out_comparison(in_file: &str, cmd: OutOpt){
-    let network = read_networks(in_file);
+    let mut networks = read_networks(in_file);
+
+    force_direction(&mut networks, cmd.direction);
+
     // for testing reasons I will only focus on the last year now
-    let last = network.last().unwrap();
-    let n = if cmd.invert{
-        last.invert()
-    } else {
-        last.clone()
-    };
+    let last = networks.last().unwrap();
+
+    let n = last;
     let ordering = n.sorted_by_largest_in();
     let sets: Vec<_> = ordering[0..cmd.top.get()]
         .iter()

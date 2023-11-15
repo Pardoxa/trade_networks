@@ -1,8 +1,6 @@
 use std::num::NonZeroUsize;
-
 use clap::{Parser, Subcommand};
-
-
+use crate::network::Direction;
 
 #[derive(Parser, Debug)]
 pub struct ToCountryBinOpt{
@@ -108,7 +106,7 @@ pub struct DegreeDist{
 
     #[arg(short, long)]
     /// Degree distribution of out-degree instead of in-degree
-    pub invert: bool
+    pub direction: Direction
 }
 
 #[derive(Parser, Debug)]
@@ -120,10 +118,6 @@ pub struct MiscOpt{
     #[arg(short, long)]
     /// Name of output file
     pub out: String,
-
-    #[arg(short, long)]
-    /// Degree distribution of out-degree instead of in-degree
-    pub invert: bool,
 
     #[arg(short, long)]
     /// Verbose output
@@ -169,5 +163,5 @@ pub struct OutOpt{
     pub top: NonZeroUsize,
 
     #[arg(short, long)]
-    pub invert: bool
+    pub direction: Direction
 }
