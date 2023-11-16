@@ -138,12 +138,13 @@ pub fn network_parser(
 
 
     let mut map = BTreeMap::new();
-    let mut first_year: Option<usize> = None;
+    let mut years: Vec<(i32, usize)> = Vec::new();
     for (idx, &entry) in entry_names.iter().enumerate()
     {
-        if first_year.is_none() && entry.starts_with('Y'){
-            let number = &entry[1..];
-            first_year = number.parse().ok();
+        if let Some(number) = entry.strip_prefix('Y'){
+            if let Ok(y) = number.parse(){
+                years.push((y, idx));
+            }
         }
         map.insert(entry, idx);
     }
@@ -160,10 +161,6 @@ pub fn network_parser(
     let mut glob_unit: Option<String> = None;
 
     let mut countries: BTreeSet<String> = BTreeSet::new();
-
-    let first_year = first_year.unwrap();
-    let year_head = format!("Y{}", first_year);
-    let start_year = *map.get(year_head.as_str()).unwrap();
 
     let line_len = map.len();
 
@@ -217,20 +214,18 @@ pub fn network_parser(
             }
         );
 
-    let network = Network{
-        nodes: all, 
-        direction,
-        data_origin: read_type,
-        year: first_year as i32
-    };
+    
 
-    let mut years: Vec<_> = (start_year..map.len())
-        .zip(0..)
-        .map(|(_, i)| 
+    let mut all_networks: Vec<_> = years
+        .iter()
+        .map(|(year, _)| 
             {
-                let mut n = network.clone();
-                n.year += i;
-                n
+                Network{
+                    nodes: all.clone(), 
+                    direction,
+                    data_origin: read_type,
+                    year: *year
+                }
             }
         )
         .collect();
@@ -261,11 +256,12 @@ pub fn network_parser(
             let rep_id = *id_map.get(rep_c).unwrap();
             let part_id = *id_map.get(part_c).unwrap();
 
-            (start_year..).zip(years.iter_mut())
+            (years.iter())
+                .zip(all_networks.iter_mut())
                 .for_each(
-                    |(idx, network)|
+                    |((_, idx), network)|
                     {
-                        let amount_entry = &line[idx];
+                        let amount_entry = &line[*idx];
                         if !amount_entry.is_empty(){
                             let amount: f64 = amount_entry.parse().unwrap();
                             let node = network.nodes.get_mut(rep_id).unwrap();
@@ -281,7 +277,7 @@ pub fn network_parser(
         }
     );
 
-    Ok(years)
+    Ok(all_networks)
 }
 
 

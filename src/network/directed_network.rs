@@ -62,12 +62,29 @@ pub struct Edge{
 }
 
 
-pub fn read_networks(file: &str) -> Vec<Network>
+pub fn read_networks(file_name: &str) -> Vec<Network>
 {
-    let file = File::open(file).unwrap();
+    let file = File::open(file_name).unwrap();
     let reader = BufReader::new(file);
-    bincode::deserialize_from(reader)
-        .expect("unable to deserialize")
+    let res = bincode::deserialize_from(reader);
+    match res{
+        Ok(o) => o,
+        Err(e) => {
+            let file = File::open(file_name).unwrap();
+            let reader = BufReader::new(file);
+            match serde_json::from_reader(reader){
+                Ok(o) => o,
+                Err(e2) => {
+                    panic!(
+                        "Bincode: {:?} JSON: {:?} Failed to deserialize",
+                        e,
+                        e2
+                    )
+                }
+            }
+            
+        }
+    }
 }
 
 pub struct GraphVizExtra{
