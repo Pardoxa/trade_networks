@@ -576,8 +576,66 @@ pub fn first_layer_overlap(in_file: &str, cmd: FirstLayerOpt){
                 map: map.clone()
             };
             n.graphviz(buf, &extra).unwrap();
+
+            let graph_name2 = format!("L_{i}_{}.dot", cmd.out);
+            let file = File::create(graph_name2)
+                .expect("unable to create graph file");
+            let buf2 = BufWriter::new(file);
+            graphviz_one_layer(
+                &network, 
+                buf2, 
+                *idx, 
+                &extra.map
+            ).unwrap();
         }
         
     }
 
+}
+
+pub fn graphviz_one_layer<'a, W>(
+    net: &'a Network, 
+    mut w: W, 
+    parent: usize,
+    map: &'a Option<BTreeMap<String, String>>
+) -> std::io::Result<()>
+where W: Write
+{
+    writeln!(w, "digraph {{")?;
+    writeln!(w, "overlap=false")?;
+    writeln!(w, "splines=true")?;
+
+    let map: Box<dyn Fn(&'a str) -> &'a str> = match map{
+        None => Box::new(|s| s),
+        Some(m) => {
+            Box::new(
+                |s| {
+                    m.get(s).unwrap()
+                }
+            )
+        }
+    };
+
+    let parent_node = &net.nodes[parent];
+    writeln!(w, "\"{}\" [fillcolor=red, style=filled]", map(&parent_node.identifier))?;
+
+    for e in parent_node.adj.iter()
+    {
+        let other_node = &net.nodes[e.index];
+        writeln!(w, "\"{}\"", map(&other_node.identifier))?;
+    }
+
+    
+    let parend_id = map(&parent_node.identifier);
+    for e in parent_node.adj.iter()
+    {
+        writeln!(
+            w, 
+            "\"{}\" -> \"{}\"", 
+            parend_id, 
+            map(&net.nodes[e.index].identifier)
+        )?;
+    }
+    
+    writeln!(w, "}}")
 }

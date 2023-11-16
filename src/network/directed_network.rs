@@ -107,12 +107,13 @@ impl Network{
 
         for node in self.nodes.iter()
         {
+            let this = map(&node.identifier);
             for e in node.adj.iter()
             {
                 writeln!(
                     w, 
                     "\"{}\" -> \"{}\"", 
-                    map(&node.identifier), 
+                    this, 
                     map(&self.nodes[e.index].identifier)
                 )?;
             }
