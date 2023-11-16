@@ -1,3 +1,5 @@
+use crate::config::ReadType;
+
 use{
     std::{
         collections::{BTreeMap, VecDeque}, 
@@ -17,6 +19,14 @@ pub enum Direction{
     ExportTo,
     #[strum(ascii_case_insensitive)]
     ImportFrom
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, EnumString)]
+pub enum NetworkType{
+    #[strum(ascii_case_insensitive)]
+    Value,
+    #[strum(ascii_case_insensitive)]
+    Quantity
 }
 
 impl Direction{
@@ -68,6 +78,7 @@ pub struct GraphVizExtra{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Network{
     pub direction: Direction,
+    pub data_origin: ReadType,
     pub nodes: Vec<Node>,
     pub year: i32
 }
@@ -163,7 +174,8 @@ impl Network{
         Network { 
             nodes: effective_network, 
             direction: self.direction, 
-            year: self.year 
+            year: self.year,
+            data_origin: self.data_origin
         }
     }
 
@@ -250,7 +262,8 @@ impl Network{
         Network { 
             nodes: all, 
             direction: self.direction.invert(),
-            year: self.year
+            year: self.year,
+            data_origin: self.data_origin
         }
     }
 
@@ -461,7 +474,8 @@ impl Network{
         Network { 
             nodes, 
             direction: self.direction,
-            year: self.year
+            year: self.year,
+            data_origin: self.data_origin
         }
     }
 

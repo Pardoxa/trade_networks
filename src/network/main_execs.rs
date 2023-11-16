@@ -35,7 +35,8 @@ pub fn parse_networks(opt: ParseNetworkOpt)
     let networks = crate::parser::network_parser(
         &opt.in_file, 
         &opt.item_code, 
-        false
+        false,
+        opt.read_type
     ).expect("unable to parse");
 
     let file = File::create(&opt.out).unwrap();
@@ -72,7 +73,12 @@ pub fn to_binary_all(opt: ParseAllNetworksOpt)
         println!("Found {} item codes", item_codes.len());
         let bar = crate::misc::indication_bar(item_codes.len() as u64);
         for item_code in item_codes.iter().progress_with(bar){
-            let networks = crate::parser::network_parser(&opt.in_file, item_code, true);
+            let networks = crate::parser::network_parser(
+                &opt.in_file, 
+                item_code, 
+                true,
+                opt.read_type
+            );
             let networks = match networks{
                 Err(e) => {
                     println!("Error in {e} - Item code {item_code}");

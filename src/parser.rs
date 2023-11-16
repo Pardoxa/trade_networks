@@ -1,3 +1,5 @@
+use crate::config::ReadType;
+
 use{
     std::{
         io::{
@@ -106,10 +108,17 @@ pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
 }
 
 
-pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow::Result<Vec<Network>>
+pub fn network_parser(
+    file_name: &str, 
+    item_code: &str, 
+    silent: bool,
+    read_type: ReadType
+) -> anyhow::Result<Vec<Network>>
 {
 
-    let wanted_transaction_type = "Import Quantity";
+    let direction = read_type.get_direction();
+    let wanted_transaction_type = read_type.get_str();
+
     let file = File::open(file_name)
         .unwrap();
     let reader = BufReader::with_capacity(64 * 1024, file);
@@ -210,7 +219,8 @@ pub fn network_parser(file_name: &str, item_code: &str, silent: bool) -> anyhow:
 
     let network = Network{
         nodes: all, 
-        direction: Direction::ImportFrom, 
+        direction,
+        data_origin: read_type,
         year: first_year as i32
     };
 

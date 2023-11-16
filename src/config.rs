@@ -1,6 +1,7 @@
 use std::num::NonZeroUsize;
-use clap::{Parser, Subcommand};
-use crate::network::Direction;
+use clap::{Parser, Subcommand, ValueEnum};
+use crate::network::{Direction, NetworkType};
+use serde::{Serialize, Deserialize};
 
 #[derive(Parser, Debug)]
 pub struct ToCountryBinOpt{
@@ -32,6 +33,10 @@ pub struct ParseNetworkOpt{
     /// Item code, e.g. 27 for Rice
     pub item_code: String,
 
+    /// Which Info to parse for building the network
+    #[arg(long, value_enum, default_value_t = ReadType::ImportQuantity)]
+    pub read_type: ReadType,
+
     #[arg(long, short)]
     /// store it as json instead
     pub json: bool
@@ -49,7 +54,11 @@ pub struct ParseAllNetworksOpt{
 
     #[arg(short, long)]
     /// Instead of one file containing all networks do one file per item code
-    pub seperate_output: bool   
+    pub seperate_output: bool,
+
+    /// Which Info to parse for building the network
+    #[arg(long, value_enum, default_value_t = ReadType::ImportQuantity)]
+    pub read_type: ReadType,
 }
 
 #[derive(Parser, Debug)]
@@ -186,4 +195,45 @@ pub struct FirstLayerOpt{
     #[arg(short, long)]
     /// Input file of country id mappings
     pub print_graph: Option<String>
+}
+
+#[derive(Debug, ValueEnum, Clone, Copy, Serialize, Deserialize)]
+pub enum ReadType{
+    /// Use reported Import value
+    ImportValue,
+    /// Use reported Export Value
+    ExportValue,
+    /// Use reported Import Quantity
+    ImportQuantity,
+    /// Use reported Export Quantity
+    ExportQuantity
+}
+
+impl ReadType{
+    pub fn get_str(&self) -> &'static str
+    {
+        match self{
+            ReadType::ImportQuantity => "Import Quantity",
+            ReadType::ExportQuantity => "Export Quantity",
+            ReadType::ExportValue => "Export Value",
+            ReadType::ImportValue => "Import Value"
+        }
+    }
+
+    pub fn get_direction(&self) -> Direction
+    {
+        match self{
+            ReadType::ExportQuantity | ReadType::ExportValue => Direction::ExportTo,
+            ReadType::ImportQuantity | ReadType::ImportValue => Direction::ImportFrom
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_network_type(&self) -> NetworkType
+    {
+        match self{
+            ReadType::ExportQuantity | ReadType::ImportQuantity => NetworkType::Quantity,
+            ReadType::ExportValue | ReadType::ImportValue => NetworkType::Value
+        }
+    }
 }
