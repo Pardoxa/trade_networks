@@ -633,13 +633,26 @@ where W: Write
 
     
     let parend_id = map(&parent_node.identifier);
+    let mut edge_max: f64 = 0.0;
+    for e in parent_node.adj.iter(){
+        if e.amount > edge_max{
+            edge_max = e.amount;
+        }
+    }
     for e in parent_node.adj.iter()
     {
+        let we = e.amount / edge_max;
+        let red = u8::MAX - (255.0 * we) as u8;
+        let green = u8::MAX - (255.0 * 2.0 * we).min(255.0) as u8;
+        let blue = u8::MAX - (255.0 * 4.0 * we).min(255.0) as u8;
         writeln!(
             w, 
-            "\"{}\" -> \"{}\"", 
+            "\"{}\" -> \"{}\" [color=\"#{:02X}{:02X}{:02X}\"]", 
             parend_id, 
-            map(&net.nodes[e.index].identifier)
+            map(&net.nodes[e.index].identifier),
+            red,
+            green,
+            blue
         )?;
     }
     
