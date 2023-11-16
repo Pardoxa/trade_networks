@@ -94,16 +94,6 @@ pub fn to_binary_all(opt: ParseAllNetworksOpt)
     
 }
 
-pub fn to_country_file(opt: ToCountryBinOpt)
-{
-    let networks = read_networks(&opt.bin_file);
-    let country_networks = crate::parser::country_networks(&networks, opt.country_file);
-    let file = File::create(&opt.out).unwrap();
-    let buf = BufWriter::new(file);
-    bincode::serialize_into(buf, &country_networks)
-        .expect("serialization issue");
-}
-
 pub fn max_weight(opt: DegreeDist)
 {
     let mut networks: Vec<Network> = read_networks(&opt.input);
@@ -343,7 +333,7 @@ pub fn misc(opt: MiscOpt)
         res_map.insert("connected_component_count", Box::new(component.num_components));
 
         let largest_connected_component = no_unconnected_exporting
-            .filtered_network(&component.members_of_largest_component);
+            .filtered_network(component.members_of_largest_component.iter());
         res_map.insert("largest_component", Box::new(component.size_of_largest_component));
         
         let giant_comp_edge_count = largest_connected_component.edge_count();
@@ -384,7 +374,7 @@ pub fn misc(opt: MiscOpt)
             );
 
         let scc_network = no_unconnected_exporting
-            .filtered_network(&scc_components[index_largest_scc]);
+            .filtered_network(scc_components[index_largest_scc].iter());
         let largest_scc_diameter = scc_network.diameter();
         res_map.insert("largest_scc", Box::new(scc_network.node_count()));
         let diam = if let Some(dia) = largest_scc_diameter {
@@ -496,7 +486,7 @@ pub fn out_comparison(in_file: &str, cmd: OutOpt){
 
 }
 
-pub fn first_layer_overlap(in_file: &str, cmd: OutOpt){
+pub fn first_layer_overlap(in_file: &str, cmd: FirstLayerOpt){
     let networks = read_networks(in_file);
 
     let mut network = None;
@@ -511,7 +501,7 @@ pub fn first_layer_overlap(in_file: &str, cmd: OutOpt){
     network.force_direction(cmd.direction);
 
     let ordering = network.sorted_by_largest_in();
-    let layers: Vec<BTreeSet<usize>> = ordering.iter()
+    let mut layers: Vec<BTreeSet<usize>> = ordering.iter()
         .take(cmd.top.get())
         .map(
             |(idx, _)|
@@ -564,6 +554,30 @@ pub fn first_layer_overlap(in_file: &str, cmd: OutOpt){
     writeln!(buf_size, "#layer1 index_of_parent {d}_amount_parent").unwrap();
     for (l, (index, amount)) in layers.iter().zip(ordering.iter()){
         writeln!(buf_size, "{} {index} {amount}", l.len()).unwrap();
+    }
+
+    if let Some(country_file) = cmd.print_graph{
+        let map = Some(parser::country_map(&country_file));
+        let iter = layers
+            .iter_mut()
+            .zip(ordering.iter())
+            .enumerate();
+        for (i, (layer, (idx, _))) in iter{
+            let filter_iter = std::iter::once(idx)
+                .chain(layer.iter());
+
+            let n = network.filtered_network(filter_iter);
+            let graph_name = format!("{i}_{}.dot", cmd.out);
+            let file = File::create(graph_name)
+                .expect("unable to create graph file");
+            let buf = BufWriter::new(file);
+            let extra = GraphVizExtra{
+                highlight: network.nodes[*idx].identifier.clone(),
+                map: map.clone()
+            };
+            n.graphviz(buf, &extra).unwrap();
+        }
+        
     }
 
 }

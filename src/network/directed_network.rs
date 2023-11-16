@@ -3,7 +3,7 @@ use{
         collections::{BTreeMap, VecDeque}, 
         num::NonZeroU32,
         fs::File,
-        io::BufReader
+        io::{BufReader, Write}
     },
     net_ensembles::Graph,
     serde::{Serialize, Deserialize},
@@ -60,6 +60,11 @@ pub fn read_networks(file: &str) -> Vec<Network>
         .expect("unable to deserialize")
 }
 
+pub struct GraphVizExtra{
+    pub highlight: String,
+    pub map: Option<BTreeMap<String, String>>
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Network{
     pub direction: Direction,
@@ -68,6 +73,52 @@ pub struct Network{
 }
 
 impl Network{
+
+    pub fn graphviz<'a, W>(
+        &'a self, 
+        mut w: W, 
+        extra: &'a GraphVizExtra
+    ) -> std::io::Result<()>
+    where W: Write
+    {
+        writeln!(w, "digraph {{")?;
+        writeln!(w, "overlap=false")?;
+        writeln!(w, "splines=true")?;
+
+        let map: Box<dyn Fn(&'a str) -> &'a str> = match &extra.map{
+            None => Box::new(|s| s),
+            Some(m) => {
+                Box::new(
+                    |s| {
+                        m.get(s).unwrap()
+                    }
+                )
+            }
+        };
+
+        for node in self.nodes.iter()
+        {
+            if node.identifier != extra.highlight{
+                writeln!(w, "\"{}\"", map(&node.identifier))?;
+            } else {
+                writeln!(w, "\"{}\" [fillcolor=red, style=filled]", map(&node.identifier))?;
+            }
+        }
+
+        for node in self.nodes.iter()
+        {
+            for e in node.adj.iter()
+            {
+                writeln!(
+                    w, 
+                    "\"{}\" -> \"{}\"", 
+                    map(&node.identifier), 
+                    map(&self.nodes[e.index].identifier)
+                )?;
+            }
+        }
+        writeln!(w, "}}")
+    }
 
     #[inline]
     pub fn force_direction(&mut self, direction: Direction)
@@ -167,7 +218,7 @@ impl Network{
     pub fn without_unconnected_nodes(&self) -> Self
     {
         let connected_indices = self.list_of_trading_nodes();
-        self.filtered_network(&connected_indices)
+        self.filtered_network(connected_indices.iter())
         
     }
 
@@ -375,11 +426,12 @@ impl Network{
         Some(diameter)
     }
 
-    pub fn filtered_network(&self, indices: &[usize]) -> Self
+    pub fn filtered_network<'a, I>(&'a self, indices: I) -> Self
+    where I: Iterator<Item = &'a usize>
     {
-        let mut nodes = Vec::with_capacity(indices.len());
+        let mut nodes = Vec::new();
         let mut new_map = BTreeMap::new();
-        for (new_index, i) in indices.iter().copied().enumerate() {
+        for (new_index, i) in indices.copied().enumerate() {
             let node = Node{identifier: self.nodes[i].identifier.clone(), adj: Vec::new()};
             new_map.insert(node.identifier.clone(), new_index);
             nodes.push(node);
@@ -389,7 +441,12 @@ impl Network{
             if let Some(this_idx) = new_map.get(old_node.identifier.as_str()) {
                 let adj = &mut nodes[*this_idx].adj;
                 for edge in old_node.adj.iter(){
-                    if let Some(other_idx) = new_map.get(self.nodes[edge.index].identifier.as_str()){
+                    if let Some(other_idx) = new_map.get(
+                            self
+                                .nodes[edge.index]
+                                .identifier
+                                .as_str()
+                        ){
                         let new_edge = Edge{
                             amount: edge.amount,
                             index: *other_idx
@@ -630,7 +687,7 @@ mod tests {
         assert_eq!(&scc[3], &[7]);
 
         for c in scc.iter(){
-            let filtered = network.filtered_network(c);
+            let filtered = network.filtered_network(c.iter());
             assert!(filtered.diameter().is_some());
         }
     }

@@ -87,7 +87,6 @@ pub enum CmdChooser{
     Out10(MiscOpt),
     ParseNetworks(ParseNetworkOpt),
     ParseAllNetworks(ParseAllNetworksOpt),
-    ToCountryNetwork(ToCountryBinOpt),
     Tests(Tests)
 }
 
@@ -144,7 +143,7 @@ pub enum SubCommand{
     /// Calculate out component overlap
     OutComp(OutOpt),
     /// Calculate overlap of first layer
-    FirstLayerOverlap(OutOpt)
+    FirstLayerOverlap(FirstLayerOpt)
 }
 
 #[derive(Parser, Debug)]
@@ -164,4 +163,27 @@ pub struct OutOpt{
     /// Which year to check
     #[arg(short, long)]
     pub year: i32
+}
+
+#[derive(Parser, Debug)]
+pub struct FirstLayerOpt{
+    /// name of output file
+    #[arg(short, long)]
+    pub out: String,
+
+    /// How many countries to consider
+    #[arg(short, long)]
+    pub top: NonZeroUsize,
+
+    /// Will force this direction for all networks
+    #[arg(short, long)]
+    pub direction: Direction,
+
+    /// Which year to check
+    #[arg(short, long)]
+    pub year: i32,
+
+    #[arg(short, long)]
+    /// Input file of country id mappings
+    pub print_graph: Option<String>
 }

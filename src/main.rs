@@ -15,7 +15,6 @@ fn main() {
         CmdChooser::ParseAllNetworks(opt) => to_binary_all(opt),
         CmdChooser::DegreeDist(opt) => degree_dists(opt),
         CmdChooser::MaxWeight(opt) => max_weight(opt),
-        CmdChooser::ToCountryNetwork(opt) => to_country_file(opt),
         CmdChooser::Misc(misc_opt) => misc(misc_opt),
         CmdChooser::Out10(opt) => export_out_comp(opt),
         CmdChooser::Enrichment(opt) => enrich(opt),
