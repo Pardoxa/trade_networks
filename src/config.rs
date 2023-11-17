@@ -152,7 +152,8 @@ pub enum SubCommand{
     /// Calculate out component overlap
     OutComp(OutOpt),
     /// Calculate overlap of first layer
-    FirstLayerOverlap(FirstLayerOpt)
+    FirstLayerOverlap(FirstLayerOpt),
+    FirstLayerAll(FirstLayerOpt)
 }
 
 #[derive(Parser, Debug)]

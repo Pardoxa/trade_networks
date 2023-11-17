@@ -431,7 +431,8 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         },
         SubCommand::FirstLayerOverlap(o) => {
             first_layer_overlap(in_file, o)
-        }
+        },
+        SubCommand::FirstLayerAll(a) => flow_of_top_first_layer(in_file, a)
     }
 }
 
@@ -643,8 +644,8 @@ where W: Write
     {
         let we = e.amount / edge_max;
         let red = u8::MAX - (255.0 * we) as u8;
-        let green = u8::MAX - (255.0 * 2.0 * we).min(255.0) as u8;
-        let blue = u8::MAX - (255.0 * 4.0 * we).min(255.0) as u8;
+        let green = u8::MAX - (255.0 * 10.0 * we).min(255.0) as u8;
+        let blue = u8::MAX - (255.0 * 100.0 * we).min(255.0) as u8;
         writeln!(
             w, 
             "\"{}\" -> \"{}\" [color=\"#{:02X}{:02X}{:02X}\"]", 
@@ -658,3 +659,144 @@ where W: Write
     
     writeln!(w, "}}")
 }
+
+pub fn flow_of_top_first_layer(in_file: &str, opt: FirstLayerOpt)
+{
+    let networks = read_networks(in_file);
+
+    let mut network = None;
+    for n in networks{
+        if n.year == opt.year {
+            network = Some(n);
+            break;
+        }
+    }
+    let mut network = network
+        .expect("could not find specified year");
+    network.force_direction(opt.direction);
+
+    let ordering = network.sorted_by_largest_in();
+
+    let graph_name = format!("A_{}.dot", opt.out);
+    let file = File::create(graph_name)
+        .expect("unable to create graph file");
+    let buf = BufWriter::new(file);
+
+    let map = opt.print_graph
+        .map(|s| parser::country_map(&s));
+
+    flow_of_top_first_layer_helper(
+        &network, 
+        &ordering[0..opt.top.get()], 
+        buf,
+        &map
+    ).unwrap();
+}
+
+fn flow_of_top_first_layer_helper<'a, W>(
+    net: &'a Network, 
+    parents: &[(usize, f64)],
+    mut w: W,
+    map: &'a Option<BTreeMap<String, String>>
+) -> std::io::Result<()>
+where W: Write
+{
+    let layer: Vec<BTreeSet<_>> = parents.iter()
+        .map(
+            |p|
+            {
+                net.nodes[p.0]
+                    .adj
+                    .iter()
+                    .map(|e| e.index)
+                    .collect()
+            }
+        ).collect();
+    // color rest by number of links?
+    let all_relevant_nodes: BTreeSet<usize> = layer.iter()
+        .flat_map(
+            |l|
+            {
+               l.iter().copied()
+            }
+        ).collect();
+
+    let parent_set: BTreeSet<usize> = parents.iter()
+        .map(|i| i.0)
+        .collect();
+
+    writeln!(w, "digraph {{")?;
+    writeln!(w, "overlap=false")?;
+    writeln!(w, "splines=true")?;
+
+    let map: Box<dyn Fn(&'a str) -> &'a str> = match map{
+        None => Box::new(|s| s),
+        Some(m) => {
+            Box::new(
+                |s| {
+                    m.get(s).unwrap()
+                }
+            )
+        }
+    };
+
+    for (i, parent) in parent_set.iter().enumerate(){
+        let hue = 1.0 / layer.len() as f64 * i as f64;
+        let parent_node = &net.nodes[*parent];
+        writeln!(
+            w, 
+            "\"{}\" [fillcolor=\"{},1.0,0.7\", style=filled]", 
+            map(&parent_node.identifier),
+            hue
+        )?;
+    }
+    
+    let colors: Vec<_> = (0..layer.len())
+        .map(
+            |i|
+            {
+                (255.0 - (i * 255) as f64 /(layer.len() as f64)) as u8
+            }
+        ).collect();
+
+
+    for e in all_relevant_nodes.difference(&parent_set)
+    {
+        let count = layer.iter()
+            .filter(|l| l.contains(e))
+            .count();
+        let c = colors[count-1];
+        let other_node = &net.nodes[*e];
+        writeln!(
+            w, 
+            "\"{}\" [fillcolor=\"#{:02x}{:02x}{:02x}\", style=filled]", 
+            map(&other_node.identifier),
+            c,
+            c,
+            c
+        )?;
+    }
+
+
+    for (i, parent) in parent_set.iter().enumerate(){
+        let hue = 1.0 / layer.len() as f64 * i as f64;
+        let parent_node = &net.nodes[*parent];
+        let parend_id = map(&parent_node.identifier);
+        for e in parent_node.adj.iter()
+        {
+            writeln!(
+                w, 
+                "\"{}\" -> \"{}\" [color=\"{},1.0,0.7\"]", 
+                parend_id, 
+                map(&net.nodes[e.index].identifier),
+                hue
+            )?;
+        }
+    }
+    
+    
+    
+    
+    writeln!(w, "}}")
+}
+
