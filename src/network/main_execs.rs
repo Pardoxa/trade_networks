@@ -1,3 +1,5 @@
+use std::f64::consts::TAU;
+
 use {
     std::{
         fs::File,
@@ -759,9 +761,14 @@ where W: Write
             }
         ).collect();
 
+    let mut other_nodes = Vec::new();
+    let mut other_map = BTreeMap::new();
+    let len = all_relevant_nodes.difference(&parent_set).count();
 
-    for e in all_relevant_nodes.difference(&parent_set)
+    for (idx, e) in all_relevant_nodes.difference(&parent_set).enumerate()
     {
+        other_nodes.push((e, 0.0, TAU * (idx as f64 / len as f64)));
+        other_map.insert(e, idx);
         let count = layer.iter()
             .filter(|l| l.contains(e))
             .count();
@@ -784,6 +791,10 @@ where W: Write
         let parend_id = map(&parent_node.identifier);
         for e in parent_node.adj.iter()
         {
+            if let Some(other_idx) = other_map.get(&e.index){
+                other_nodes[*other_idx].1 += e.amount;
+            }
+
             writeln!(
                 w, 
                 "\"{}\" -> \"{}\" [color=\"{},1.0,0.7\"]", 
@@ -794,7 +805,19 @@ where W: Write
         }
     }
     
-    
+    let mut max_amount = 0.0;
+    for amount in other_nodes.iter().map(|e| e.1){
+        max_amount = amount.max(max_amount);
+    }
+
+    let file = File::create("test.dat").unwrap();
+    let mut buf = BufWriter::new(file);
+
+    for item in other_nodes.iter(){
+        let r = (1.1 - item.1 / max_amount) / 1.1;
+        
+        writeln!(buf, "{r} {}", item.2).unwrap();
+    }
     
     
     writeln!(w, "}}")
