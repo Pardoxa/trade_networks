@@ -96,6 +96,7 @@ pub struct GraphVizExtra{
 pub struct Network{
     pub direction: Direction,
     pub data_origin: ReadType,
+    pub unit: String,
     pub nodes: Vec<Node>,
     pub year: i32
 }
@@ -192,7 +193,8 @@ impl Network{
             nodes: effective_network, 
             direction: self.direction, 
             year: self.year,
-            data_origin: self.data_origin
+            data_origin: self.data_origin,
+            unit: self.unit.clone()
         }
     }
 
@@ -280,7 +282,8 @@ impl Network{
             nodes: all, 
             direction: self.direction.invert(),
             year: self.year,
-            data_origin: self.data_origin
+            data_origin: self.data_origin,
+            unit: self.unit.clone()
         }
     }
 
@@ -492,7 +495,8 @@ impl Network{
             nodes, 
             direction: self.direction,
             year: self.year,
-            data_origin: self.data_origin
+            data_origin: self.data_origin,
+            unit: self.unit.clone()
         }
     }
 

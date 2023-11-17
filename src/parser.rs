@@ -51,7 +51,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
     let header = line_to_vec(&first_line);
 
     let mut header_map = BTreeMap::new();
-    let mut start_year: Option<usize> = None;
+    let mut start_year: Option<i32> = None;
     for (i, s) in header.into_iter().enumerate(){
         if start_year.is_none() && s.starts_with('Y') {
             let number = &s[1..];
@@ -224,7 +224,8 @@ pub fn network_parser(
                     nodes: all.clone(), 
                     direction,
                     data_origin: read_type,
-                    year: *year
+                    year: *year,
+                    unit: glob_unit.as_ref().unwrap().clone()
                 }
             }
         )

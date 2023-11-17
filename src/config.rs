@@ -153,7 +153,33 @@ pub enum SubCommand{
     OutComp(OutOpt),
     /// Calculate overlap of first layer
     FirstLayerOverlap(FirstLayerOpt),
-    FirstLayerAll(FirstLayerOpt)
+    FirstLayerAll(FirstLayerOpt),
+    Flow(FlowOpt)
+}
+
+#[derive(Parser, Debug)]
+pub struct FlowOpt{
+    /// name of output file
+    #[arg(short, long)]
+    pub out: String,
+
+    /// id of exporter
+    #[arg(short, long)]
+    pub top_id: String,
+
+    /// Which year to check
+    #[arg(short, long)]
+    pub year: i32,
+
+    /// Iterations
+    #[arg(short, long)]
+    pub iterations: usize,
+
+    #[arg(short, long)]
+    pub item_code: String,
+
+    #[arg(short, long)]
+    pub enrich_file: String,
 }
 
 #[derive(Parser, Debug)]

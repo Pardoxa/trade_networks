@@ -5,8 +5,15 @@ use {
         cmp::Ordering,
         ops::Deref
     },
-    super::*
+    super::*,
 };
+use lazy_static::lazy_static;
+
+lazy_static! {
+    pub static ref GLOBAL_NODE_INFO_MAP: NodeInfoMap<'static> = {
+        NodeInfoMap::new()
+    };
+}
 
 
 const POSSIBLE_NODE_INFO: [&str; 26] = [
@@ -92,12 +99,12 @@ impl ExtraInfo {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentInfos{
-    starting_year: usize,
-    enrichments: Vec<BTreeMap<String, ExtraInfo>>
+    pub starting_year: i32,
+    pub enrichments: Vec<BTreeMap<String, ExtraInfo>>
 }
 
 impl EnrichmentInfos{
-    pub fn new(num_entries: usize, starting_year: usize) -> Self
+    pub fn new(num_entries: usize, starting_year: i32) -> Self
     {
         let e = (0..num_entries)
             .map(|_| BTreeMap::new())
@@ -194,7 +201,7 @@ impl From<EnrichedDigraphHelper> for EnrichedDigraph{
 pub struct EnrichedDigraphs{
     pub extra_header_map: Vec<String>,
     pub digraphs: Vec<EnrichedDigraph>,
-    pub start_year: usize
+    pub start_year: i32
 }
 
 
@@ -213,11 +220,11 @@ pub struct EnrichedNode{
 }
 
 pub fn enrich_networks(
-    start_year_networks: usize, 
     networks: &[Network], 
     enrichments: EnrichmentInfos
 ) -> EnrichedDigraphs
 {
+    let start_year_networks = networks[0].year;
     let (starting_year, networks, enrichments): (_, _, &[_]) = match start_year_networks
         .cmp(&enrichments.starting_year)
     {
@@ -226,11 +233,11 @@ pub fn enrich_networks(
         },
         Ordering::Less => {
             let start_idx = enrichments.starting_year - start_year_networks;
-            (enrichments.starting_year, &networks[start_idx..], &enrichments.enrichments)
+            (enrichments.starting_year, &networks[start_idx as usize..], &enrichments.enrichments)
         },
         Ordering::Greater => {
             let start_idx = start_year_networks - enrichments.starting_year;
-            (start_year_networks, networks, &enrichments.enrichments[start_idx..])
+            (start_year_networks, networks, &enrichments.enrichments[start_idx as usize..])
         }
     };
 
