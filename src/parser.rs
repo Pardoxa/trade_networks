@@ -168,7 +168,9 @@ pub fn network_parser(
     let line_iter = lines
         .map(|line| {
             let line = line.unwrap();
-            line_to_vec(&line)
+            let line_v = line_to_vec(&line);
+            debug_assert_eq!(line_v.len(), line_len);
+            line_v
         })
         .filter(
             |item| 
