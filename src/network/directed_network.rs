@@ -21,6 +21,25 @@ pub enum Direction{
     ImportFrom
 }
 
+impl Direction{
+    pub fn invert(self) -> Self{
+        match self{
+            Self::ExportTo => Self::ImportFrom,
+            Self::ImportFrom => Self::ExportTo
+        }
+    }
+
+    pub fn is_import(self) -> bool
+    {
+        matches!(self, Direction::ImportFrom)
+    }
+
+    pub fn is_export(&self) -> bool 
+    {
+        matches!(self, Direction::ExportTo)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, EnumString)]
 pub enum NetworkType{
     #[strum(ascii_case_insensitive)]
@@ -29,14 +48,7 @@ pub enum NetworkType{
     Quantity
 }
 
-impl Direction{
-    pub fn invert(self) -> Self{
-        match self{
-            Self::ExportTo => Self::ImportFrom,
-            Self::ImportFrom => Self::ExportTo
-        }
-    }
-}
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node{
@@ -155,6 +167,16 @@ impl Network{
     {
         if self.direction != direction{
             *self = self.invert()
+        }
+    }
+
+    #[inline]
+    pub fn get_network_with_direction(&self, direction: Direction) -> Self
+    {
+        if self.direction == direction{
+            self.clone()
+        } else {
+            self.invert()
         }
     }
 

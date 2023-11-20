@@ -436,7 +436,8 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
             first_layer_overlap(in_file, o)
         },
         SubCommand::FirstLayerAll(a) => flow_of_top_first_layer(in_file, a),
-        SubCommand::Flow(f) => flow(f, in_file)
+        SubCommand::Flow(f) => flow(f, in_file),
+        SubCommand::Shock(s) => shock_exec(s, in_file)
     }
 }
 
@@ -896,10 +897,7 @@ pub fn flow_calc(
     let focus_idx = map.get(focus).unwrap();
     percent[*focus_idx] = 1.0;
 
-    let import_from = match net.direction{
-        Direction::ImportFrom => net.clone(),
-        Direction::ExportTo => net.invert()
-    };
+    let import_from = net.get_network_with_direction(Direction::ImportFrom);
 
     for _ in 0..iterations{
         #[allow(clippy::needless_range_loop)]
@@ -946,4 +944,153 @@ pub fn flow_calc(
 pub struct Flow{
     total: Vec<f64>,
     imports: Vec<f64>
+}
+
+pub fn shock_exec(opt: ShockOpts, in_file: &str)
+{
+    let networks = read_networks(in_file);
+
+    let mut network = None;
+    for n in networks{
+        if n.year == opt.year {
+            network = Some(n);
+            break;
+        }
+    }
+    let network = network
+        .expect("could not find specified year")
+        .without_unconnected_nodes();
+
+
+    let focus = network.nodes.iter()
+        .position(|item| item.identifier == opt.top_id)
+        .unwrap();
+
+    let fracts = shock_distribution(
+        &network, 
+        focus, 
+        opt.export, 
+        opt.iterations
+    );
+
+    let name = format!("{}.dat", opt.out);
+    let file = File::create(name)
+        .expect("unable to create file");
+    let mut buf = BufWriter::new(file);
+
+    write_commands_and_version(&mut buf).unwrap();
+    writeln!(buf, "#index import_frac export_frac").unwrap();
+
+    for (index, (import, export)) in fracts.import_fracs.iter().zip(fracts.export_fracs.iter()).enumerate()
+    {
+        writeln!(buf, "{index} {import} {export}").unwrap()
+    }
+
+    let write_dist = |slice: &[f64], name: &str| {
+        let mut hist = HistF64::new(0.0, 1.0 + f64::EPSILON, 20)
+            .unwrap();
+        for v in slice {
+            hist.increment(*v).unwrap();
+        }
+        let total: usize = hist.hist().iter().sum();
+        let total_f = total as f64;
+        
+        let file = File::create(name)
+            .unwrap();
+        let mut buf = BufWriter::new(file);
+        write_commands_and_version(&mut buf).unwrap();
+        writeln!(buf, "#Bin_left Bin_right Bin_center hits normalized").unwrap();
+        for (bins, hits) in hist.bin_hits_iter()
+        {
+            let normed = hits as f64 / total_f;
+            let center = (bins[0] + bins[1]) * 0.5;
+            writeln!(buf, "{} {} {center} {hits} {normed}", bins[0], bins[1])
+                .unwrap();
+        }
+    };
+    let import_name = format!("{}.import.dist", opt.out);
+    write_dist(&fracts.import_fracs, &import_name);
+    let export_name = format!("{}.export.dist", opt.out);
+    write_dist(&fracts.export_fracs, &export_name);
+
+}
+
+
+pub fn shock_distribution(
+    network: &Network, 
+    focus: usize, 
+    export_frac: f64,
+    iterations: usize
+) -> ShockRes
+{
+    assert!((0.0..=1.0).contains(&export_frac));
+    let inverted = network.invert();
+    let (import, export) = match network.direction{
+        Direction::ExportTo => (&inverted, network),
+        Direction::ImportFrom => (network, &inverted)
+    };
+    assert!(import.direction.is_import());
+    assert!(export.direction.is_export());
+
+    let original_exports: Vec<f64> = export
+        .nodes
+        .iter()
+        .map(
+            |n| 
+            {
+                n.adj
+                    .iter()
+                    .map(|e| e.amount)
+                    .sum()
+            }
+        ).collect();
+
+    let original_imports: Vec<f64> = import
+        .nodes
+        .iter()
+        .map(
+            |n| 
+            {
+                n.adj
+                    .iter()
+                    .map(|e| e.amount)
+                    .sum()
+            }
+        ).collect();
+
+    let mut current_export_frac = vec![1.0; original_exports.len()];
+    current_export_frac[focus] = export_frac;
+    let mut reduced_import_frac = vec![1.0; current_export_frac.len()];
+
+    for _ in 0..iterations{
+        for (index, n) in import.nodes.iter().enumerate(){
+            reduced_import_frac[index] = 0.0;
+            for e in n.adj.iter(){
+                reduced_import_frac[index] += e.amount * current_export_frac[e.index];
+            }
+            reduced_import_frac[index] /= original_imports[index];
+        }
+
+        for index in 0..current_export_frac.len()
+        {
+            if index == focus{
+                continue;
+            }
+            let missing_imports = (1.0 - reduced_import_frac[index]) * original_imports[index];
+            let available_for_export = original_exports[index] - missing_imports;
+            current_export_frac[index] = if available_for_export <= 0.0 {
+                0.0
+            } else {
+                available_for_export / original_exports[index]
+            };
+        }
+    }
+
+    ShockRes { import_fracs: reduced_import_frac, export_fracs: current_export_frac }
+}
+
+
+pub struct ShockRes{
+    pub import_fracs: Vec<f64>,
+    pub export_fracs: Vec<f64>
 }

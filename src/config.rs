@@ -101,7 +101,6 @@ pub enum CmdChooser{
 
 
 
-
 #[derive(Parser, Debug)]
 pub struct DegreeDist{
     #[arg(short, long)]
@@ -154,7 +153,33 @@ pub enum SubCommand{
     /// Calculate overlap of first layer
     FirstLayerOverlap(FirstLayerOpt),
     FirstLayerAll(FirstLayerOpt),
-    Flow(FlowOpt)
+    Flow(FlowOpt),
+    Shock(ShockOpts)
+}
+
+
+#[derive(Parser, Debug)]
+pub struct ShockOpts{
+
+    #[arg(short, long)]
+    /// Name of output file
+    pub out: String,
+
+    /// id of exporter
+    #[arg(short, long)]
+    pub top_id: String,
+
+    /// Which year to check
+    #[arg(short, long)]
+    pub year: i32,
+
+    /// Iterations
+    #[arg(short, long)]
+    pub iterations: usize,    
+
+    /// fraction of old exports that are still exported
+    #[arg(short, long)]
+    pub export: f64,  
 }
 
 #[derive(Parser, Debug)]
