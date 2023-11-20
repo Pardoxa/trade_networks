@@ -178,8 +178,11 @@ fn degree_dists_helper(networks: &[Network], out: &str)
             }
         ).max().unwrap();
     
-    let hist = HistUsizeFast::new_inclusive(0, max_degree).unwrap();
-
+    let mul = (max_degree+1).next_multiple_of(2) - 1;
+    let hist = HistUsize::new_inclusive(0, mul, (mul+1)/2)
+        .unwrap();
+    //let hist = HistUsizeFast::new_inclusive(0, max_degree).unwrap();
+        
     let mut hists: Vec<_> = (0..networks.len()).map(|_| hist.clone()).collect();
 
     networks.iter()
@@ -187,6 +190,7 @@ fn degree_dists_helper(networks: &[Network], out: &str)
         .for_each(
             |(network, hist)|
             {
+                let network = network.without_unconnected_nodes();
                 for node in network.nodes.iter()
                 {
                     hist.increment_quiet(node.adj.len());
@@ -204,7 +208,7 @@ fn degree_dists_helper(networks: &[Network], out: &str)
 
     for (index, (bin, hits)) in first.bin_hits_iter().enumerate()
     {
-        write!(buf, "{bin} {hits}").unwrap();
+        write!(buf, "{} {hits}", bin[0]).unwrap();
         for hist in hists[1..].iter()
         {
             let hit = hist.hist()[index];
@@ -437,7 +441,28 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         },
         SubCommand::FirstLayerAll(a) => flow_of_top_first_layer(in_file, a),
         SubCommand::Flow(f) => flow(f, in_file),
-        SubCommand::Shock(s) => shock_exec(s, in_file)
+        SubCommand::Shock(s) => shock_exec(s, in_file),
+        SubCommand::CountryCount(c) => country_count(in_file, c)
+    }
+}
+
+pub fn country_count(in_file: &str, opt: CountryCountOpt){
+    let networks = read_networks(in_file);
+
+    let file = File::create(opt.out)
+        .unwrap();
+    let mut buf = BufWriter::new(file);
+    write_commands_and_version(&mut buf).unwrap();
+    writeln!(buf, "#Year Trading Exporter").unwrap();
+
+    for n in networks{
+        let mut without = n.without_unconnected_nodes();
+        without.force_direction(Direction::ExportTo);
+        let exporter = without.nodes.iter()
+            .filter(|n| !n.adj.is_empty())
+            .count();
+        writeln!(buf, "{} {} {exporter}", n.year, without.node_count())
+            .unwrap();
     }
 }
 

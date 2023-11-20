@@ -305,3 +305,79 @@ pub fn country_map(code_file: &str) -> BTreeMap<String, String>
     code_country_map
 
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn random_read_checks()
+    {
+        // check last line that contains wheat to see if it is parsed correctly
+        let networks = read_networks("15.bincode");
+
+        let years = [
+            Some(11045.0),
+            None,
+            None,
+            None,
+            Some(66347.0),
+            Some(5961.0),
+            None,
+            Some(68932.0),
+            Some(54723.0),
+            None,
+            Some(96688.0),
+            Some(20201.0),
+            None,
+            None,
+            None,
+            Some(5442.0),
+            None,
+            None,
+            Some(15723.0),
+            Some(10815.0),
+            Some(4035.0),
+            None,
+            Some(381.0),
+            None,
+            Some(1560.0),
+            Some(14865.0),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(5288.0),
+            None,
+            None
+        ];
+
+        for (n, amount) in networks.iter().zip(years)
+        {
+            let z = n.nodes.iter().position(|i| i.identifier == "181");
+            let u = n.nodes.iter().position(|p| p.identifier == "231");
+            match amount{
+                None => {
+                    if let Some(zim) = z {
+                        let node = &n.nodes[zim];
+                        if let Some(usa) = u{
+                            assert!(node.adj.iter().all(|e| e.index != usa));
+                        }
+                    }
+                },
+                Some(val) =>{
+                    let zim = z.unwrap();
+                    let usa = u.unwrap();
+                    let node = &n.nodes[zim];
+                    let e = node.adj.iter().find(|e| e.index == usa).unwrap();
+                    assert_eq!(e.amount, val);
+                }
+            }
+        }
+    }
+}

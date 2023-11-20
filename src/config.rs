@@ -154,9 +154,19 @@ pub enum SubCommand{
     FirstLayerOverlap(FirstLayerOpt),
     FirstLayerAll(FirstLayerOpt),
     Flow(FlowOpt),
-    Shock(ShockOpts)
+    Shock(ShockOpts),
+    CountryCount(CountryCountOpt)
 }
 
+
+#[derive(Parser, Debug)]
+pub struct CountryCountOpt{
+
+    #[arg(short, long)]
+    /// Name of output
+    pub out: String,
+    
+}
 
 #[derive(Parser, Debug)]
 pub struct ShockOpts{
