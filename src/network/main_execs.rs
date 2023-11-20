@@ -1023,40 +1023,35 @@ pub fn shock_distribution(
     iterations: usize
 ) -> ShockRes
 {
-    assert!((0.0..=1.0).contains(&export_frac));
+    assert!(
+        (0.0..=1.0).contains(&export_frac),
+        "Invalid export fraction, has to be in range 0.0..=1.0"
+    );
     let inverted = network.invert();
     let (import, export) = match network.direction{
         Direction::ExportTo => (&inverted, network),
         Direction::ImportFrom => (network, &inverted)
     };
-    assert!(import.direction.is_import());
-    assert!(export.direction.is_export());
+    debug_assert!(import.direction.is_import());
+    debug_assert!(export.direction.is_export());
 
-    let original_exports: Vec<f64> = export
-        .nodes
-        .iter()
-        .map(
-            |n| 
-            {
-                n.adj
-                    .iter()
-                    .map(|e| e.amount)
-                    .sum()
-            }
-        ).collect();
+    let calc_total = |net: &Network| -> Vec<f64> {
+        net
+            .nodes
+            .iter()
+            .map(
+                |n| 
+                {
+                    n.adj
+                        .iter()
+                        .map(|e| e.amount)
+                        .sum()
+                }
+            ).collect()
+    };
 
-    let original_imports: Vec<f64> = import
-        .nodes
-        .iter()
-        .map(
-            |n| 
-            {
-                n.adj
-                    .iter()
-                    .map(|e| e.amount)
-                    .sum()
-            }
-        ).collect();
+    let original_exports = calc_total(export);
+    let original_imports = calc_total(import);
 
     let mut current_export_frac = vec![1.0; original_exports.len()];
     current_export_frac[focus] = export_frac;
