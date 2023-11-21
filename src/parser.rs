@@ -37,8 +37,32 @@ pub fn line_to_vec(line: &str) -> Vec<String>
 }
 
 
-pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
+pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> EnrichmentInfos
 {
+    {
+        let file = File::open(in_file)
+            .unwrap();
+        let buf = BufReader::new(file);
+        if let Ok(r) = serde_json::from_reader::<_, EnrichmentInfos>(buf){
+            if let Some(item_code) = target_item_code{
+                assert_eq!(item_code, &r.item_code);
+            }
+            return r;
+        }
+
+        let file = File::open(in_file)
+            .unwrap();
+        let buf = BufReader::new(file);
+        if let Ok(r) = serde_json::from_reader::<_, EnrichmentInfos>(buf){
+            if let Some(item_code) = target_item_code{
+                assert_eq!(item_code, &r.item_code);
+            }
+            return r;
+        }
+    }
+    let target_item_code: &str = target_item_code
+        .as_ref()
+        .expect("Cannot parse as Json or Bincode -> item code required");
     let map = crate::network::enriched_digraph::NodeInfoMap::new();
 
     let file = File::open(in_file)
@@ -75,7 +99,11 @@ pub fn parse_extra(in_file: &str, target_item_code: &str) -> EnrichmentInfos
         .expect(&year_start_str);
     let total = header_map.len() - start_year_id;
 
-    let mut enrichments = EnrichmentInfos::new(total, start_year);
+    let mut enrichments = EnrichmentInfos::new(
+        total, 
+        start_year,
+        target_item_code.to_owned()
+    );
     let mut not_even_once = true;
     for l in lines{
         let v = line_to_vec(&l);

@@ -4,6 +4,25 @@ use crate::network::{Direction, NetworkType};
 use serde::{Serialize, Deserialize};
 
 #[derive(Parser, Debug)]
+pub struct ParseEnrichOpts{
+    #[arg(short, long)]
+    /// Name of output
+    pub out: String,
+    
+    #[arg(short, long)]
+    /// Path to csv containing enrichment data
+    pub enrich_files: Vec<String>,
+
+    #[arg(long)]
+    /// Item code, e.g. 27 for Rice
+    pub item_code: String,
+
+    #[arg(short, long)]
+    /// Use json output format instead of bincode
+    pub json: bool
+}
+
+#[derive(Parser, Debug)]
 pub struct ToCountryBinOpt{
     #[arg(short, long)]
     /// Path to binary file to read in
@@ -77,7 +96,7 @@ pub struct EnrichOpt{
 
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
-    pub item_code: String,
+    pub item_code: Option<String>,
 
     #[arg(short, long)]
     /// Use json output format instead of bincode
@@ -96,7 +115,8 @@ pub enum CmdChooser{
     Out10(MiscOpt),
     ParseNetworks(ParseNetworkOpt),
     ParseAllNetworks(ParseAllNetworksOpt),
-    Tests(Tests)
+    Tests(Tests),
+    ParseEnrichment(ParseEnrichOpts)
 }
 
 
@@ -155,6 +175,7 @@ pub enum SubCommand{
     FirstLayerAll(FirstLayerOpt),
     Flow(FlowOpt),
     Shock(ShockOpts),
+    ShockAvail(ShockAvailOpts),
     CountryCount(CountryCountOpt)
 }
 
@@ -193,6 +214,37 @@ pub struct ShockOpts{
 }
 
 #[derive(Parser, Debug)]
+pub struct ShockAvailOpts{
+
+    #[arg(short, long)]
+    /// Name of output file
+    pub out: String,
+
+    /// id of exporter
+    #[arg(short, long)]
+    pub top_id: String,
+
+    #[arg(short, long)]
+    pub enrich_file: String,
+
+    /// Which year to check
+    #[arg(short, long)]
+    pub year: i32,
+
+    /// Iterations
+    #[arg(short, long)]
+    pub iterations: usize,    
+
+    /// fraction of old exports that are still exported
+    #[arg(long)]
+    pub export: f64,  
+
+    #[arg(long)]
+    /// Item code, e.g. 27 for Rice
+    pub item_code: Option<String>,
+}
+
+#[derive(Parser, Debug)]
 pub struct FlowOpt{
     /// name of output file
     #[arg(short, long)]
@@ -207,11 +259,11 @@ pub struct FlowOpt{
     pub year: i32,
 
     /// Iterations
-    #[arg(short, long)]
+    #[arg(long)]
     pub iterations: usize,
 
-    #[arg(short, long)]
-    pub item_code: String,
+    #[arg(long)]
+    pub item_code: Option<String>,
 
     #[arg(short, long)]
     pub enrich_file: String,

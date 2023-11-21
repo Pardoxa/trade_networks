@@ -95,24 +95,90 @@ impl ExtraInfo {
     {
         Self{map: BTreeMap::new()}
     }
+
+    pub fn fuse(&mut self, other: &Self){
+        for (key, value) in other.map.iter(){
+            let old = self.map.insert(*key, value.clone());
+            assert!(
+                old.is_none(),
+                "Extra info already present!"
+            );
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentInfos{
     pub starting_year: i32,
+    pub item_code: String,
+    pub possible_node_info: Vec<String>,
     pub enrichments: Vec<BTreeMap<String, ExtraInfo>>
 }
 
 impl EnrichmentInfos{
-    pub fn new(num_entries: usize, starting_year: i32) -> Self
+
+    pub fn fuse(&mut self, other: &Self)
+    {
+        self.possible_node_info
+            .iter()
+            .zip(other.possible_node_info.iter())
+            .for_each(
+                |(s,o)|
+                {
+                    assert_eq!(s,o);
+                }
+            );
+        let mut other_slice = other.enrichments.as_slice();
+        let s = match self.starting_year.cmp(&other.starting_year)
+        {
+            Ordering::Equal => self.enrichments.as_mut_slice(),
+            Ordering::Less => {
+                let diff = (other.starting_year - self.starting_year) as usize;
+                &mut self.enrichments[diff..]
+            },
+            Ordering::Greater => {
+                let diff = (self.starting_year - other.starting_year) as usize;
+                other_slice = &other_slice[diff..];
+                self.enrichments.as_mut_slice()
+            }
+        };
+
+        s.iter_mut()
+            .zip(other_slice)
+            .for_each(
+                |(this, other)|
+                {
+                    for (key, val) in other.iter(){
+                        if let Some(e) = this.get_mut(key){
+                            e.fuse(val);
+                        } else {
+                            this.insert(key.clone(), val.clone());
+                        }
+                    }
+                }
+            );
+    }
+
+    pub fn new(num_entries: usize, starting_year: i32, item_code: String) -> Self
     {
         let e = (0..num_entries)
             .map(|_| BTreeMap::new())
             .collect();
+        let infos = POSSIBLE_NODE_INFO.iter()
+            .map(|i| i.to_string())
+            .collect();
         Self{
             starting_year,
-            enrichments: e
+            possible_node_info: infos,
+            enrichments: e,
+            item_code
         }
+    }
+
+    pub fn get_year(&self, year_idx: i32) -> & BTreeMap<String, ExtraInfo>
+    {
+        let idx =  year_idx - self.starting_year;
+        &self.enrichments[idx as usize]
     }
 
     pub fn get_mut_inserting<'a>(&'a mut self, year_idx: usize, country: &str) -> &'a mut ExtraInfo

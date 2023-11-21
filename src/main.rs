@@ -20,7 +20,8 @@ fn main() {
         CmdChooser::Misc(misc_opt) => misc(misc_opt),
         CmdChooser::Out10(opt) => export_out_comp(opt),
         CmdChooser::Enrichment(opt) => enrich(opt),
-        CmdChooser::Tests(t) => test_chooser(&t.in_file, t.command)
+        CmdChooser::Tests(t) => test_chooser(&t.in_file, t.command),
+        CmdChooser::ParseEnrichment(o) => enrich_to_bin(o)
     }
 }
 
