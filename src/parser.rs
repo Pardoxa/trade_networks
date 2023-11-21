@@ -176,10 +176,14 @@ pub fn network_parser(
             |item| 
             {
                 item[item_id] == item_code 
-                && item[transaction_type] == wanted_transaction_type
             });
 
+
     for line_vec in line_iter{
+       
+        if line_vec[transaction_type] != wanted_transaction_type{
+            continue;
+        }
         let unit = line_vec.get(unit_id).unwrap();
         if let Some(u) = &glob_unit{
             if !u.eq(unit){
@@ -198,6 +202,7 @@ pub fn network_parser(
         let part_c = line_vec.get(partner_country_id).unwrap();
         countries.insert(part_c.clone());
     }
+
 
     let all: Vec<_> = countries.iter()
         .map(
@@ -267,12 +272,15 @@ pub fn network_parser(
                         let amount_entry = &line[*idx];
                         if !amount_entry.is_empty(){
                             let amount: f64 = amount_entry.parse().unwrap();
-                            let node = network.nodes.get_mut(rep_id).unwrap();
-                            let edge = Edge{
-                                amount,
-                                index: part_id
-                            };
-                            node.adj.push(edge);
+                            if amount > 0.0{
+                                let node = network.nodes.get_mut(rep_id).unwrap();
+                                let edge = Edge{
+                                    amount,
+                                    index: part_id
+                                };
+                                node.adj.push(edge);
+                            }
+                            
                         }
                         
                     }

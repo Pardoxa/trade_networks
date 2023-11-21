@@ -453,7 +453,7 @@ pub fn country_count(in_file: &str, opt: CountryCountOpt){
         .unwrap();
     let mut buf = BufWriter::new(file);
     write_commands_and_version(&mut buf).unwrap();
-    writeln!(buf, "#Year Trading Exporter").unwrap();
+    writeln!(buf, "#Year Trading Exporter EdgeCount").unwrap();
 
     for n in networks{
         let mut without = n.without_unconnected_nodes();
@@ -461,7 +461,11 @@ pub fn country_count(in_file: &str, opt: CountryCountOpt){
         let exporter = without.nodes.iter()
             .filter(|n| !n.adj.is_empty())
             .count();
-        writeln!(buf, "{} {} {exporter}", n.year, without.node_count())
+        let edge_count: usize = without.nodes
+            .iter()
+            .map(|n| n.adj.len())
+            .sum();
+        writeln!(buf, "{} {} {exporter} {edge_count}", n.year, without.node_count())
             .unwrap();
     }
 }
