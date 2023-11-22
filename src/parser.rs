@@ -1,4 +1,4 @@
-use crate::config::ReadType;
+use crate::{config::ReadType, misc::*};
 
 use{
     std::{
@@ -40,23 +40,26 @@ pub fn line_to_vec(line: &str) -> Vec<String>
 pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> EnrichmentInfos
 {
     {
-        let file = File::open(in_file)
-            .unwrap();
-        let buf = BufReader::new(file);
+        let check_item_code = |item_code: &str|
+        {
+            if let Some(t_item_code) = target_item_code{
+                assert_eq!(
+                    t_item_code, 
+                    item_code,
+                    "Missmatch in Item code between Request and Savefile"
+                );
+            } 
+        };
+
+        let buf = open_bufreader(in_file);
         if let Ok(r) = serde_json::from_reader::<_, EnrichmentInfos>(buf){
-            if let Some(item_code) = target_item_code{
-                assert_eq!(item_code, &r.item_code);
-            }
+            check_item_code(&r.item_code);
             return r;
         }
 
-        let file = File::open(in_file)
-            .unwrap();
-        let buf = BufReader::new(file);
+        let buf = open_bufreader(in_file);
         if let Ok(r) = serde_json::from_reader::<_, EnrichmentInfos>(buf){
-            if let Some(item_code) = target_item_code{
-                assert_eq!(item_code, &r.item_code);
-            }
+            check_item_code(&r.item_code);
             return r;
         }
     }
@@ -65,9 +68,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
         .expect("Cannot parse as Json or Bincode -> item code required");
     let map = crate::network::enriched_digraph::NodeInfoMap::new();
 
-    let file = File::open(in_file)
-        .expect("unable to open file");
-    let buf = BufReader::new(file);
+    let buf = open_bufreader(in_file);
     let mut lines = buf.lines()
         .map(|l| l.expect("read error"));
     let first_line = lines.next()
@@ -322,9 +323,7 @@ pub fn network_parser(
 
 pub fn country_map(code_file: &str) -> BTreeMap<String, String>
 {
-    let file = File::open(code_file)
-        .unwrap();
-    let buf_reader = BufReader::new(file);
+    let buf_reader = open_bufreader(code_file);
     let lines = buf_reader
         .lines()
         .map(|r| r.unwrap())

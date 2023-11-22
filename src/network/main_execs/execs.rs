@@ -1,16 +1,14 @@
-use std::f64::consts::TAU;
-use super::shock_avail;
-
-
 use {
     std::{
         fs::File,
-        io::{BufWriter, Write, BufRead, BufReader},
+        io::{BufWriter, Write, BufRead},
         collections::{BTreeSet, BTreeMap}, 
-        fmt::Display
+        fmt::Display,
+        f64::consts::TAU
     },
     crate::network::{*, helper_structs::*},
     crate::{config::*, misc::*, parser},
+    super::shock_avail,
     rayon::prelude::*,
     net_ensembles::sampling::*,
     indicatif::ProgressIterator,
@@ -43,8 +41,7 @@ pub fn parse_networks(opt: ParseNetworkOpt)
         opt.read_type
     ).expect("unable to parse");
 
-    let file = File::create(&opt.out).unwrap();
-    let buf = BufWriter::new(file);
+    let buf = create_buf(&opt.out);
     if opt.json{
         serde_json::to_writer_pretty(buf, &networks)
             .expect("unable to create json");
@@ -57,10 +54,7 @@ pub fn parse_networks(opt: ParseNetworkOpt)
 
 pub fn to_binary_all(opt: ParseAllNetworksOpt)
 {
-
-    let item_file = File::open(&opt.item_file)
-        .unwrap();
-    let buf_reader = BufReader::new(item_file);
+    let buf_reader = open_bufreader(&opt.item_file);
 
     let lines = buf_reader.lines().skip(1);
 
@@ -138,10 +132,8 @@ fn max_weight_dist(networks: &mut [Network], out: &str){
             }
         );
 
-    let file = File::create(out).expect("unable to create file");
-    let mut buf = BufWriter::new(file);
+    let mut buf = create_buf_with_command_and_version(out);
 
-    write_commands_and_version(&mut buf).unwrap();
     assert_same_direction_write_direction(networks, &mut buf);
 
     let first = hists.first().unwrap();
@@ -198,10 +190,7 @@ fn degree_dists_helper(networks: &[Network], out: &str)
             }
         );
 
-    let file = File::create(out).expect("unable to create file");
-    let mut buf = BufWriter::new(file);
-
-    write_commands_and_version(&mut buf).unwrap();
+    let mut buf = create_buf_with_command_and_version(out);
     assert_same_direction_write_direction(networks, &mut buf);
 
     let first = hists.first().unwrap();
@@ -228,10 +217,7 @@ pub fn export_out_comp(opt: MiscOpt)
 
     force_direction(&mut networks, Direction::ExportTo);
 
-    let file = File::create(opt.out).expect("unable to create file");
-    let mut buf = BufWriter::new(file);
-
-    write_commands_and_version(&mut buf).unwrap();
+    let mut buf = create_buf_with_command_and_version(opt.out);
 
     write!(buf, "#year").unwrap();
     for i in 0..10
@@ -274,11 +260,6 @@ pub fn misc(opt: MiscOpt)
 {
     let mut networks = read_networks(&opt.input);
 
-    let file = File::create(opt.out).expect("unable to create file");
-    let mut buf = BufWriter::new(file);
-
-    write_commands_and_version(&mut buf).unwrap();
-
     let entries = [
         "year_id",
         "exporting_nodes",
@@ -296,6 +277,7 @@ pub fn misc(opt: MiscOpt)
         "largest_scc_diameter"
     ];
 
+    let mut buf = create_buf_with_command_and_version(opt.out);
     write!(buf, "#{}_1", entries[0]).unwrap();
     for (e, j) in entries[1..].iter().zip(2..) {
         write!(buf, " {e}_{j}").unwrap();
@@ -418,9 +400,7 @@ pub fn enrich(opt: EnrichOpt){
         &networks, 
         enrichments
     );
-    let out_file = File::create(opt.out)
-        .unwrap();
-    let buf_writer = BufWriter::new(out_file);
+    let buf_writer = create_buf(opt.out);
     if opt.json{
         serde_json::to_writer_pretty(buf_writer, &enriched)
             .expect("unable to create json");
@@ -447,10 +427,7 @@ pub fn enrich_to_bin(opt: ParseEnrichOpts){
         fused.fuse(&e);
     }
 
-    let file = File::create(opt.out)
-        .unwrap();
-    let buf = BufWriter::new(file);
-
+    let buf = create_buf(opt.out);
     if opt.json{
         serde_json::to_writer_pretty(buf, &fused)
             .unwrap();
@@ -481,10 +458,7 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
 pub fn country_count(in_file: &str, opt: CountryCountOpt){
     let networks = read_networks(in_file);
 
-    let file = File::create(opt.out)
-        .unwrap();
-    let mut buf = BufWriter::new(file);
-    write_commands_and_version(&mut buf).unwrap();
+    let mut buf = create_buf_with_command_and_version(opt.out);
     writeln!(buf, "#Year Trading Exporter EdgeCount").unwrap();
 
     for n in networks{
@@ -530,10 +504,7 @@ pub fn out_comparison(in_file: &str, cmd: OutOpt){
             }
         ).collect();
     
-    let out = File::create(&cmd.out)
-        .expect("unable to create file");
-    let mut buf = BufWriter::new(out);
-    write_commands_and_version(&mut buf).unwrap();
+    let mut buf = create_buf_with_command_and_version(&cmd.out);
 
     let matrix: Vec<Vec<_>> = sets.iter()
         .map(
@@ -586,21 +557,11 @@ pub fn first_layer_overlap(in_file: &str, cmd: FirstLayerOpt){
                     .collect()
             }
         ).collect();
-    
-    
-    
-
-    let create_file = |filename: &str| {
-        let out = File::create(filename)
-            .expect("unable to create file");
-        let mut buf_overlap = BufWriter::new(out);
-        write_commands_and_version(&mut buf_overlap).unwrap();
-        buf_overlap
-    };
+        
 
 
     let overlap_name = format!("layer_overlap_{}", cmd.out);
-    let mut buf_overlap = create_file(&overlap_name);
+    let mut buf_overlap = create_buf_with_command_and_version(overlap_name);
     layers.iter()
         .for_each(
             |set|
@@ -618,7 +579,7 @@ pub fn first_layer_overlap(in_file: &str, cmd: FirstLayerOpt){
         );
 
     let size_name = format!("layer_size_{}", cmd.out);
-    let mut buf_size = create_file(&size_name);
+    let mut buf_size = create_buf_with_command_and_version(size_name);
 
     let d = match cmd.direction{
         Direction::ExportTo => "Export",
@@ -744,9 +705,7 @@ pub fn flow_of_top_first_layer(in_file: &str, opt: FirstLayerOpt)
     let ordering = network.sorted_by_largest_in();
 
     let graph_name = format!("A_{}.dot", opt.out);
-    let file = File::create(graph_name)
-        .expect("unable to create graph file");
-    let buf = BufWriter::new(file);
+    let buf = create_buf(graph_name);
 
     let map = opt.print_graph
         .map(|s| parser::country_map(&s));

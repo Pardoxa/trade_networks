@@ -156,9 +156,7 @@ pub fn shock_exec(opt: ShockOpts, in_file: &str)
     );
 
     let name = format!("{}.dat", opt.out);
-    let file = File::create(name)
-        .expect("unable to create file");
-    let mut buf = BufWriter::new(file);
+    let mut buf = create_buf(name);
 
     write_commands_and_version(&mut buf).unwrap();
     writeln!(buf, "#index import_frac export_frac country").unwrap();
@@ -332,6 +330,16 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
         node_info_map
     );
 
+    let total_before: f64 = available_before_shock.iter().sum();
+    let total_after: f64 = avail_after_shock.iter().sum();
+    let total_missing = avail_after_shock[focus] - available_before_shock[focus];
+
+    println!("Missing amount: {total_missing:e}");
+    println!("Missing fract: {}", total_missing / total_before);
+    println!("before: {total_before:e}");
+    println!("after: {total_after:e}");
+    println!("difference: {:e}", total_before - total_after);
+
     let file = File::create(opt.out)
         .unwrap();
     let mut buf = BufWriter::new(file);
@@ -377,7 +385,6 @@ fn calc_available(
     let stock_id = node_map.get("Stocks");
     let mut at_least_some_stock = false;
 
-    
 
     let res =(0..original_export.len())
         .map(
@@ -414,7 +421,10 @@ fn calc_available(
         ).collect();
 
     assert!(at_least_some_production, "No production data!");
-    assert!(at_least_some_stock, "No Stock data!");
+    if !at_least_some_stock{
+        eprintln!("WARNING: NO STOCK DATA")
+    }
+    eprintln!("Stock Variation data is unimplemented!");
     
     res
 
