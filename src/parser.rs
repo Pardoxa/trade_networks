@@ -1,4 +1,4 @@
-use crate::{config::ReadType, misc::*};
+use crate::{config::ReadType, misc::*, UNIT_TESTER};
 
 use{
     std::{
@@ -6,6 +6,7 @@ use{
             BufReader, 
             BufRead
         },
+        ops::Deref,
         fs::File,
         collections::{
             BTreeMap,
@@ -137,6 +138,223 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
 }
 
 
+pub fn parse_all_networks(
+    file_name: &str,
+    read_type: ReadType
+)-> anyhow::Result<BTreeMap<String, Vec<Network>>>
+{
+    let unit_tester = UNIT_TESTER.deref();
+    let direction = read_type.get_direction();
+    let wanted_transaction_type = read_type.get_str();
+
+    let file = File::open(file_name)
+        .unwrap();
+    let reader = BufReader::with_capacity(64 * 1024, file);
+
+    let mut lines = reader.lines();
+    let header = lines.next().unwrap().unwrap(); 
+    let entry_iter = header.split(',');
+
+    let entry_names: Vec<_> = entry_iter.collect();
+
+    for (idx, &entry) in entry_names.iter().enumerate() {
+        println!("Entry {idx} is {entry}");
+    }
+
+    let mut map = BTreeMap::new();
+    let mut years: Vec<(i32, usize)> = Vec::new();
+    for (idx, &entry) in entry_names.iter().enumerate()
+    {
+        if let Some(number) = entry.strip_prefix('Y'){
+            if let Ok(y) = number.parse(){
+                years.push((y, idx));
+            }
+        }
+        map.insert(entry, idx);
+    }
+    let item_id = *map.get("Item Code").unwrap();
+    let reporter_country = "Reporter Country Code";
+    let reporter_country_id = *map.get(reporter_country).unwrap();
+    let partner_country = "Partner Country Code";
+    let partner_country_id = *map.get(partner_country).unwrap();
+    let unit = "Unit";
+    let unit_id = *map.get(unit).unwrap();
+
+    let transaction_type = *map.get("Element").unwrap();
+
+
+    let mut countries: BTreeMap<String, (String, BTreeSet<String>, bool)> = BTreeMap::new();
+
+    let line_len = map.len();
+
+    let line_iter = lines
+        .map(|line| {
+            let line = line.unwrap();
+            let line_v = line_to_vec(&line);
+            assert_eq!(line_v.len(), line_len);
+            line_v
+        });
+
+    let mut unit_errors = Vec::new();
+
+    for line_vec in line_iter{
+    
+        if line_vec[transaction_type] != wanted_transaction_type{
+            continue;
+        }
+        if line_vec.len() != line_len{
+            return Err(anyhow::anyhow!("Line error! old_len {line_len} new {}", line_vec.len()));
+        }
+        let current_item_code = line_vec[item_id].as_str();
+        let unit: &String = line_vec.get(unit_id).unwrap();
+
+        let (other_units, c_set, unit_error) = match countries.get_mut(current_item_code){
+            Some(s) => s,
+            None => {
+                countries.insert(current_item_code.to_string(), (unit.clone(), BTreeSet::new(), false));
+                countries.get_mut(current_item_code).unwrap()
+            }
+        };
+
+        if *unit_error{
+            continue;
+        }
+        if !unit_tester.is_equiv(unit, other_units){
+            *unit_error = true;
+            unit_errors.push(format!("Item: {} Unit1: {} Unit2: {}", current_item_code, unit, other_units));
+            continue;
+        }
+
+        let rep_c = line_vec.get(reporter_country_id).unwrap();
+        c_set.insert(rep_c.clone());
+        let part_c = line_vec.get(partner_country_id).unwrap();
+        c_set.insert(part_c.clone());
+        
+    }
+
+    if !unit_errors.is_empty()
+    {
+        println!("Encountered {} unit errors", unit_errors.len());
+        for error in unit_errors{
+            println!("{error}");
+        }
+    }
+
+    let mut network_map: BTreeMap<String, NetworkParsingHelper> = BTreeMap::new();
+    for (item_code, (unit, c_set, unit_error)) in countries.into_iter(){
+        if unit_error{
+            continue;
+        }
+        
+        let all: Vec<_> = c_set
+            .into_iter()
+            .map(Node::new)
+            .collect();
+
+        let mut id_map = BTreeMap::new();
+
+        all.iter()
+            .enumerate()
+            .for_each(
+                |(id, item)|
+                {
+                    let code = &item.identifier;
+                    id_map.insert(code.to_owned(), id);
+                }
+            );
+        let all_networks: Vec<_> = years
+            .iter()
+            .map(|(year, _)| 
+                {
+                    Network{
+                        nodes: all.clone(), 
+                        direction,
+                        data_origin: read_type,
+                        year: *year,
+                        unit: unit.clone()
+                    }
+                }
+            ).collect();
+        let helper = NetworkParsingHelper{
+            id_map,
+            networks: all_networks
+        };
+        network_map.insert(item_code, helper);
+    }
+    
+
+    let file = File::open(file_name)
+        .unwrap();
+    let reader = BufReader::with_capacity(64 * 1024, file);
+
+    let iter = reader.lines()
+        .skip(1)
+        .map(|line| {
+            let line = line.unwrap();
+            line_to_vec(&line)
+        })
+        .filter(
+            |item| 
+            {
+                item[transaction_type] == wanted_transaction_type
+            });
+
+    for line in iter{
+        let entry = match network_map.get_mut(line[item_id].as_str()){
+            None => {
+                // unit error in this item code 
+                continue;
+            },
+            Some(e) =>{
+                e
+            }
+        };
+        let rep_c = line.get(reporter_country_id).unwrap();
+        let part_c = line.get(partner_country_id).unwrap();
+
+        let rep_id = *entry.id_map.get(rep_c).unwrap();
+        let part_id = *entry.id_map.get(part_c).unwrap();
+
+        (years.iter())
+            .zip(entry.networks.iter_mut())
+            .for_each(
+                |((_, idx), network)|
+                {
+                    let amount_entry = &line[*idx];
+                    if !amount_entry.is_empty(){
+                        let amount: f64 = amount_entry.parse().unwrap();
+                        if amount > 0.0{
+                            let node = network.nodes.get_mut(rep_id).unwrap();
+                            let edge = Edge{
+                                amount,
+                                index: part_id
+                            };
+                            node.adj.push(edge);
+                        }
+
+                    }
+
+                }
+            )
+    }
+
+    Ok(
+        network_map.into_iter()
+        .map(
+            |(key, helper)|
+            {
+                (key, helper.networks)
+            }
+        ).collect()
+    )
+    
+}
+
+struct NetworkParsingHelper{
+    id_map: BTreeMap<String, usize>,
+    networks: Vec<Network>
+}
+
 pub fn network_parser(
     file_name: &str, 
     item_code: &str, 
@@ -205,8 +423,8 @@ pub fn network_parser(
             |item| 
             {
                 item[item_id] == item_code 
-            });
-
+            }
+        );
 
     for line_vec in line_iter{
        

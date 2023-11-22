@@ -67,10 +67,6 @@ pub struct ParseAllNetworksOpt{
     /// Path to csv to read in
     pub in_file: String,
 
-    #[arg(long)]
-    /// Name of the file with all item codes etc
-    pub item_file: String,
-
     #[arg(short, long)]
     /// Instead of one file containing all networks do one file per item code
     pub seperate_output: bool,

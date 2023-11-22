@@ -16,6 +16,7 @@ pub fn write_commands_and_version<W: Write>(mut w: W) -> std::io::Result<()>
     writeln!(w)
 }
 
+#[allow(dead_code)]
 pub fn indication_bar(len: u64) -> ProgressBar
 {
         // for indication on when it is finished
@@ -39,7 +40,7 @@ pub fn open_bufreader<P>(path: P) -> BufReader<File>
 where P: AsRef<Path>
 {
     let file = File::open(path)
-        .expect("Unable to create file");
+        .expect("Unable to open file");
     BufReader::new(file)
 }
 

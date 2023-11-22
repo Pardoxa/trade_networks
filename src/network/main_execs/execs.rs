@@ -1,7 +1,9 @@
+use crate::parser::parse_all_networks;
+
 use {
     std::{
         fs::File,
-        io::{BufWriter, Write, BufRead},
+        io::{BufWriter, Write},
         collections::{BTreeSet, BTreeMap}, 
         fmt::Display,
         f64::consts::TAU
@@ -10,8 +12,7 @@ use {
     crate::{config::*, misc::*, parser},
     super::shock_avail,
     rayon::prelude::*,
-    net_ensembles::sampling::*,
-    indicatif::ProgressIterator,
+    net_ensembles::sampling::*
 };
 
 fn assert_same_direction_write_direction<W>(networks: &[Network], mut writer: W)
@@ -54,44 +55,25 @@ pub fn parse_networks(opt: ParseNetworkOpt)
 
 pub fn to_binary_all(opt: ParseAllNetworksOpt)
 {
-    let buf_reader = open_bufreader(&opt.item_file);
-
-    let lines = buf_reader.lines().skip(1);
-
-    let mut item_codes = BTreeSet::new();
-
-    for item_line in lines{
-        let l = item_line.unwrap();
-        let split = parser::line_to_vec(&l);
-        assert_eq!(split.len(), 3);
-        item_codes.insert(split[0].clone());
-    }
+    let all = parse_all_networks(&opt.in_file, opt.read_type)
+        .unwrap();
+    println!("Found {} item codes", all.len());
 
     if opt.seperate_output {
-        println!("Found {} item codes", item_codes.len());
-        let bar = crate::misc::indication_bar(item_codes.len() as u64);
-        for item_code in item_codes.iter().progress_with(bar){
-            let networks = crate::parser::network_parser(
-                &opt.in_file, 
-                item_code, 
-                true,
-                opt.read_type
-            );
-            let networks = match networks{
-                Err(e) => {
-                    println!("Error in {e} - Item code {item_code}");
-                    continue;
-                }, 
-                Ok(n) => n
-            };
+        
+        for (item_code, networks) in all.into_iter(){
+            
             let output_name = format!("{item_code}.bincode");
-            let file = File::create(&output_name).unwrap();
-            let buf = BufWriter::new(file);
+            let buf = create_buf(output_name);
             bincode::serialize_into(buf, &networks)
                 .expect("serialization issue");
         }
     } else {
-        unimplemented!()
+        let name = "everything.bincode";
+        println!("creating {name}");
+        let buf = create_buf(name);
+        bincode::serialize_into(buf, &all)
+                .expect("serialization issue");
     }
     
 
