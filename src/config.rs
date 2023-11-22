@@ -170,9 +170,12 @@ pub enum SubCommand{
     FirstLayerOverlap(FirstLayerOpt),
     FirstLayerAll(FirstLayerOpt),
     Flow(FlowOpt),
+    /// Also calculates the distribution of import and export fractions
     Shock(ShockOpts),
     ShockAvail(ShockAvailOpts),
-    CountryCount(CountryCountOpt)
+    /// Calculate distribution for total available food fractional changes
+    ShockDist(ShockDistOpts),
+    CountryCount(CountryCountOpt),
 }
 
 
@@ -238,6 +241,44 @@ pub struct ShockAvailOpts{
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
     pub item_code: Option<String>,
+}
+#[derive(Parser, Debug)]
+pub struct ShockDistOpts{
+
+    #[arg(short, long)]
+    /// Name of output file
+    pub out: String,
+
+    /// id of exporter
+    #[arg(short, long)]
+    pub top_id: String,
+
+    #[arg(short, long)]
+    pub enrich_file: String,
+
+    /// Which year to check
+    #[arg(short, long)]
+    pub year: i32,
+
+    /// Iterations
+    #[arg(short, long)]
+    pub iterations: usize,    
+
+    /// fraction of old exports that are still exported
+    #[arg(long)]
+    pub export: f64,  
+
+    #[arg(long)]
+    /// Item code, e.g. 27 for Rice
+    pub item_code: Option<String>,
+
+    #[arg(long, default_value_t=31)]
+    /// number of bins
+    pub bins: usize,
+
+    /// Do not include the country that reduces its exports in the histogram
+    #[arg(long, short)]
+    pub without: bool
 }
 
 #[derive(Parser, Debug)]

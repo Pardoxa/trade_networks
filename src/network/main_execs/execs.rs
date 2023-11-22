@@ -10,7 +10,7 @@ use {
     },
     crate::network::{*, helper_structs::*},
     crate::{config::*, misc::*, parser},
-    super::shock_avail,
+    super::*,
     rayon::prelude::*,
     net_ensembles::sampling::*
 };
@@ -431,9 +431,11 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         },
         SubCommand::FirstLayerAll(a) => flow_of_top_first_layer(in_file, a),
         SubCommand::Flow(f) => super::flow(f, in_file),
+        
         SubCommand::Shock(s) => super::shock_exec(s, in_file),
         SubCommand::CountryCount(c) => country_count(in_file, c),
-        SubCommand::ShockAvail(s) => shock_avail(s, in_file)
+        SubCommand::ShockAvail(s) => shock_avail(s, in_file),
+        SubCommand::ShockDist(d) => shock_dist(d, in_file)
     }
 }
 

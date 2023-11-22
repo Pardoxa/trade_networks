@@ -276,12 +276,28 @@ pub struct ShockRes{
     pub export_fracs: Vec<f64>
 }
 
-pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
+pub struct CalculatedShocks{
+    pub available_before_shock: Vec<f64>,
+    pub available_after_shock: Vec<f64>,
+    pub focus_index: usize,
+    pub network: Network
+}
+
+pub fn calc_shock(
+    in_file: &str, 
+    year: i32, 
+    top_id: &str, 
+    export_frac: f64,
+    iterations: usize,
+    enrich_file: &str,
+    target_item_code: &Option<String>
+) -> CalculatedShocks
+{
     let networks = read_networks(in_file);
 
     let mut network = None;
     for n in networks{
-        if n.year == opt.year {
+        if n.year == year {
             network = Some(n);
             break;
         }
@@ -292,30 +308,30 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
 
 
     let focus = network.nodes.iter()
-        .position(|item| item.identifier == opt.top_id)
+        .position(|item| item.identifier == top_id)
         .unwrap();
 
     let fracts = shock_distribution(
         &network, 
         focus, 
-        opt.export, 
-        opt.iterations
+        export_frac, 
+        iterations
     );
 
     let enrich_infos = crate::parser::parse_extra(
-        &opt.enrich_file, 
-        &opt.item_code
+        enrich_file, 
+        target_item_code
     );
 
-    let enrich = enrich_infos.get_year(opt.year);
+    let enrich = enrich_infos.get_year(year);
 
-    let node_info_map = GLOBAL_NODE_INFO_MAP.deref();
+    let node_info_map = NodeInfoMap::from_slice(enrich_infos.possible_node_info.as_slice());
 
     let avail_after_shock = calc_available(
         &network, 
         enrich, 
         &fracts, 
-        node_info_map
+        &node_info_map
     );
 
     let no_shock = ShockRes{
@@ -327,8 +343,31 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
         &network, 
         enrich, 
         &no_shock, 
-        node_info_map
+        &node_info_map
     );
+
+    CalculatedShocks { 
+        available_after_shock: avail_after_shock,
+        available_before_shock,
+        focus_index: focus,
+        network
+    }
+}
+
+pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
+    let res = calc_shock(
+        in_file, 
+        opt.year, 
+        &opt.top_id, 
+        opt.export, 
+        opt.iterations, 
+        &opt.enrich_file, 
+        &opt.item_code
+    );
+    
+    let available_before_shock = res.available_before_shock;
+    let avail_after_shock = res.available_after_shock;
+    let focus = res.focus_index;
 
     let total_before: f64 = available_before_shock.iter().sum();
     let total_after: f64 = avail_after_shock.iter().sum();
@@ -346,7 +385,7 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
     write_commands_and_version(&mut buf).unwrap();
     writeln!(buf, "#idx before_shock after_shock country").unwrap();
 
-    for (idx, n) in network.nodes.iter().enumerate()
+    for (idx, n) in res.network.nodes.iter().enumerate()
     {
         writeln!(buf, 
             "{idx} {} {} {} {}",
@@ -355,6 +394,51 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
             available_before_shock[idx] - avail_after_shock[idx],
             n.identifier
         ).unwrap();
+    }
+
+}
+
+
+pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
+{
+    let res = calc_shock(
+        in_file, 
+        opt.year, 
+        &opt.top_id, 
+        opt.export, 
+        opt.iterations, 
+        &opt.enrich_file, 
+        &opt.item_code
+    );
+
+    let mut hist = HistF64::new(-1.0, 1.0 + f64::EPSILON, opt.bins)
+        .unwrap();
+
+    for i in 0..res.available_after_shock.len(){
+        if opt.without && i == res.focus_index{
+            continue;
+        }
+        let delta = (res.available_after_shock[i] - res.available_before_shock[i])
+            / res.available_before_shock[i];
+        if delta > 1.0 {
+            println!("{delta}");
+        }
+        hist.increment(delta).unwrap();
+    }
+
+    let mut buf = create_buf_with_command_and_version(opt.out);
+    writeln!(buf, "#left right center hits normalized").unwrap();
+    let total: usize = hist.hist().iter().sum();
+
+    for (bin, hits) in hist.bin_hits_iter(){
+        let center = (bin[0] + bin[1]) / 2.0;
+        let normalized = hits as f64 / total as f64;
+        writeln!(
+            buf,
+            "{} {} {center} {hits} {normalized}",
+            bin[0],
+            bin[1]
+        ).unwrap()
     }
 
 }
