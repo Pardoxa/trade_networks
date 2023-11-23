@@ -251,7 +251,10 @@ pub fn shock_distribution(
         }
     }
 
-    ShockRes { import_fracs: reduced_import_frac, export_fracs: current_export_frac }
+    ShockRes { 
+        import_fracs: reduced_import_frac, 
+        export_fracs: current_export_frac
+    }
 }
 
 fn calc_acc_trade(network: &Network) -> Vec<f64>
@@ -280,13 +283,39 @@ pub struct CalculatedShocks{
     pub available_before_shock: Vec<f64>,
     pub available_after_shock: Vec<f64>,
     pub focus_index: usize,
-    pub network: Network
+    pub network: Network,
+    pub item_code: String
+}
+
+
+#[derive(Clone)]
+pub enum TopSpecifier{
+    Id(String),
+    Rank(usize),
+    RankRef(TopSpecifierHelper)
+}
+
+impl TopSpecifier{
+    pub fn get_string(&self) -> String
+    {
+        match self{
+            Self::Id(id) => format!("ID{}", id),
+            Self::Rank(r) => format!("Rank{r}"),
+            Self::RankRef(r) => format!("Rank{}Ref{}", r.focus, r.reference)
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct TopSpecifierHelper{
+    pub focus: usize,
+    pub reference: usize
 }
 
 pub fn calc_shock(
     in_file: &str, 
     year: i32, 
-    top_id: &str, 
+    top_id: TopSpecifier, 
     export_frac: f64,
     iterations: usize,
     enrich_file: &str,
@@ -306,10 +335,44 @@ pub fn calc_shock(
         .expect("could not find specified year")
         .without_unconnected_nodes();
 
+    let get_sorting = ||
+    {
+        let export = network.get_network_with_direction(Direction::ExportTo);
+        let all = calc_acc_trade(&export);
+        let mut for_sorting: Vec<_> = all.into_iter()
+            .enumerate()
+            .collect();
+        for_sorting
+            .sort_unstable_by(|a,b| b.1.total_cmp(&a.1));
+        assert!(for_sorting.windows(2).all(|s| s[0].1 >= s[1].1));
+        for_sorting
+    };
 
-    let focus = network.nodes.iter()
-        .position(|item| item.identifier == top_id)
-        .unwrap();
+    let (focus, export_frac) = match top_id{
+        TopSpecifier::Id(id) => {
+            let focus = network.nodes
+                .iter()
+                .position(|item| item.identifier == id)
+                .unwrap();
+            (focus, export_frac)
+        },
+        TopSpecifier::Rank(r) => {
+            let sorted = get_sorting();
+
+            let focus = sorted[r].0;
+            (focus, export_frac)
+            
+        },
+        TopSpecifier::RankRef(r) => {
+            let sorted = get_sorting();
+
+            let wanted_export = export_frac * sorted[r.reference].1;
+            let possible_export = sorted[r.focus].1;
+            let frac = wanted_export / possible_export;
+
+            (sorted[r.focus].0, frac)
+        }
+    };
 
     let fracts = shock_distribution(
         &network, 
@@ -350,7 +413,8 @@ pub fn calc_shock(
         available_after_shock: avail_after_shock,
         available_before_shock,
         focus_index: focus,
-        network
+        network,
+        item_code: enrich_infos.item_code
     }
 }
 
@@ -358,7 +422,7 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
     let res = calc_shock(
         in_file, 
         opt.year, 
-        &opt.top_id, 
+        TopSpecifier::Id(opt.top_id), 
         opt.export, 
         opt.iterations, 
         &opt.enrich_file, 
@@ -401,51 +465,80 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
 
 pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
 {
-    let res = calc_shock(
-        in_file, 
-        opt.year, 
-        &opt.top_id, 
-        opt.export, 
-        opt.iterations, 
-        &opt.enrich_file, 
-        &opt.item_code
-    );
-
-    let mut hist = HistF64::new(-1.0, 1.0 + f64::EPSILON, opt.bins)
-        .unwrap();
-
-    for i in 0..res.available_after_shock.len(){
-        // check if focus county is to be counted in hist
-        if opt.without && i == res.focus_index{
-            // skip focus country
-            continue;
+    let specifiers: Vec<_> = match opt.top{
+        CountryChooser::TopId(id) => vec![TopSpecifier::Id(id.id)],
+        CountryChooser::Top(t) => {
+            (0..t.top.get())
+                .map(TopSpecifier::Rank)
+                .collect()
+        },
+        CountryChooser::TopRef(t) =>
+        {
+            (0..t.top.get())
+                .map(|i| 
+                    TopSpecifier::RankRef(
+                        TopSpecifierHelper { focus: i, reference: t.top.get()-1 }
+                    )
+                )
+                .collect()
         }
-        // fraction of missing product after shock, negative to show that it is removed
-        let delta = (res.available_after_shock[i] - res.available_before_shock[i])
-            / res.available_before_shock[i];
-        if delta > 1.0 {
-            println!("{delta}");
+    };
+
+    for s in specifiers{
+        for &e in opt.export.iter(){
+        
+            let res = calc_shock(
+                in_file, 
+                opt.year, 
+                s.clone(), 
+                e, 
+                opt.iterations, 
+                &opt.enrich_file, 
+                &opt.item_code
+            );
+    
+            let name = format!(
+                "{}_item{}_y{}_e{e}.dat", 
+                s.get_string(), 
+                res.item_code, 
+                opt.year
+            );
+        
+            let mut hist = HistF64::new(-1.0, 1.0 + f64::EPSILON, opt.bins)
+                .unwrap();
+        
+            for i in 0..res.available_after_shock.len(){
+                // check if focus county is to be counted in hist
+                if opt.without && i == res.focus_index{
+                    // skip focus country
+                    continue;
+                }
+                // fraction of missing product after shock, negative to show that it is removed
+                let delta = (res.available_after_shock[i] - res.available_before_shock[i])
+                    / res.available_before_shock[i];
+                if delta > 1.0 {
+                    println!("{delta}");
+                }
+                hist.increment(delta).unwrap();
+            }
+        
+            let mut buf = create_buf_with_command_and_version(name);
+            writeln!(buf, "#left right center hits normalized").unwrap();
+            let total: usize = hist.hist().iter().sum();
+        
+            for (bin, hits) in hist.bin_hits_iter(){
+                let center = (bin[0] + bin[1]) / 2.0;
+                let normalized = hits as f64 / total as f64;
+                writeln!(
+                    buf,
+                    "{} {} {center} {hits} {normalized}",
+                    bin[0],
+                    bin[1]
+                ).unwrap()
+            }
         }
-        hist.increment(delta).unwrap();
     }
-
-    let mut buf = create_buf_with_command_and_version(opt.out);
-    writeln!(buf, "#left right center hits normalized").unwrap();
-    let total: usize = hist.hist().iter().sum();
-
-    for (bin, hits) in hist.bin_hits_iter(){
-        let center = (bin[0] + bin[1]) / 2.0;
-        let normalized = hits as f64 / total as f64;
-        writeln!(
-            buf,
-            "{} {} {center} {hits} {normalized}",
-            bin[0],
-            bin[1]
-        ).unwrap()
-    }
-
 }
-
 
 fn calc_available(
     network: &Network,

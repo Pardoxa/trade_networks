@@ -244,16 +244,11 @@ pub struct ShockAvailOpts{
 }
 #[derive(Parser, Debug)]
 pub struct ShockDistOpts{
+    /// further instruction
+    #[command(subcommand)]
+    pub top: CountryChooser,
 
-    #[arg(short, long)]
-    /// Name of output file
-    pub out: String,
-
-    /// id of exporter
-    #[arg(short, long)]
-    pub top_id: String,
-
-    #[arg(short, long)]
+    #[arg(long)]
     pub enrich_file: String,
 
     /// Which year to check
@@ -265,8 +260,8 @@ pub struct ShockDistOpts{
     pub iterations: usize,    
 
     /// fraction of old exports that are still exported
-    #[arg(long)]
-    pub export: f64,  
+    #[arg(short, long, required(true))]
+    pub export: Vec<f64>,  
 
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
@@ -279,6 +274,28 @@ pub struct ShockDistOpts{
     /// Do not include the country that reduces its exports in the histogram
     #[arg(long, short)]
     pub without: bool
+}
+
+#[derive(Subcommand, Debug)]
+pub enum CountryChooser{
+    /// Just use the country with the corresponding ID
+    TopId(TopId),
+    /// Use top X exporters. Reduction of exports will be related to each individual exporter
+    Top(Top),
+    /// Use top X exporters. Reduction of exports will be related to the smallest exporter
+    TopRef(Top)
+}
+
+#[derive(Parser, Debug)]
+pub struct TopId{
+    /// The ID of the country that restricts exports
+    pub id: String
+}
+
+#[derive(Parser, Debug)]
+pub struct Top{
+    /// How many top exporter to consider?
+    pub top: NonZeroUsize
 }
 
 #[derive(Parser, Debug)]
