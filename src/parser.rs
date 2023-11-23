@@ -59,7 +59,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
         }
 
         let buf = open_bufreader(in_file);
-        if let Ok(r) = serde_json::from_reader::<_, EnrichmentInfos>(buf){
+        if let Ok(r) = bincode::deserialize_from::<_, EnrichmentInfos>(buf){
             check_item_code(&r.item_code);
             return r;
         }

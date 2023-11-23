@@ -9,7 +9,7 @@ pub struct ParseEnrichOpts{
     /// Name of output
     pub out: String,
     
-    #[arg(short, long)]
+    #[arg(short, long, required(true))]
     /// Path to csv containing enrichment data
     pub enrich_files: Vec<String>,
 
@@ -273,7 +273,11 @@ pub struct ShockDistOpts{
 
     /// Do not include the country that reduces its exports in the histogram
     #[arg(long, short)]
-    pub without: bool
+    pub without: bool,
+
+    /// also create gnuplot file(s)
+    #[arg(long, short)]
+    pub gnuplot: bool
 }
 
 #[derive(Subcommand, Debug)]
