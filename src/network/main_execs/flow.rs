@@ -486,6 +486,7 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
 
 pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
 {
+    let hist_header = "#left right center hits normalized";
     let specifiers: Vec<_> = match &opt.top{
         CountryChooser::TopId(id) => vec![TopSpecifier::Id(id.id.clone())],
         CountryChooser::Top(t) => {
@@ -509,10 +510,16 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
     let mut gp_names = Vec::new();
     let mut is_first = true;
 
+    let mut bins = None;
+    let mut hists: Vec<_> = opt.export.iter()
+        .map(|_| 
+            vec![0; opt.bins]
+        ).collect();
+
     for s in specifiers.iter(){
         let mut v = Vec::new();
         
-        for &e in opt.export.iter(){
+        for (e_index, &e) in opt.export.iter().enumerate(){
             println!("E: {e}");
             let res = calc_shock(
                 in_file, 
@@ -546,6 +553,12 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
         
             let mut hist = HistF64::new(-1.0, 1.0 + f64::EPSILON, opt.bins)
                 .unwrap();
+            if bins.is_none(){
+                let b: Vec<_> = hist.bin_iter()
+                    .copied()
+                    .collect();
+                bins = Some(b);
+            }
         
             for i in 0..res.available_after_shock.len(){
                 // check if focus county is to be counted in hist
@@ -563,7 +576,7 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             }
         
             let mut buf = create_buf_with_command_and_version(name);
-            writeln!(buf, "#left right center hits normalized").unwrap();
+            writeln!(buf, "{hist_header}").unwrap();
             let total: usize = hist.hist().iter().sum();
         
             for (bin, hits) in hist.bin_hits_iter(){
@@ -576,14 +589,28 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                     bin[1]
                 ).unwrap()
             }
+
+            hists[e_index]
+                .iter_mut()
+                .zip(
+                    hist.hist()
+                        .iter()
+                ).for_each(
+                    |(this, other)|
+                    {
+                        *this += *other
+                    }
+                );
         }
         names.push(v);
         is_first = false;
     }
 
+    let bins = bins.unwrap();
     let relative = matches!(opt.top, CountryChooser::TopRef(_));
     if opt.gnuplot{
         for (i, e) in opt.export.iter().enumerate(){
+            // Write gnuplot
             let name = &gp_names[i];
             let mut buf = create_buf_with_command_and_version(name);
             writeln!(buf, "reset session").unwrap();
@@ -604,6 +631,26 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                 writeln!(buf, "\"{e_name}\" u 3:5 w boxes t \"top {j}\",\\").unwrap()
             }
             writeln!(buf, "\nset output").unwrap();
+
+            // write fused hist
+            let hist = hists[i].as_slice();
+            let total: usize = hist.iter().sum();
+
+            let name = format!("{without_file_ending}.combined");
+            let mut buf = create_buf_with_command_and_version(name);
+            writeln!(buf, "{hist_header}").unwrap();
+
+            for (bin, &hits) in bins.iter().zip(hist)
+            {
+                let center = (bin[0] + bin[1]) / 2.0;
+                let normalized = hits as f64 / total as f64;
+                writeln!(
+                    buf,
+                    "{} {} {center} {hits} {normalized}",
+                    bin[0],
+                    bin[1]
+                ).unwrap()
+            }
         }
     }
 }
