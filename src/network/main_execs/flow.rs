@@ -304,6 +304,14 @@ impl TopSpecifier{
             Self::RankRef(r) => format!("Rank{}Ref{}", r.focus, r.reference)
         }
     }
+
+    pub fn get_short_str(&self) -> String {
+        match self{
+            Self::Id(_) => "ID".to_owned(),
+            Self::Rank(_) => "Rank".to_owned(),
+            Self::RankRef(r) => format!("RankRef{}", r.reference)
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -498,9 +506,12 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
     };
 
     let mut names = Vec::new();
+    let mut gp_names = Vec::new();
+    let mut is_first = true;
 
     for s in specifiers.iter(){
         let mut v = Vec::new();
+        
         for &e in opt.export.iter(){
             println!("E: {e}");
             let res = calc_shock(
@@ -512,16 +523,26 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                 &opt.enrich_file, 
                 &opt.item_code
             );
-            
-    
-            let name = format!(
+
+            let name_stub = format!(
                 "{}_item{}_y{}_e{e}.dat", 
                 s.get_string(), 
                 res.item_code, 
                 opt.year
             );
-            v.push(name);
+            v.push(name_stub);
             let name = v.last().unwrap();
+            if is_first{
+                gp_names.push(
+                    format!(
+                        "{}_item{}_y{}_e{e}.gp", 
+                        s.get_short_str(), 
+                        res.item_code, 
+                        opt.year
+                    )
+                );
+            }
+            
         
             let mut hist = HistF64::new(-1.0, 1.0 + f64::EPSILON, opt.bins)
                 .unwrap();
@@ -557,14 +578,14 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             }
         }
         names.push(v);
+        is_first = false;
     }
 
-    let name = specifiers.first().unwrap().get_string();
     let relative = matches!(opt.top, CountryChooser::TopRef(_));
     if opt.gnuplot{
         for (i, e) in opt.export.iter().enumerate(){
-            let name = format!("{name}_etc_{e}.gp");
-            let mut buf = create_buf_with_command_and_version(&name);
+            let name = &gp_names[i];
+            let mut buf = create_buf_with_command_and_version(name);
             writeln!(buf, "reset session").unwrap();
             writeln!(buf, "set t pdfcairo").unwrap();
             writeln!(buf, "set xrange [-1:0.1]").unwrap();
@@ -575,8 +596,8 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             if relative {
                 writeln!(buf, "set title \"relative {}\"", e).unwrap();
             }
-            
-            writeln!(buf, "set output \"{name}_etc_{e}.pdf\"").unwrap();
+            let without_file_ending = name.strip_suffix(".gp").unwrap();
+            writeln!(buf, "set output \"{without_file_ending}.pdf\"").unwrap();
             write!(buf, "p ").unwrap();
             for (j, name_vec) in names.iter().enumerate(){
                 let e_name = &name_vec[i];
