@@ -415,9 +415,12 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
         .unwrap();
 
     for i in 0..res.available_after_shock.len(){
+        // check if focus county is to be counted in hist
         if opt.without && i == res.focus_index{
+            // skip focus country
             continue;
         }
+        // fraction of missing product after shock, negative to show that it is removed
         let delta = (res.available_after_shock[i] - res.available_before_shock[i])
             / res.available_before_shock[i];
         if delta > 1.0 {

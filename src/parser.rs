@@ -170,23 +170,21 @@ pub fn parse_all_networks(
                 years.push((y, idx));
             }
         }
-        map.insert(entry, idx);
+        map.entry(entry)
+            .or_insert(idx);
     }
-    let item_id = *map.get("Item Code").unwrap();
-    let reporter_country = "Reporter Country Code";
-    let reporter_country_id = *map.get(reporter_country).unwrap();
-    let partner_country = "Partner Country Code";
-    let partner_country_id = *map.get(partner_country).unwrap();
-    let unit = "Unit";
-    let unit_id = *map.get(unit).unwrap();
 
-    let transaction_type = *map.get("Element").unwrap();
-
+    let item_id = map["Item Code"];
+    let reporter_country_id = map["Reporter Country Code"];
+    let partner_country_id = map["Partner Country Code"];
+    let unit_id = map["Unit"];
+    let transaction_type = map["Element"];
 
     let mut countries: BTreeMap<String, (String, BTreeSet<String>, bool)> = BTreeMap::new();
 
+    let mut unit_errors = Vec::new();
+    
     let line_len = map.len();
-
     let line_iter = lines
         .map(|line| {
             let line = line.unwrap();
@@ -194,9 +192,6 @@ pub fn parse_all_networks(
             assert_eq!(line_v.len(), line_len);
             line_v
         });
-
-    let mut unit_errors = Vec::new();
-
     for line_vec in line_iter{
     
         if line_vec[transaction_type] != wanted_transaction_type{
@@ -205,16 +200,13 @@ pub fn parse_all_networks(
         if line_vec.len() != line_len{
             return Err(anyhow::anyhow!("Line error! old_len {line_len} new {}", line_vec.len()));
         }
-        let current_item_code = line_vec[item_id].as_str();
-        let unit: &String = line_vec.get(unit_id).unwrap();
+        let current_item_code = &line_vec[item_id];
+        let unit = &line_vec[unit_id];
 
-        let (other_units, c_set, unit_error) = match countries.get_mut(current_item_code){
-            Some(s) => s,
-            None => {
-                countries.insert(current_item_code.to_string(), (unit.clone(), BTreeSet::new(), false));
-                countries.get_mut(current_item_code).unwrap()
-            }
-        };
+        let (other_units, c_set, unit_error) = 
+            countries
+                .entry(current_item_code.clone())
+                .or_insert_with(|| (unit.clone(), BTreeSet::new(), false));    
 
         if *unit_error{
             continue;
@@ -309,11 +301,11 @@ pub fn parse_all_networks(
                 e
             }
         };
-        let rep_c = line.get(reporter_country_id).unwrap();
-        let part_c = line.get(partner_country_id).unwrap();
+        let rep_c = &line[reporter_country_id];
+        let part_c = &line[partner_country_id];
 
-        let rep_id = *entry.id_map.get(rep_c).unwrap();
-        let part_id = *entry.id_map.get(part_c).unwrap();
+        let rep_id = entry.id_map[rep_c];
+        let part_id = entry.id_map[part_c];
 
         (years.iter())
             .zip(entry.networks.iter_mut())
