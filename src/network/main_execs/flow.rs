@@ -283,8 +283,7 @@ pub struct CalculatedShocks{
     pub available_before_shock: Vec<f64>,
     pub available_after_shock: Vec<f64>,
     pub focus_index: usize,
-    pub network: Network,
-    pub item_code: String
+    pub network: Network
 }
 
 
@@ -321,31 +320,21 @@ pub struct TopSpecifierHelper{
 }
 
 pub fn calc_shock(
-    in_file: &str, 
+    lazy_network: &mut LazyNetwork, 
     year: i32, 
     top_id: TopSpecifier, 
     export_frac: f64,
     iterations: usize,
-    enrich_file: &str,
-    target_item_code: &Option<String>
+    lazy_enrichment: &mut LazyEnrichmentInfos,
 ) -> CalculatedShocks
 {
-    let networks = read_networks(in_file);
 
-    let mut network = None;
-    for n in networks{
-        if n.year == year {
-            network = Some(n);
-            break;
-        }
-    }
-    let network = network
-        .expect("could not find specified year")
+    let export = lazy_network
+        .get_export_network(year)
         .without_unconnected_nodes();
 
     let get_sorting = ||
     {
-        let export = network.get_network_with_direction(Direction::ExportTo);
         let all = calc_acc_trade(&export);
         let mut for_sorting: Vec<_> = all.into_iter()
             .enumerate()
@@ -358,7 +347,7 @@ pub fn calc_shock(
 
     let (focus, export_frac) = match top_id{
         TopSpecifier::Id(id) => {
-            let focus = network.nodes
+            let focus = export.nodes
                 .iter()
                 .position(|item| item.identifier == id)
                 .unwrap();
@@ -386,23 +375,20 @@ pub fn calc_shock(
     };
 
     let fracts = shock_distribution(
-        &network, 
+        &export, 
         focus, 
         export_frac, 
         iterations
     );
 
-    let enrich_infos = crate::parser::parse_extra(
-        enrich_file, 
-        target_item_code
-    );
+    lazy_enrichment.assure_availability();
+    let enrichment_infos = lazy_enrichment.enrichment_infos_unchecked();
+    let enrich = enrichment_infos.get_year(year);
 
-    let enrich = enrich_infos.get_year(year);
-
-    let node_info_map = NodeInfoMap::from_slice(enrich_infos.possible_node_info.as_slice());
+    let node_info_map = lazy_enrichment.node_map_unchecked();
 
     let avail_after_shock = calc_available(
-        &network, 
+        &export, 
         enrich, 
         &fracts, 
         &node_info_map
@@ -414,7 +400,7 @@ pub fn calc_shock(
     };
 
     let available_before_shock = calc_available(
-        &network, 
+        &export, 
         enrich, 
         &no_shock, 
         &node_info_map
@@ -422,7 +408,7 @@ pub fn calc_shock(
 
     let shock_amount = avail_after_shock[focus] - available_before_shock[focus];
     println!("SHOCK AMOUNT: {shock_amount}");
-    let actual_export: f64 = network.get_network_with_direction(Direction::ExportTo)
+    let actual_export: f64 = export
         .nodes[focus]
         .adj
         .iter()
@@ -434,20 +420,20 @@ pub fn calc_shock(
         available_after_shock: avail_after_shock,
         available_before_shock,
         focus_index: focus,
-        network,
-        item_code: enrich_infos.item_code
+        network: export
     }
 }
 
 pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
+    let mut lazy_network = LazyNetwork::Filename(in_file.to_owned());
+    let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file.clone(), opt.item_code.clone());
     let res = calc_shock(
-        in_file, 
+        &mut lazy_network, 
         opt.year, 
         TopSpecifier::Id(opt.top_id), 
         opt.export, 
         opt.iterations, 
-        &opt.enrich_file, 
-        &opt.item_code
+        &mut lazy_enrichment
     );
     
     let available_before_shock = res.available_before_shock;
@@ -484,8 +470,52 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
 }
 
 
+pub fn reduce_x(opt: ShockDistOpts, in_file: &str)
+{
+    let specifiers: Vec<_> = match &opt.top{
+        CountryChooser::TopId(id) => vec![TopSpecifier::Id(id.id.clone())],
+        CountryChooser::Top(t) => {
+            (0..t.top.get())
+                .map(TopSpecifier::Rank)
+                .collect()
+        },
+        CountryChooser::TopRef(t) =>
+        {
+            (0..t.top.get())
+                .map(|i| 
+                    TopSpecifier::RankRef(
+                        TopSpecifierHelper { focus: i, reference: t.top.get()-1 }
+                    )
+                )
+                .collect()
+        }
+    };
+    /* 
+    for &e in opt.export.iter()
+    {
+        let mut counter = 0;
+        let mut sum = Vec::new();
+        let mut sum_sq = Vec::new();
+        for s in specifiers.iter(){
+            let res = calc_shock(
+                in_file, 
+                opt.year, 
+                s.clone(), 
+                e, 
+                opt.iterations, 
+                &opt.enrich_file, 
+                &opt.item_code
+            );
+        }
+    }*/
+
+
+}
+
 pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
 {
+    let mut lazy_networks = LazyNetwork::Filename(in_file.to_string());
+    let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file, opt.item_code);
     let hist_header = "#left right center hits normalized";
     let specifiers: Vec<_> = match &opt.top{
         CountryChooser::TopId(id) => vec![TopSpecifier::Id(id.id.clone())],
@@ -516,7 +546,6 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             vec![0; opt.bins]
         ).collect();
 
-    let mut item_code = opt.item_code.clone();
 
     for s in specifiers.iter(){
         let mut v = Vec::new();
@@ -524,19 +553,18 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
         for (e_index, &e) in opt.export.iter().enumerate(){
             println!("E: {e}");
             let res = calc_shock(
-                in_file, 
+                &mut lazy_networks, 
                 opt.year, 
                 s.clone(), 
                 e, 
                 opt.iterations, 
-                &opt.enrich_file, 
-                &opt.item_code
+                &mut lazy_enrichment
             );
 
             let name_stub = format!(
                 "{}_item{}_y{}_e{e}.dat", 
                 s.get_string(), 
-                res.item_code, 
+                lazy_enrichment.get_item_code_unchecked(), 
                 opt.year
             );
 
@@ -547,14 +575,10 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                     format!(
                         "{}_item{}_y{}_e{e}", 
                         s.get_short_str(), 
-                        res.item_code, 
+                        lazy_enrichment.get_item_code_unchecked(), 
                         opt.year
                     )
                 );
-            }
-
-            if item_code.is_none(){
-                item_code = Some(res.item_code);
             }
             
             let mut hist = HistF64::new(-1.0, 1.0 + f64::EPSILON, opt.bins)
@@ -674,7 +698,7 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
     }
 
     if !combined_names.is_empty(){
-        let item_code = item_code.unwrap();
+        let item_code = lazy_enrichment.get_item_code_unchecked();
         let name = format!("{}_combined_Item{}", opt.top.get_string(), item_code);
         let iter = combined_names
             .iter()
@@ -730,7 +754,9 @@ where I: IntoIterator<Item = GnuplotHelper::<'a>>
         Relative::Yes => {
             writeln!(buf, "set title \"relative\"")?;
         },
-        _ => ()
+        Relative::No => {
+            writeln!(buf, "set title \"absolut\"")?;
+        }
     };
     
     writeln!(buf, "set output \"{gnuplot_name_stub}.pdf\"")?;

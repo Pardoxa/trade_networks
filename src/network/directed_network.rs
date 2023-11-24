@@ -104,6 +104,68 @@ pub struct GraphVizExtra{
     pub map: Option<BTreeMap<String, String>>
 }
 
+#[derive(Clone, Debug)]
+pub enum LazyNetwork{
+    Filename(String),
+    Networks(Vec<Network>, Vec<Network>)
+}
+
+impl LazyNetwork{
+    fn assure_availability(&mut self){
+        if let Self::Filename(f) = self{
+            let mut networks = read_networks(f);
+            match &networks[0].direction
+            {
+                Direction::ImportFrom => {
+                    networks.iter_mut().for_each(|n| n.force_direction(Direction::ImportFrom));
+                    let export = networks
+                        .iter()
+                        .map(|n| n.get_network_with_direction(Direction::ExportTo))
+                        .collect();
+                    *self = Self::Networks(networks, export)
+                },
+                Direction::ExportTo => {
+                    networks.iter_mut().for_each(|n| n.force_direction(Direction::ExportTo));
+                    let import = networks
+                        .iter()
+                        .map(|n| n.get_network_with_direction(Direction::ImportFrom))
+                        .collect();
+                    *self = Self::Networks(import, networks)
+                }
+            }
+        }
+    }
+
+    pub fn get_export_network(&mut self, year: i32) -> &Network
+    {
+        self.assure_availability();
+        if let Self::Networks(_, export_networks) = self {
+            for n in export_networks.iter(){
+                if n.year == year {
+                    return n;
+                }
+            }
+        }
+        unreachable!()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_import_network(&mut self, year: i32) -> &Network
+    {
+        self.assure_availability();
+        if let Self::Networks(import_networks, _) = self {
+            for n in import_networks.iter(){
+                if n.year == year {
+                    return n;
+                }
+            }
+        }
+        unreachable!()
+        
+    }
+
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Network{
     pub direction: Direction,

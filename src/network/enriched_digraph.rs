@@ -107,6 +107,51 @@ impl ExtraInfo {
     }
 }
 
+
+pub enum LazyEnrichmentInfos{
+    Filename(String, Option<String>),
+    Enriched(EnrichmentInfos)
+}
+
+impl LazyEnrichmentInfos{
+    #[inline]
+    pub fn assure_availability(&mut self){
+        if let Self::Filename(f, target_item_code) = self{
+            let e = crate::parser::parse_extra(
+                f, 
+                target_item_code
+            );
+            *self = Self::Enriched(
+                e
+            );
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn get_year_unckecked(&self, year: i32) -> &BTreeMap<String, ExtraInfo>
+    {
+        return self.enrichment_infos_unchecked().get_year(year)
+    }
+
+    pub fn enrichment_infos_unchecked(&self) -> &EnrichmentInfos
+    {
+        if let Self::Enriched(e) = self {
+            return e;
+        } 
+        unreachable!()
+    }
+
+    pub fn node_map_unchecked(&self) -> NodeInfoMap
+    {
+        self.enrichment_infos_unchecked().get_node_map()
+    }
+
+    pub fn get_item_code_unchecked(&self) -> &str{
+        &self.enrichment_infos_unchecked()
+            .item_code
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentInfos{
     pub starting_year: i32,
@@ -116,6 +161,10 @@ pub struct EnrichmentInfos{
 }
 
 impl EnrichmentInfos{
+    pub fn get_node_map(&self) -> NodeInfoMap
+    {
+        NodeInfoMap::from_slice(self.possible_node_info.as_slice())
+    }
 
     pub fn fuse(&mut self, other: &Self)
     {
@@ -175,9 +224,9 @@ impl EnrichmentInfos{
         }
     }
 
-    pub fn get_year(&self, year_idx: i32) -> & BTreeMap<String, ExtraInfo>
+    pub fn get_year(&self, year: i32) -> & BTreeMap<String, ExtraInfo>
     {
-        let idx =  year_idx - self.starting_year;
+        let idx =  year - self.starting_year;
         &self.enrichments[idx as usize]
     }
 
