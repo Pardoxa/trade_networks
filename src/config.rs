@@ -274,10 +274,6 @@ pub struct ShockDistOpts{
     /// Do not include the country that reduces its exports in the histogram
     #[arg(long, short)]
     pub without: bool,
-
-    /// also create gnuplot file(s)
-    #[arg(long, short)]
-    pub gnuplot: bool
 }
 
 #[derive(Subcommand, Debug)]
@@ -288,6 +284,17 @@ pub enum CountryChooser{
     Top(Top),
     /// Use top X exporters. Reduction of exports will be related to the smallest exporter
     TopRef(Top)
+}
+
+impl CountryChooser{
+    pub fn get_string(&self) -> String
+    {
+        match self{
+            Self::Top(t) => format!("Top{}", t.top),
+            Self::TopId(id) => format!("Id{}", id.id),
+            Self::TopRef(tr) => format!("TopR{}", tr.top)
+        }
+    }
 }
 
 #[derive(Parser, Debug)]

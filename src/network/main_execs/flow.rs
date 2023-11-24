@@ -516,6 +516,8 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             vec![0; opt.bins]
         ).collect();
 
+    let mut item_code = opt.item_code.clone();
+
     for s in specifiers.iter(){
         let mut v = Vec::new();
         
@@ -537,20 +539,24 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                 res.item_code, 
                 opt.year
             );
+
             v.push(name_stub);
             let name = v.last().unwrap();
             if is_first{
                 gp_names.push(
                     format!(
-                        "{}_item{}_y{}_e{e}.gp", 
+                        "{}_item{}_y{}_e{e}", 
                         s.get_short_str(), 
                         res.item_code, 
                         opt.year
                     )
                 );
             }
+
+            if item_code.is_none(){
+                item_code = Some(res.item_code);
+            }
             
-        
             let mut hist = HistF64::new(-1.0, 1.0 + f64::EPSILON, opt.bins)
                 .unwrap();
             if bins.is_none(){
@@ -608,36 +614,38 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
 
     let bins = bins.unwrap();
     let relative = matches!(opt.top, CountryChooser::TopRef(_));
-    if opt.gnuplot{
-        for (i, e) in opt.export.iter().enumerate(){
-            // Write gnuplot
-            let name = &gp_names[i];
-            let mut buf = create_buf_with_command_and_version(name);
-            writeln!(buf, "reset session").unwrap();
-            writeln!(buf, "set t pdfcairo").unwrap();
-            writeln!(buf, "set xrange [-1:0.1]").unwrap();
-            writeln!(buf, "set xlabel \"Δ\"").unwrap();
-            writeln!(buf, "set ylabel \"normalized hits\"").unwrap();
-            writeln!(buf, "set key center").unwrap();
+    let mut combined_names = Vec::new();
 
-            if relative {
-                writeln!(buf, "set title \"relative {}\"", e).unwrap();
-            }
-            let without_file_ending = name.strip_suffix(".gp").unwrap();
-            writeln!(buf, "set output \"{without_file_ending}.pdf\"").unwrap();
-            write!(buf, "p ").unwrap();
-            for (j, name_vec) in names.iter().enumerate(){
-                let e_name = &name_vec[i];
-                writeln!(buf, "\"{e_name}\" u 3:5 w boxes t \"top {j}\",\\").unwrap()
-            }
-            writeln!(buf, "\nset output").unwrap();
+    for (i, e) in opt.export.iter().enumerate(){
+        let r = if relative{
+            Relative::YesWith(*e)
+        } else {
+            Relative::No
+        };
+        let name_iter = names
+            .iter()
+            .enumerate()
+            .map(
+                |(index, name_vec)|
+                {
+                    let e_name = &name_vec[i];
+                    let title = format!("top {index}");
+                    GnuplotHelper { file_name: e_name, title}
+                }
+            );
+        write_gnuplot(
+            &gp_names[i], 
+            r, 
+            name_iter
+        ).unwrap();
 
+        if names.len() > 1 {
             // write fused hist
             let hist = hists[i].as_slice();
             let total: usize = hist.iter().sum();
 
-            let name = format!("{without_file_ending}.combined");
-            let mut buf = create_buf_with_command_and_version(name);
+            let name = format!("{}.combined", &gp_names[i]);
+            let mut buf = create_buf_with_command_and_version(&name);
             writeln!(buf, "{hist_header}").unwrap();
 
             for (bin, &hits) in bins.iter().zip(hist)
@@ -651,8 +659,91 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                     bin[1]
                 ).unwrap()
             }
+
+            let iter = std::iter::once(
+                GnuplotHelper { file_name: &name, title: format!("combined {}", names.len()) }
+            );
+            write_gnuplot(
+                &name, 
+                r, 
+               iter
+            ).unwrap();
+
+            combined_names.push(name);
         }
     }
+
+    if !combined_names.is_empty(){
+        let item_code = item_code.unwrap();
+        let name = format!("{}_combined_Item{}", opt.top.get_string(), item_code);
+        let iter = combined_names
+            .iter()
+            .zip(opt.export.iter())
+            .map(
+                |(n, e)|
+                {
+                    GnuplotHelper{file_name: n, title: format!("Export {e}")}
+                }
+            );
+        let r = if relative{
+            Relative::Yes
+        } else {
+            Relative::No
+        };
+        write_gnuplot(
+            &name, 
+            r, 
+            iter
+        ).unwrap();
+    }
+    
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Relative{
+    YesWith(f64),
+    Yes,
+    No
+}
+
+pub struct GnuplotHelper<'a>{
+    pub file_name: &'a str,
+    pub title: String
+}
+
+fn write_gnuplot<'a, I>(gnuplot_name_stub: &'a str, relative: Relative, name_iter: I) -> std::io::Result<()>
+where I: IntoIterator<Item = GnuplotHelper::<'a>>
+{
+    let gnuplot_name = format!("{gnuplot_name_stub}.gp");
+    let mut buf = create_buf_with_command_and_version(gnuplot_name);
+    writeln!(buf, "reset session")?;
+    writeln!(buf, "set t pdfcairo")?;
+    writeln!(buf, "set xrange [-1:0.1]")?;
+    writeln!(buf, "set xlabel \"Δ\"")?;
+    writeln!(buf, "set ylabel \"normalized hits\"")?;
+    writeln!(buf, "set key center")?;
+
+    match relative{
+        Relative::YesWith(e) => {
+            writeln!(buf, "set title \"relative {}\"", e)?;
+        },
+        Relative::Yes => {
+            writeln!(buf, "set title \"relative\"")?;
+        },
+        _ => ()
+    };
+    
+    writeln!(buf, "set output \"{gnuplot_name_stub}.pdf\"")?;
+    write!(buf, "p ")?;
+    for helper in name_iter{
+        writeln!(
+            buf, 
+            "\"{}\" u 3:5 w boxes t \"{}\",\\", 
+            helper.file_name, 
+            helper.title
+        )?
+    }
+    writeln!(buf, "\nset output")
 }
 
 fn calc_available(
