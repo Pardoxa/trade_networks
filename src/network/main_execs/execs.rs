@@ -435,7 +435,8 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         SubCommand::Shock(s) => super::shock_exec(s, in_file),
         SubCommand::CountryCount(c) => country_count(in_file, c),
         SubCommand::ShockAvail(s) => shock_avail(s, in_file),
-        SubCommand::ShockDist(d) => shock_dist(d, in_file)
+        SubCommand::ShockDist(d) => shock_dist(d, in_file),
+        SubCommand::ReduceX(o) => reduce_x(o, in_file)
     }
 }
 

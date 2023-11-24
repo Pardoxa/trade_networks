@@ -16,3 +16,6 @@ indicatif="^0.17.7"
 anyhow = "^1.0.75"
 strum = { version = "0.25", features = ["derive"] }
 lazy_static = "^1.4.0"
+
+[profile.release]
+#lto = true

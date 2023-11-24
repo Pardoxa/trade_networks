@@ -107,7 +107,6 @@ impl ExtraInfo {
     }
 }
 
-
 pub enum LazyEnrichmentInfos{
     Filename(String, Option<String>),
     Enriched(EnrichmentInfos)
@@ -138,7 +137,7 @@ impl LazyEnrichmentInfos{
         if let Self::Enriched(e) = self {
             return e;
         } 
-        unreachable!()
+        panic!("{}", crate::misc::AVAILABILITY_ERR)
     }
 
     pub fn node_map_unchecked(&self) -> NodeInfoMap

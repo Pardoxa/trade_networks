@@ -4,6 +4,8 @@ use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const AVAILABILITY_ERR: &str = "You forgot to call self.assure_availabiliy()";
+pub const YEAR_ERR: &str = "Year not found";
 
 pub fn write_commands_and_version<W: Write>(mut w: W) -> std::io::Result<()>
 {

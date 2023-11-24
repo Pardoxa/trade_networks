@@ -286,41 +286,41 @@ pub struct CalculatedShocks{
     pub network: Network
 }
 
-
-#[derive(Clone)]
-pub enum TopSpecifier{
-    Id(String),
-    Rank(usize),
-    RankRef(TopSpecifierHelper)
-}
-
-impl TopSpecifier{
-    pub fn get_string(&self) -> String
+impl CalculatedShocks{
+    /// fraction of missing product after shock, negative to show that it is removed
+    pub fn delta_iter(&'_ self) -> impl Iterator<Item = f64> + '_
     {
-        match self{
-            Self::Id(id) => format!("ID{}", id),
-            Self::Rank(r) => format!("Rank{r}"),
-            Self::RankRef(r) => format!("Rank{}Ref{}", r.focus, r.reference)
-        }
+        self.available_after_shock
+            .iter()
+            .zip(self.available_before_shock.iter())
+            .map(
+                |(after, before)|
+                    (after - before) / before
+            )
     }
 
-    pub fn get_short_str(&self) -> String {
-        match self{
-            Self::Id(_) => "ID".to_owned(),
-            Self::Rank(_) => "Rank".to_owned(),
-            Self::RankRef(r) => format!("RankRef{}", r.reference)
-        }
+    /// fraction of missing product after shock, negative to show that it is removed
+    pub fn delta_or_nan_iter(&'_ self) -> impl Iterator<Item = f64> + '_
+    {
+        self.available_after_shock
+            .iter()
+            .zip(self.available_before_shock.iter())
+            .map(
+                |(after, before)|{
+                    if *before < 0.0 {
+                        f64::NAN
+                    } else {
+                        (after - before) / before
+                    }
+                }
+            )
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct TopSpecifierHelper{
-    pub focus: usize,
-    pub reference: usize
-}
+
 
 pub fn calc_shock(
-    lazy_network: &mut LazyNetwork, 
+    lazy_network: &mut LazyNetworks, 
     year: i32, 
     top_id: TopSpecifier, 
     export_frac: f64,
@@ -328,9 +328,9 @@ pub fn calc_shock(
     lazy_enrichment: &mut LazyEnrichmentInfos,
 ) -> CalculatedShocks
 {
-
+    lazy_network.assure_availability();
     let export = lazy_network
-        .get_export_network(year)
+        .get_export_network_unchecked(year)
         .without_unconnected_nodes();
 
     let get_sorting = ||
@@ -425,7 +425,7 @@ pub fn calc_shock(
 }
 
 pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
-    let mut lazy_network = LazyNetwork::Filename(in_file.to_owned());
+    let mut lazy_network = LazyNetworks::Filename(in_file.to_owned());
     let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file.clone(), opt.item_code.clone());
     let res = calc_shock(
         &mut lazy_network, 
@@ -470,71 +470,202 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
 }
 
 
-pub fn reduce_x(opt: ShockDistOpts, in_file: &str)
+pub fn reduce_x(opt: XOpts, in_file: &str)
 {
-    let specifiers: Vec<_> = match &opt.top{
-        CountryChooser::TopId(id) => vec![TopSpecifier::Id(id.id.clone())],
-        CountryChooser::Top(t) => {
-            (0..t.top.get())
-                .map(TopSpecifier::Rank)
-                .collect()
-        },
-        CountryChooser::TopRef(t) =>
-        {
-            (0..t.top.get())
-                .map(|i| 
-                    TopSpecifier::RankRef(
-                        TopSpecifierHelper { focus: i, reference: t.top.get()-1 }
-                    )
-                )
-                .collect()
-        }
-    };
-    /* 
-    for &e in opt.export.iter()
+    let specifiers: Vec<_> = opt.top.get_specifiers();
+
+    let mut lazy_networks = LazyNetworks::Filename(in_file.to_owned());
+    lazy_networks.assure_availability();
+    let export_without_unconnected = lazy_networks
+        .get_export_network_unchecked(opt.year)
+        .without_unconnected_nodes();
+
+    let mut lazy_enrichments = LazyEnrichmentInfos::Filename(
+        opt.enrich_file, 
+        opt.item_code
+    );
+    lazy_enrichments.assure_availability();
+
+    let stub = opt.top.get_string();
+    let stub = format!(
+        "{stub}_Item{}", 
+        lazy_enrichments.get_item_code_unchecked()
+    );
+
+    let var_name = format!("{stub}_var.dat");
+    let mut buf_var = create_buf_with_command_and_version(&var_name);
+
+    let av_name = format!("{stub}_av.dat");
+    let mut buf_av = create_buf_with_command_and_version(&av_name);
+
+    let max_name = format!("{stub}_max.dat");
+    let mut buf_max = create_buf_with_command_and_version(&max_name);
+
+    let min_name = format!("{stub}_min.dat");
+    let mut buf_min = create_buf_with_command_and_version(&min_name);
+
+    let abs_name = format!("{stub}_min_max_abs.dat");
+    let mut buf_abs = create_buf_with_command_and_version(&abs_name);
+
+    let write_header = |buf: &mut BufWriter<File>|
     {
-        let mut counter = 0;
-        let mut sum = Vec::new();
-        let mut sum_sq = Vec::new();
+        write!(buf, "#IDX_1_Export_frac").unwrap();
+        export_without_unconnected.nodes
+            .iter()
+            .zip(2..)
+            .for_each(
+                |(n, i)|
+                {
+                    write!(buf, " GP{i}_ID{}", n.identifier).unwrap();
+                }
+            );
+        writeln!(buf).unwrap();
+    };
+    write_header(&mut buf_av);
+    write_header(&mut buf_var);
+    write_header(&mut buf_max);
+    write_header(&mut buf_min);
+    write_header(&mut buf_abs);
+
+    let export_diff = opt.export_end - opt.export_start;
+    let export_delta = export_diff / (opt.export_samples - 1) as f64;
+
+
+    let export_iter = (0..opt.export_samples-1)
+        .map(|i| opt.export_start + export_delta * i as f64)
+        .chain(std::iter::once(opt.export_end));
+
+    let len_recip = (specifiers.len() as f64).recip();
+    let mut is_first = true;
+    let mut foci = Vec::new();
+    for e in export_iter
+    {
+        let mut sum = vec![0.0; export_without_unconnected.node_count()];
+        let mut sum_sq = vec![0.0; sum.len()];
+        let mut max = vec![f64::NEG_INFINITY; sum.len()];
+        let mut min = vec![f64::INFINITY; sum.len()];
         for s in specifiers.iter(){
             let res = calc_shock(
-                in_file, 
+                &mut lazy_networks, 
                 opt.year, 
                 s.clone(), 
                 e, 
                 opt.iterations, 
-                &opt.enrich_file, 
-                &opt.item_code
+                &mut lazy_enrichments
             );
+
+            if is_first{
+                foci.push(res.focus_index);
+            }
+
+            for (i, delta) in res.delta_or_nan_iter().enumerate()
+            {
+                sum[i] += delta;
+                sum_sq[i] += delta * delta;
+                max[i] = delta.max(max[i]);
+                min[i] = delta.min(min[i]);
+            }
+
         }
-    }*/
+        is_first = false;
+        sum.iter_mut()
+            .for_each(|v| *v *= len_recip);
+        let average = sum;
+        let variance = sum_sq
+            .into_iter()
+            .zip(average.iter())
+            .map(
+                |(sq, a)|
+                {
+                    sq * len_recip - a*a
+                }
+            );
+
+        let abs_iter = min
+            .iter()
+            .zip(max.iter())
+            .map(|(min, max)| (max - min).abs());
+
+        fn write_res<I>(buf: &mut BufWriter<File>, e: f64, iter: I)
+        where I: IntoIterator<Item = f64>
+        {
+            write!(buf, "{e}").unwrap();
+            for v in iter{
+                write!(buf, " {v}").unwrap();
+            }
+            writeln!(buf).unwrap();
+        }
+
+        write_res(&mut buf_abs, e, abs_iter);
+        write_res(&mut buf_var, e, variance);
+        write_res(&mut buf_av, e, average);
+        write_res(&mut buf_max, e, max);
+        write_res(&mut buf_min, e, min);
+    }
+    let write_focus = |mut buf: BufWriter<File>|
+    {
+        for focus in foci.iter(){
+            let id = export_without_unconnected.nodes[*focus].identifier.as_str();
+            let gnuplot_index = focus + 2;
+            writeln!(buf, "#Focus GP: {gnuplot_index} ID: {id}").unwrap();
+        }
+    };
+    write_focus(buf_av);
+    write_focus(buf_var);
+    write_focus(buf_max);
+    write_focus(buf_min);
+    write_focus(buf_abs);
+
+    let create_gp = |data_name: &str, ylabel: &str, y_min: f64, y_max: f64|
+    {
+        let stub = data_name.strip_suffix(".dat").unwrap();
+        let name = format!("{stub}.gp");
+        let mut buf = create_buf_with_command_and_version(name);
+        writeln!(buf, "reset session").unwrap();
+        writeln!(buf, "set t pdfcairo").unwrap();
+        writeln!(buf, "set xlabel \"export fraction\"").unwrap();
+        writeln!(buf, "set ylabel \"{}\"", ylabel).unwrap();
+        writeln!(buf, "set output \"{stub}.pdf\"").unwrap();
+        writeln!(buf, "set yrange[{}:{}]", y_min, y_max).unwrap();
+
+        write!(buf, "p ").unwrap();
+
+        for gp_index in 2..=export_without_unconnected.node_count()+1
+        {
+            let this_idx = gp_index - 2;
+            if foci.contains(&this_idx){
+                continue;
+            } else {
+                writeln!(
+                    buf, 
+                    "\"{data_name}\" u 1:{gp_index} w l t \"\",\\"
+                ).unwrap();
+            }
+        }
+        for (pos, this_idx) in foci.iter().enumerate(){
+            let gp_index = this_idx + 2;
+            writeln!(
+                buf, 
+                "\"{data_name}\" u 1:{gp_index} w l dt (5,5) t \"top {pos}\",\\"
+            ).unwrap();
+        }
+    };
+
+    create_gp(&var_name, "Var(delta)", 0.0, 1.0);
+    create_gp(&av_name, "Average(delta)", -1.1, 0.1);
+    create_gp(&max_name, "Max(delta)", -1.0, 1.0);
+    create_gp(&min_name, "Min(delta)", -1.0, 0.0);
+    create_gp(&abs_name, "abs(Max - Min)", 0.0, 1.0);
 
 
 }
 
 pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
 {
-    let mut lazy_networks = LazyNetwork::Filename(in_file.to_string());
+    let mut lazy_networks = LazyNetworks::Filename(in_file.to_string());
     let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file, opt.item_code);
     let hist_header = "#left right center hits normalized";
-    let specifiers: Vec<_> = match &opt.top{
-        CountryChooser::TopId(id) => vec![TopSpecifier::Id(id.id.clone())],
-        CountryChooser::Top(t) => {
-            (0..t.top.get())
-                .map(TopSpecifier::Rank)
-                .collect()
-        },
-        CountryChooser::TopRef(t) =>
-        {
-            (0..t.top.get())
-                .map(|i| 
-                    TopSpecifier::RankRef(
-                        TopSpecifierHelper { focus: i, reference: t.top.get()-1 }
-                    )
-                )
-                .collect()
-        }
-    };
+    let specifiers = opt.top.get_specifiers();
 
     let mut names = Vec::new();
     let mut gp_names = Vec::new();
@@ -590,15 +721,13 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                 bins = Some(b);
             }
         
-            for i in 0..res.available_after_shock.len(){
+            for (i, delta) in res.delta_iter().enumerate(){
                 // check if focus county is to be counted in hist
                 if opt.without && i == res.focus_index{
                     // skip focus country
                     continue;
                 }
-                // fraction of missing product after shock, negative to show that it is removed
-                let delta = (res.available_after_shock[i] - res.available_before_shock[i])
-                    / res.available_before_shock[i];
+                
                 if delta > 1.0 {
                     println!("{delta}");
                 }
@@ -794,8 +923,8 @@ fn calc_available(
     let unit = &import.unit;
     let unit_tester = UNIT_TESTER.deref();
 
-    let stock_id = node_map.get("Stocks");
-    let mut at_least_some_stock = false;
+    //let stock_id = node_map.get("Stocks");
+    //let mut at_least_some_stock = false;
 
 
     let res =(0..original_export.len())
@@ -815,11 +944,11 @@ fn calc_available(
                         total += production.amount;
                         at_least_some_production = true;
                     }
-                    if let Some(stock) = extra.map.get(&stock_id){
-                        assert!(unit_tester.is_equiv(unit, &stock.unit));
-                        total += stock.amount;
-                        at_least_some_stock = true;
-                    }
+                    //if let Some(stock) = extra.map.get(&stock_id){
+                    //    assert!(unit_tester.is_equiv(unit, &stock.unit));
+                    //    total += stock.amount;
+                    //    at_least_some_stock = true;
+                    //}
 
                     // TODO Stock variation
                 }
@@ -833,10 +962,10 @@ fn calc_available(
         ).collect();
 
     assert!(at_least_some_production, "No production data!");
-    if !at_least_some_stock{
-        eprintln!("WARNING: NO STOCK DATA")
-    }
-    eprintln!("Stock Variation data is unimplemented!");
+    //if !at_least_some_stock{
+    //    eprintln!("WARNING: NO STOCK DATA")
+    //}
+    eprintln!("Stock Variation data is unimplemented! STOCK data unimplemented!");
     
     res
 

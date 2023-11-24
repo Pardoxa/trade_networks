@@ -176,6 +176,7 @@ pub enum SubCommand{
     /// Calculate distribution for total available food fractional changes
     ShockDist(ShockDistOpts),
     CountryCount(CountryCountOpt),
+    ReduceX(XOpts)
 }
 
 
@@ -242,6 +243,7 @@ pub struct ShockAvailOpts{
     /// Item code, e.g. 27 for Rice
     pub item_code: Option<String>,
 }
+
 #[derive(Parser, Debug)]
 pub struct ShockDistOpts{
     /// further instruction
@@ -276,6 +278,48 @@ pub struct ShockDistOpts{
     pub without: bool,
 }
 
+#[derive(Parser, Debug)]
+pub struct XOpts{
+    /// further instruction
+    #[command(subcommand)]
+    pub top: CountryChooser,
+
+    #[arg(long)]
+    pub enrich_file: String,
+
+    /// Which year to check
+    #[arg(short, long)]
+    pub year: i32,
+
+    /// Iterations
+    #[arg(short, long)]
+    pub iterations: usize,    
+
+    /// fraction of old exports that are still exported
+    #[arg(long, default_value_t=0.0)]
+    pub export_start: f64,  
+
+    /// fraction of old exports that are still exported
+    #[arg(long, default_value_t=1.0)]
+    pub export_end: f64,  
+
+    /// fraction of old exports that are still exported
+    #[arg(long, value_parser = clap::value_parser!(u32).range(2..))]
+    pub export_samples: u32,  
+
+    #[arg(long)]
+    /// Item code, e.g. 27 for Rice
+    pub item_code: Option<String>,
+
+    #[arg(long, default_value_t=31)]
+    /// number of bins
+    pub bins: usize,
+
+    /// Do not include the country that reduces its exports in the histogram
+    #[arg(long, short)]
+    pub without: bool,
+}
+
 #[derive(Subcommand, Debug)]
 pub enum CountryChooser{
     /// Just use the country with the corresponding ID
@@ -295,6 +339,60 @@ impl CountryChooser{
             Self::TopRef(tr) => format!("TopR{}", tr.top)
         }
     }
+
+    pub fn get_specifiers(&self) -> Vec<TopSpecifier>
+    {
+        match self{
+            Self::TopId(id) => vec![TopSpecifier::Id(id.id.clone())],
+            Self::Top(t) => {
+                (0..t.top.get())
+                    .map(TopSpecifier::Rank)
+                    .collect()
+            },
+            Self::TopRef(t) =>
+            {
+                (0..t.top.get())
+                    .map(|i| 
+                        TopSpecifier::RankRef(
+                            TopSpecifierHelper { focus: i, reference: t.top.get() - 1 }
+                        )
+                    )
+                    .collect()
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum TopSpecifier{
+    Id(String),
+    Rank(usize),
+    RankRef(TopSpecifierHelper)
+}
+
+impl TopSpecifier{
+    pub fn get_string(&self) -> String
+    {
+        match self{
+            Self::Id(id) => format!("ID{}", id),
+            Self::Rank(r) => format!("Rank{r}"),
+            Self::RankRef(r) => format!("Rank{}Ref{}", r.focus, r.reference)
+        }
+    }
+
+    pub fn get_short_str(&self) -> String {
+        match self{
+            Self::Id(_) => "ID".to_owned(),
+            Self::Rank(_) => "Rank".to_owned(),
+            Self::RankRef(r) => format!("RankRef{}", r.reference)
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct TopSpecifierHelper{
+    pub focus: usize,
+    pub reference: usize
 }
 
 #[derive(Parser, Debug)]

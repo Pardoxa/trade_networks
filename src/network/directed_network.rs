@@ -1,5 +1,3 @@
-use crate::config::ReadType;
-
 use{
     std::{
         collections::{BTreeMap, VecDeque}, 
@@ -10,7 +8,11 @@ use{
     net_ensembles::Graph,
     serde::{Serialize, Deserialize},
     super::helper_structs::*,
-    strum::EnumString
+    strum::EnumString,
+    crate::{
+        misc::*,
+        config::*
+    }
 };
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, EnumString)]
@@ -105,13 +107,17 @@ pub struct GraphVizExtra{
 }
 
 #[derive(Clone, Debug)]
-pub enum LazyNetwork{
+pub enum LazyNetworks{
     Filename(String),
     Networks(Vec<Network>, Vec<Network>)
 }
 
-impl LazyNetwork{
-    fn assure_availability(&mut self){
+
+
+impl LazyNetworks{
+    /// This needs to be called once before any of the unchecked members.
+    /// Otherwise the unchecked members will panic!
+    pub fn assure_availability(&mut self){
         if let Self::Filename(f) = self{
             let mut networks = read_networks(f);
             match &networks[0].direction
@@ -136,32 +142,34 @@ impl LazyNetwork{
         }
     }
 
-    pub fn get_export_network(&mut self, year: i32) -> &Network
+
+    pub fn get_export_network_unchecked(&self, year: i32) -> &Network
     {
-        self.assure_availability();
         if let Self::Networks(_, export_networks) = self {
             for n in export_networks.iter(){
                 if n.year == year {
                     return n;
                 }
             }
+        } else {
+            panic!("{AVAILABILITY_ERR}")
         }
-        unreachable!()
+        panic!("{YEAR_ERR}")
     }
 
     #[allow(dead_code)]
-    pub fn get_import_network(&mut self, year: i32) -> &Network
+    pub fn get_import_network_unchecked(&mut self, year: i32) -> &Network
     {
-        self.assure_availability();
         if let Self::Networks(import_networks, _) = self {
             for n in import_networks.iter(){
                 if n.year == year {
                     return n;
                 }
             }
+        } else {
+            panic!("{AVAILABILITY_ERR}")
         }
-        unreachable!()
-        
+        panic!("{YEAR_ERR}")
     }
 
 }
