@@ -1,7 +1,7 @@
 use std::collections::*;
 use crate::{network::*, UNIT_TESTER};
 use crate::network::enriched_digraph::*;
-use std::ops::Deref;
+use std::ops::{Deref, RangeInclusive};
 use crate::config::*;
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -538,6 +538,9 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     let len_recip = (specifiers.len() as f64).recip();
     let mut is_first = true;
     let mut foci = Vec::new();
+    let mut dist_names = Vec::new();
+    let mut min_names = Vec::new();
+    let mut max_names = Vec::new();
     for e in export_iter
     {
         let mut sum = vec![0.0; export_without_unconnected.node_count()];
@@ -581,10 +584,51 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 }
             );
 
-        let abs_iter = min
+        let abs: Vec<_> = min
             .iter()
             .zip(max.iter())
-            .map(|(min, max)| (max - min).abs());
+            .map(|(min, max)| (max - min).abs())
+            .collect();
+
+        if opt.distributions{
+            let mut hist = HistF64::new(0.0, 2.0, opt.bins)
+                .unwrap();
+            for (i, &a) in abs.iter().enumerate(){
+                if opt.without && foci.contains(&i){
+                    continue;
+                }
+                hist.increment_quiet(a);
+            }
+            let name = format!("{stub}_abs{e}.dist");
+            let mut buf = create_buf_with_command_and_version(&name);
+            dist_names.push(GnuplotHelper{file_name: name, title: format!("Export {e}")});
+            writeln!(buf, "#left right center hits normalized").unwrap();
+            let total: usize = hist.hist().iter().sum();
+            for (bin, hits) in hist.bin_hits_iter(){
+                let center = (bin[0] + bin[1]) / 2.0;
+                let normed = hits as f64 / total as f64;
+                writeln!(buf, "{} {} {center} {hits} {normed}", bin[0], bin[1]).unwrap();
+            }
+        }
+        // write acc
+        let write_sorted = |unsorted: &[f64], name: &str|
+        {
+            let mut sorted = unsorted.to_vec();
+            sorted.sort_unstable_by(|a,b| a.total_cmp(b));
+            
+            let mut buf = create_buf_with_command_and_version(name);
+            
+            for (i, val) in sorted.iter().enumerate(){
+                writeln!(buf, "{i} {val}").unwrap();
+            }
+        };
+        let name = format!("{stub}_min{e}.txt");
+        write_sorted(&min, &name);
+        min_names.push((e, name));
+
+        let name = format!("{stub}_max{e}.txt");
+        write_sorted(&max, &name);
+        max_names.push((e, name));
 
         fn write_res<I>(buf: &mut BufWriter<File>, e: f64, iter: I)
         where I: IntoIterator<Item = f64>
@@ -596,7 +640,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
             writeln!(buf).unwrap();
         }
 
-        write_res(&mut buf_abs, e, abs_iter);
+        write_res(&mut buf_abs, e, abs);
         write_res(&mut buf_var, e, variance);
         write_res(&mut buf_av, e, average);
         write_res(&mut buf_max, e, max);
@@ -616,6 +660,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     write_focus(buf_min);
     write_focus(buf_abs);
 
+    let max_gp_index = export_without_unconnected.node_count() + 1;
     let create_gp = |data_name: &str, ylabel: &str, y_min: f64, y_max: f64|
     {
         let stub = data_name.strip_suffix(".dat").unwrap();
@@ -630,7 +675,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
 
         write!(buf, "p ").unwrap();
 
-        for gp_index in 2..=export_without_unconnected.node_count()+1
+        for gp_index in 2..=max_gp_index
         {
             let this_idx = gp_index - 2;
             if foci.contains(&this_idx){
@@ -642,7 +687,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 ).unwrap();
             }
         }
-        for (pos, this_idx) in foci.iter().enumerate(){
+        for (pos, &this_idx) in foci.iter().enumerate(){
             let gp_index = this_idx + 2;
             writeln!(
                 buf, 
@@ -656,6 +701,35 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     create_gp(&max_name, "Max(delta)", -1.0, 1.0);
     create_gp(&min_name, "Min(delta)", -1.0, 0.0);
     create_gp(&abs_name, "abs(Max - Min)", 0.0, 1.0);
+
+    if opt.distributions{
+        let name = format!("{stub}_abs.dist");
+        let relative = opt.top.get_relative();
+        write_gnuplot(
+            &name, 
+            relative, 
+            dist_names,
+            0.0..=2.0
+        ).unwrap();
+    }
+
+    let acc_gnuplot = |name: &str, names: &[(f64, String)]|
+    {
+        let gp_name = format!("ACC_{stub}_{name}.gp");
+        let out_name = format!("ACC_{stub}_{name}.pdf");
+        let mut buf = create_buf_with_command_and_version(gp_name);
+        writeln!(buf, "reset session").unwrap();
+        writeln!(buf, "set t pdfcairo").unwrap();
+        writeln!(buf, "set output \"{out_name}\"").unwrap();
+        write!(buf, "p ").unwrap();
+        for (e, n) in names {
+            writeln!(buf, "\"{n}\" u 1:2 w lp t \"{e}\",\\").unwrap();
+        }
+        writeln!(buf, "\nset output").unwrap();
+    };
+
+    acc_gnuplot("min", &min_names);
+    acc_gnuplot("max", &max_names);
 
 
 }
@@ -766,15 +840,11 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
     }
 
     let bins = bins.unwrap();
-    let relative = matches!(opt.top, CountryChooser::TopRef(_));
+    let relative = opt.top.get_relative();
     let mut combined_names = Vec::new();
 
     for (i, e) in opt.export.iter().enumerate(){
-        let r = if relative{
-            Relative::YesWith(*e)
-        } else {
-            Relative::No
-        };
+        let r = relative.if_yes_with(*e);
         let name_iter = names
             .iter()
             .enumerate()
@@ -783,13 +853,14 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                 {
                     let e_name = &name_vec[i];
                     let title = format!("top {index}");
-                    GnuplotHelper { file_name: e_name, title}
+                    GnuplotHelper { file_name: e_name.clone(), title}
                 }
             );
         write_gnuplot(
             &gp_names[i], 
             r, 
-            name_iter
+            name_iter,
+            -1.0..=1.0
         ).unwrap();
 
         if names.len() > 1 {
@@ -814,12 +885,13 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             }
 
             let iter = std::iter::once(
-                GnuplotHelper { file_name: &name, title: format!("combined {}", names.len()) }
+                GnuplotHelper { file_name: name.clone(), title: format!("combined {}", names.len()) }
             );
             write_gnuplot(
                 &name, 
                 r, 
-               iter
+               iter,
+               -1.0..=1.0
             ).unwrap();
 
             combined_names.push(name);
@@ -835,18 +907,14 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             .map(
                 |(n, e)|
                 {
-                    GnuplotHelper{file_name: n, title: format!("Export {e}")}
+                    GnuplotHelper{file_name: n.clone(), title: format!("Export {e}")}
                 }
             );
-        let r = if relative{
-            Relative::Yes
-        } else {
-            Relative::No
-        };
         write_gnuplot(
             &name, 
-            r, 
-            iter
+            relative, 
+            iter,
+            -1.0..=1.0
         ).unwrap();
     }
     
@@ -859,19 +927,47 @@ pub enum Relative{
     No
 }
 
-pub struct GnuplotHelper<'a>{
-    pub file_name: &'a str,
+impl Relative{
+    pub fn is_not_relative(self) -> bool
+    {
+        matches!(self, Self::No)
+    }
+
+    pub fn is_relative(self) -> bool
+    {
+        !self.is_not_relative()
+    }
+
+    pub fn if_yes_with(self, with: f64) -> Self 
+    {
+        if self.is_relative(){
+            Self::YesWith(with)
+        } else {
+            Relative::No
+        }
+    }
+}
+
+pub struct GnuplotHelper{
+    pub file_name: String,
     pub title: String
 }
 
-fn write_gnuplot<'a, I>(gnuplot_name_stub: &'a str, relative: Relative, name_iter: I) -> std::io::Result<()>
-where I: IntoIterator<Item = GnuplotHelper::<'a>>
+fn write_gnuplot<I>(
+    gnuplot_name_stub: &str, 
+    relative: Relative, 
+    name_iter: I,
+    xrange: RangeInclusive<f64>
+) -> std::io::Result<()>
+where I: IntoIterator<Item = GnuplotHelper>
 {
     let gnuplot_name = format!("{gnuplot_name_stub}.gp");
     let mut buf = create_buf_with_command_and_version(gnuplot_name);
     writeln!(buf, "reset session")?;
     writeln!(buf, "set t pdfcairo")?;
-    writeln!(buf, "set xrange [-1:0.1]")?;
+    let range_start = xrange.start();
+    let range_end = xrange.end(); 
+    writeln!(buf, "set xrange [{range_start}:{range_end}]")?;
     writeln!(buf, "set xlabel \"Δ\"")?;
     writeln!(buf, "set ylabel \"normalized hits\"")?;
     writeln!(buf, "set key center")?;

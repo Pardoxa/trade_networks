@@ -1,6 +1,6 @@
 use std::num::NonZeroUsize;
 use clap::{Parser, Subcommand, ValueEnum};
-use crate::network::{Direction, NetworkType};
+use crate::network::{Direction, NetworkType, main_execs::Relative};
 use serde::{Serialize, Deserialize};
 
 #[derive(Parser, Debug)]
@@ -318,6 +318,10 @@ pub struct XOpts{
     /// Do not include the country that reduces its exports in the histogram
     #[arg(long, short)]
     pub without: bool,
+
+    /// Also create distributions. WARNING: Can result in a lot of files!
+    #[arg(long, short)]
+    pub distributions: bool
 }
 
 #[derive(Subcommand, Debug)]
@@ -331,6 +335,16 @@ pub enum CountryChooser{
 }
 
 impl CountryChooser{
+    pub fn get_relative(&self) -> Relative
+    {
+        let relative = matches!(self, CountryChooser::TopRef(_));
+        if relative{
+            Relative::Yes
+        } else {
+            Relative::No
+        }
+    }
+
     pub fn get_string(&self) -> String
     {
         match self{
