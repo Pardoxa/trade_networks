@@ -1,9 +1,9 @@
-use crate::parser::parse_all_networks;
+use crate::parser::{parse_all_networks, country_map};
 
 use {
     std::{
         fs::File,
-        io::{BufWriter, Write},
+        io::{BufWriter, Write, BufRead},
         collections::{BTreeSet, BTreeMap}, 
         fmt::Display,
         f64::consts::TAU
@@ -436,7 +436,7 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         SubCommand::CountryCount(c) => country_count(in_file, c),
         SubCommand::ShockAvail(s) => shock_avail(s, in_file),
         SubCommand::ShockDist(d) => shock_dist(d, in_file),
-        SubCommand::ReduceX(o) => reduce_x(o, in_file)
+        SubCommand::ReduceX(o) => reduce_x(o, in_file),
     }
 }
 
@@ -829,4 +829,157 @@ where W: Write
     
     
     writeln!(w, "}}")
+}
+
+
+pub fn three_set_exec(opt: ThreeS)
+{
+    let map = opt.id_map_file
+        .as_ref()
+        .map(|c| country_map(c));
+    let sets: Vec<_> = opt.files.iter()
+        .map(|f| to_three_sets(f, opt.border_low, opt.border_high))
+        .collect();
+
+    let all: BTreeSet<_> = sets.iter()
+        .flat_map(|t| t.low.iter().chain(t.high.iter()).chain(t.middle.iter()))
+        .map(|v| *v.0)
+        .collect();
+
+    let mut buf = create_buf_with_command_and_version(opt.out);
+    write!(buf, "#").unwrap();
+
+    for f in opt.files.iter()
+    {
+        write!(buf, " s:{f}").unwrap();
+    }
+    
+    let h = if map.is_some(){
+        " country_name"
+    } else {
+        ""
+    };
+
+
+    writeln!(buf, " low middle high total country_id{h}").unwrap();
+
+
+
+    struct Tmp{
+        low: u32,
+        middle: u32,
+        high: u32,
+        c_idx: u32,
+        deltas: Vec<f64>
+    }
+
+    let mut to_write = Vec::new();
+
+    for i in all.iter(){
+        let mut low = 0;
+        let mut middle = 0;
+        let mut high = 0;
+        let mut deltas = Vec::new();
+        for s in sets.iter() {
+            let mut delta = f64::NAN;
+            let mut t = 0;
+            if let Some(v) = s.high.get(i){
+                high += 1;
+                t += 1;
+                delta = *v;
+            }
+            if let Some(v) = s.middle.get(i){
+                middle += 1;
+                t += 1;
+                delta = *v;
+            }
+            if let Some(v) = s.low.get(i){
+                low += 1;
+                t += 1;
+                delta = *v;
+            }
+            deltas.push(delta);
+            assert!(t <= 1);
+
+        }
+        let tmp = Tmp{
+            low,
+            middle,
+            high,
+            c_idx: *i,
+            deltas
+        };
+        to_write.push(tmp);
+
+    }
+
+    to_write
+        .sort_by_cached_key(|e| e.middle*2+ e.low + e.high*3);
+
+    for l in to_write{
+
+        for d in l.deltas{
+            write!(buf, "{d} ").unwrap();
+        }
+
+        let total = l.low + l.middle + l.high;
+        write!(
+            buf, 
+            "{} {} {} {total} {}",
+            l.low,
+            l.middle,
+            l.high,
+            l.c_idx
+        ).unwrap();
+        if let Some(m) = &map
+        {
+            let s = l.c_idx.to_string();
+            let c = m.get(&s).unwrap();
+            writeln!(buf, " '{c}'").unwrap();
+        } else {
+            writeln!(buf).unwrap();
+        }
+    }
+
+    
+}
+
+#[derive(Default)]
+pub struct ThreeSets{
+    pub low: BTreeMap<u32, f64>,
+    pub middle: BTreeMap<u32, f64>,
+    pub high: BTreeMap<u32, f64>
+}
+
+
+pub fn to_three_sets(file: &str, border_low: f64, border_high: f64) -> ThreeSets
+{
+    let buf = open_bufreader(file);
+
+    let lines = buf.lines()
+        .map(|l| l.unwrap())
+        .filter(|l| !l.starts_with('#'));
+
+    let mut sets = ThreeSets::default();
+
+    for (plot_idx, line) in lines.enumerate() {
+        let (first, rest) = line.split_once(' ').unwrap();
+        let (delta, country_id) = rest.split_once(' ').unwrap();
+        let p_id: usize = first.parse().unwrap();
+        assert_eq!(p_id, plot_idx);
+        let delta: f64 = delta.parse().unwrap();
+        let c_id: u32 = country_id.parse().unwrap();
+
+        if delta.is_finite(){
+            let set = if delta >= border_high {
+                &mut sets.high
+            } else if delta > border_low {
+                &mut sets.middle
+            } else {
+                &mut sets.low
+            };
+            set.insert(c_id, delta);
+        }
+    }
+    sets
 }

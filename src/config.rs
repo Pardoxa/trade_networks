@@ -112,7 +112,8 @@ pub enum CmdChooser{
     ParseNetworks(ParseNetworkOpt),
     ParseAllNetworks(ParseAllNetworksOpt),
     Tests(Tests),
-    ParseEnrichment(ParseEnrichOpts)
+    ParseEnrichment(ParseEnrichOpts),
+    Three(ThreeS)
 }
 
 
@@ -176,7 +177,7 @@ pub enum SubCommand{
     /// Calculate distribution for total available food fractional changes
     ShockDist(ShockDistOpts),
     CountryCount(CountryCountOpt),
-    ReduceX(XOpts)
+    ReduceX(XOpts),
 }
 
 
@@ -326,6 +327,26 @@ pub struct XOpts{
     /// A negative total for a country will result in NaN or Inf
     #[arg(long)]
     pub forbit_negative_total: bool
+}
+
+#[derive(Parser, Debug)]
+pub struct ThreeS{
+    /// Files to read
+    #[arg(long, short, required=true)]
+    pub files: Vec<String>,
+
+    #[arg(long, short)]
+    /// Out file
+    pub out: String,
+
+    #[arg(long, short)]
+    pub id_map_file: Option<String>,
+
+    #[arg(long)]
+    pub border_low: f64,
+
+    #[arg(long)]
+    pub border_high: f64
 }
 
 #[derive(Subcommand, Debug)]

@@ -21,7 +21,8 @@ fn main() {
         CmdChooser::Out10(opt) => export_out_comp(opt),
         CmdChooser::Enrichment(opt) => enrich(opt),
         CmdChooser::Tests(t) => test_chooser(&t.in_file, t.command),
-        CmdChooser::ParseEnrichment(o) => enrich_to_bin(o)
+        CmdChooser::ParseEnrichment(o) => enrich_to_bin(o),
+        CmdChooser::Three(t) => three_set_exec(t)
     }
 }
 
