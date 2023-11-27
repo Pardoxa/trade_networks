@@ -321,7 +321,11 @@ pub struct XOpts{
 
     /// Also create distributions. WARNING: Can result in a lot of files!
     #[arg(long, short)]
-    pub distributions: bool
+    pub distributions: bool,
+
+    /// A negative total for a country will result in NaN or Inf
+    #[arg(long)]
+    pub forbit_negative_total: bool
 }
 
 #[derive(Subcommand, Debug)]

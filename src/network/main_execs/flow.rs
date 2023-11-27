@@ -561,7 +561,13 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 foci.push(res.focus_index);
             }
 
-            for (i, delta) in res.delta_or_nan_iter().enumerate()
+            let iter: Box<dyn Iterator<Item=f64>> = if opt.forbit_negative_total{
+                Box::new(res.delta_or_nan_iter())
+            } else {
+                Box::new(res.delta_iter())
+            };
+
+            for (i, delta) in iter.enumerate()
             {
                 sum[i] += delta;
                 sum_sq[i] += delta * delta;
@@ -613,13 +619,23 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         // write acc
         let write_sorted = |unsorted: &[f64], name: &str|
         {
-            let mut sorted = unsorted.to_vec();
-            sorted.sort_unstable_by(|a,b| a.total_cmp(b));
+            let mut sorted: Vec<_> = unsorted.iter()
+                .zip(export_without_unconnected.nodes.iter())
+                .map(
+                    |(v, n)|
+                    {
+                        let id = n.identifier.as_str();
+                        (*v, id)
+                    }
+                ).collect();
+            sorted.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
             
             let mut buf = create_buf_with_command_and_version(name);
+
+            writeln!(buf, "#Sort_idx delta CountryID").unwrap();
             
-            for (i, val) in sorted.iter().enumerate(){
-                writeln!(buf, "{i} {val}").unwrap();
+            for (i, (val, id)) in sorted.iter().enumerate(){
+                writeln!(buf, "{i} {val} {id}").unwrap();
             }
         };
         let name = format!("{stub}_min{e}.txt");
