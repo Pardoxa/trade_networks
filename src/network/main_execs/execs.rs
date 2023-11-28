@@ -846,9 +846,13 @@ pub fn three_set_exec(opt: ThreeS)
         .map(|v| *v.0)
         .collect();
 
+    let name_var = format!("{}.var", opt.out);
+    let name_av = format!("{}.av", opt.out);
     let mut buf = create_buf_with_command_and_version(opt.out);
+    let mut var_buf = create_buf_with_command_and_version(name_var);
+    let mut av_buf = create_buf_with_command_and_version(name_av);
     write!(buf, "#").unwrap();
-
+    
     for f in opt.files.iter()
     {
         write!(buf, " s:{f}").unwrap();
@@ -859,8 +863,8 @@ pub fn three_set_exec(opt: ThreeS)
     } else {
         ""
     };
-
-
+    writeln!(var_buf, "#var country_id{h}").unwrap();
+    writeln!(av_buf, "#av country_id{h}").unwrap();
     writeln!(buf, " low middle high total country_id{h}").unwrap();
 
 
@@ -873,13 +877,16 @@ pub fn three_set_exec(opt: ThreeS)
         deltas: Vec<f64>
     }
 
-    let mut to_write = Vec::new();
+    let mut var_vec = Vec::new();
+    let mut av_vec = Vec::new();
 
+    let mut to_write = Vec::new();
     for i in all.iter(){
         let mut low = 0;
         let mut middle = 0;
         let mut high = 0;
         let mut deltas = Vec::new();
+        
         for s in sets.iter() {
             let mut delta = f64::NAN;
             let mut t = 0;
@@ -902,6 +909,23 @@ pub fn three_set_exec(opt: ThreeS)
             assert!(t <= 1);
 
         }
+        let count = deltas
+            .iter()
+            .filter(|a| a.is_finite())
+            .count();
+        let sum: f64 = deltas.iter()
+            .filter(|f| f.is_finite())
+            .sum();
+        let sum_sq: f64 = deltas.iter()
+            .filter(|a| a.is_finite())
+            .map(|a| a*a)
+            .sum();
+        let average = sum / count as f64;
+        let var = sum_sq / count as f64 - average * average;
+
+        av_vec.push((average, *i));
+        var_vec.push((var, *i));
+
         let tmp = Tmp{
             low,
             middle,
@@ -913,8 +937,32 @@ pub fn three_set_exec(opt: ThreeS)
 
     }
 
+    let country_name_new_line = |b: &mut BufWriter<File>, country_id: u32|
+    {
+        if let Some(m) = &map
+        {
+            let s = country_id.to_string();
+            let c = m.get(&s).unwrap();
+            writeln!(b, " '{c}'").unwrap();
+        } else {
+            writeln!(b).unwrap();
+        }
+    };
+
     to_write
         .sort_by_cached_key(|e| e.middle*2+ e.low + e.high*3);
+
+    let write_stat = |b: &mut BufWriter<File>, mut v: Vec<(f64, u32)>|
+    {
+        v.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
+        for (val, country_id) in v
+        {
+            write!(b, "{val:e} {country_id}").unwrap();
+            country_name_new_line(b, country_id);
+        }
+    };
+    write_stat(&mut var_buf, var_vec);
+    write_stat(&mut av_buf, av_vec);
 
     for l in to_write{
 
@@ -931,14 +979,7 @@ pub fn three_set_exec(opt: ThreeS)
             l.high,
             l.c_idx
         ).unwrap();
-        if let Some(m) = &map
-        {
-            let s = l.c_idx.to_string();
-            let c = m.get(&s).unwrap();
-            writeln!(buf, " '{c}'").unwrap();
-        } else {
-            writeln!(buf).unwrap();
-        }
+        country_name_new_line(&mut buf, l.c_idx);
     }
 
     
