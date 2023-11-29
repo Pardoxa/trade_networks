@@ -326,7 +326,11 @@ pub struct XOpts{
 
     /// A negative total for a country will result in NaN or Inf
     #[arg(long)]
-    pub forbit_negative_total: bool
+    pub forbit_negative_total: bool,
+
+    /// Do not write the Acc files
+    #[arg(long)]
+    pub no_acc: bool
 }
 
 #[derive(Parser, Debug)]

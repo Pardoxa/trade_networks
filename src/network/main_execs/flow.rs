@@ -1,4 +1,5 @@
 use std::collections::*;
+use std::fmt::Display;
 use crate::{network::*, UNIT_TESTER};
 use crate::network::enriched_digraph::*;
 use std::ops::{Deref, RangeInclusive};
@@ -8,6 +9,21 @@ use std::io::{BufWriter, Write};
 use crate::misc::*;
 use net_ensembles::sampling::{HistF64, Histogram};
 
+fn derivative(data: &[f64]) -> Vec<f64>
+{
+    let mut d = vec![f64::NAN; data.len()];
+    if data.len() >= 3 {
+        for i in 1..data.len()-1 {
+            d[i] = (data[i+1] - data[i-1]) / 2.0;
+        }
+    }
+    if data.len() >= 2 {
+        d[0] = data[1] - data[0];
+
+        d[data.len() - 1] = data[data.len() - 1] - data[data.len() - 2];
+    }
+    d
+}
 
 pub fn flow(opt: FlowOpt, in_file: &str)
 {
@@ -283,7 +299,8 @@ pub struct CalculatedShocks{
     pub available_before_shock: Vec<f64>,
     pub available_after_shock: Vec<f64>,
     pub focus_index: usize,
-    pub network: Network
+    pub network: Network,
+    after_export_fract: Vec<f64>
 }
 
 impl CalculatedShocks{
@@ -420,7 +437,8 @@ pub fn calc_shock(
         available_after_shock: avail_after_shock,
         available_before_shock,
         focus_index: focus,
-        network: export
+        network: export,
+        after_export_fract: fracts.export_fracs
     }
 }
 
@@ -469,6 +487,17 @@ pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
 
 }
 
+fn write_res<I, A>(buf: &mut BufWriter<File>, e: f64, iter: I)
+where I: IntoIterator<Item = A>,
+    A: Display
+{
+    write!(buf, "{e}").unwrap();
+    for v in iter{
+        write!(buf, " {v}").unwrap();
+    }
+    writeln!(buf).unwrap();
+}
+
 
 pub fn reduce_x(opt: XOpts, in_file: &str)
 {
@@ -479,6 +508,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     let export_without_unconnected = lazy_networks
         .get_export_network_unchecked(opt.year)
         .without_unconnected_nodes();
+    let import_without_unconnected = export_without_unconnected.invert();
 
     let mut lazy_enrichments = LazyEnrichmentInfos::Filename(
         opt.enrich_file, 
@@ -498,6 +528,9 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     let av_name = format!("{stub}_av.dat");
     let mut buf_av = create_buf_with_command_and_version(&av_name);
 
+    let av_d_name = format!("{stub}_av_derivative.dat");
+    let mut buf_av_d = create_buf_with_command_and_version(&av_d_name);
+
     let max_name = format!("{stub}_max.dat");
     let mut buf_max = create_buf_with_command_and_version(&max_name);
 
@@ -506,6 +539,12 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
 
     let abs_name = format!("{stub}_min_max_abs.dat");
     let mut buf_abs = create_buf_with_command_and_version(&abs_name);
+
+    let import_name = format!("{stub}_import.dat");
+    let mut buf_import = create_buf_with_command_and_version(&import_name);
+
+    let import_totals_name = format!("{stub}_import_totals.dat");
+    let mut buf_import_totals = create_buf_with_command_and_version(&import_totals_name);
 
     let write_header = |buf: &mut BufWriter<File>|
     {
@@ -526,14 +565,18 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     write_header(&mut buf_max);
     write_header(&mut buf_min);
     write_header(&mut buf_abs);
+    write_header(&mut buf_av_d);
+    write_header(&mut buf_import);
+    write_header(&mut buf_import_totals);
 
     let export_diff = opt.export_end - opt.export_start;
     let export_delta = export_diff / (opt.export_samples - 1) as f64;
 
 
-    let export_iter = (0..opt.export_samples-1)
+    let export_vals: Vec<_> = (0..opt.export_samples-1)
         .map(|i| opt.export_start + export_delta * i as f64)
-        .chain(std::iter::once(opt.export_end));
+        .chain(std::iter::once(opt.export_end))
+        .collect();
 
     let len_recip = (specifiers.len() as f64).recip();
     let mut is_first = true;
@@ -541,12 +584,18 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     let mut dist_names = Vec::new();
     let mut min_names = Vec::new();
     let mut max_names = Vec::new();
-    for e in export_iter
+
+    let mut av_matrix: Vec<Vec<f64>> = (0..export_without_unconnected.node_count())
+        .map(|_| Vec::new())
+        .collect();
+
+    for e in export_vals.iter().copied()
     {
         let mut sum = vec![0.0; export_without_unconnected.node_count()];
         let mut sum_sq = vec![0.0; sum.len()];
         let mut max = vec![f64::NEG_INFINITY; sum.len()];
         let mut min = vec![f64::INFINITY; sum.len()];
+        let mut after_shock_avail_total = vec![0.0; sum.len()];
         for s in specifiers.iter(){
             let res = calc_shock(
                 &mut lazy_networks, 
@@ -556,6 +605,10 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 opt.iterations, 
                 &mut lazy_enrichments
             );
+
+            res.available_after_shock.iter()
+                .zip(after_shock_avail_total.iter_mut())
+                .for_each(|(v, acc)| *acc += v);
 
             if is_first{
                 foci.push(res.focus_index);
@@ -574,6 +627,19 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 max[i] = delta.max(max[i]);
                 min[i] = delta.min(min[i]);
             }
+
+            let import_iter = import_without_unconnected.nodes
+                .iter()
+                .map(
+                    |node|
+                    {
+                        node.adj
+                            .iter()
+                            .filter(|edge| res.after_export_fract[edge.index] > 0.0)
+                            .count()
+                    }
+                );
+            write_res(&mut buf_import, e, import_iter);
 
         }
         is_first = false;
@@ -617,52 +683,53 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
             }
         }
         // write acc
-        let write_sorted = |unsorted: &[f64], name: &str|
-        {
-            let mut sorted: Vec<_> = unsorted.iter()
-                .zip(export_without_unconnected.nodes.iter())
-                .map(
-                    |(v, n)|
-                    {
-                        let id = n.identifier.as_str();
-                        (*v, id)
-                    }
-                ).collect();
-            sorted.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
-            
-            let mut buf = create_buf_with_command_and_version(name);
-
-            writeln!(buf, "#Sort_idx delta CountryID").unwrap();
-            
-            for (i, (val, id)) in sorted.iter().enumerate(){
-                writeln!(buf, "{i} {val} {id}").unwrap();
-            }
-        };
-        let name = format!("{stub}_min{e}.txt");
-        write_sorted(&min, &name);
-        min_names.push((e, name));
-
-        let name = format!("{stub}_max{e}.txt");
-        write_sorted(&max, &name);
-        max_names.push((e, name));
-
-        fn write_res<I>(buf: &mut BufWriter<File>, e: f64, iter: I)
-        where I: IntoIterator<Item = f64>
-        {
-            write!(buf, "{e}").unwrap();
-            for v in iter{
-                write!(buf, " {v}").unwrap();
-            }
-            writeln!(buf).unwrap();
+        if !opt.no_acc{
+            let write_sorted = |unsorted: &[f64], name: &str|
+            {
+                let mut sorted: Vec<_> = unsorted.iter()
+                    .zip(export_without_unconnected.nodes.iter())
+                    .map(
+                        |(v, n)|
+                        {
+                            let id = n.identifier.as_str();
+                            (*v, id)
+                        }
+                    ).collect();
+                sorted.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
+                
+                let mut buf = create_buf_with_command_and_version(name);
+    
+                writeln!(buf, "#Sort_idx delta CountryID").unwrap();
+                
+                for (i, (val, id)) in sorted.iter().enumerate(){
+                    writeln!(buf, "{i} {val} {id}").unwrap();
+                }
+            };
+            let name = format!("{stub}_min{e}.txt");
+            write_sorted(&min, &name);
+            min_names.push((e, name));
+    
+            let name = format!("{stub}_max{e}.txt");
+            write_sorted(&max, &name);
+            max_names.push((e, name));
         }
+        
+
+        
 
         write_res(&mut buf_abs, e, abs);
         write_res(&mut buf_var, e, variance);
+        av_matrix.iter_mut()
+            .zip(average.iter())
+            .for_each(|(vec, val)| vec.push(*val)); 
         write_res(&mut buf_av, e, average);
+        
         write_res(&mut buf_max, e, max);
         write_res(&mut buf_min, e, min);
+        write_res(&mut buf_import_totals, e, after_shock_avail_total);
     }
-    let write_focus = |mut buf: BufWriter<File>|
+
+    let write_focus = |buf: &mut BufWriter<File>|
     {
         for focus in foci.iter(){
             let id = export_without_unconnected.nodes[*focus].identifier.as_str();
@@ -670,11 +737,29 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
             writeln!(buf, "#Focus GP: {gnuplot_index} ID: {id}").unwrap();
         }
     };
-    write_focus(buf_av);
-    write_focus(buf_var);
-    write_focus(buf_max);
-    write_focus(buf_min);
-    write_focus(buf_abs);
+    write_focus(&mut buf_av);
+    write_focus(&mut buf_var);
+    write_focus(&mut buf_max);
+    write_focus(&mut buf_min);
+    write_focus(&mut buf_abs);
+    write_focus(&mut buf_av_d);
+    write_focus(&mut buf_import);
+    write_focus(&mut buf_import_totals);
+
+    let derivatives: Vec<_> = av_matrix
+        .into_iter()
+        .map(|av| derivative(&av))
+        .collect();
+
+    for (index, e) in export_vals.iter().enumerate(){
+        let d_iter = derivatives
+            .iter()
+            .map(|v| v[index] / export_delta);
+        write_res(&mut buf_av_d, *e, d_iter);
+    }
+
+
+
 
     let max_gp_index = export_without_unconnected.node_count() + 1;
     let create_gp = |data_name: &str, ylabel: &str, y_min: f64, y_max: f64|
@@ -717,6 +802,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     create_gp(&max_name, "Max(delta)", -1.0, 1.0);
     create_gp(&min_name, "Min(delta)", -1.0, 0.0);
     create_gp(&abs_name, "abs(Max - Min)", 0.0, 1.0);
+    create_gp(&av_d_name, "derivative of average", -1.0, 1.0);
 
     if opt.distributions{
         let name = format!("{stub}_abs.dist");
@@ -744,9 +830,10 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         writeln!(buf, "\nset output").unwrap();
     };
 
-    acc_gnuplot("min", &min_names);
-    acc_gnuplot("max", &max_names);
-
+    if !opt.no_acc{
+        acc_gnuplot("min", &min_names);
+        acc_gnuplot("max", &max_names);
+    }
 
 }
 
