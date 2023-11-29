@@ -1,6 +1,6 @@
 use std::num::NonZeroUsize;
 use clap::{Parser, Subcommand, ValueEnum};
-use crate::network::{Direction, NetworkType, main_execs::Relative};
+use crate::network::{Direction, NetworkType, main_execs::Relative, Network};
 use serde::{Serialize, Deserialize};
 
 #[derive(Parser, Debug)]
@@ -330,7 +330,44 @@ pub struct XOpts{
 
     /// Do not write the Acc files
     #[arg(long)]
-    pub no_acc: bool
+    pub no_acc: bool,
+
+    #[arg(long)]
+    /// If I want to focus on a specific country
+    pub investigate: Vec<usize>,
+
+    #[arg(long, value_enum, default_value_t = InvestigationIndexType::GnuplotIndex)]
+    /// how to interpret investigate
+    pub invest_type: InvestigationIndexType,
+
+    #[arg(long)]
+    /// file that maps ids to countries
+    pub country_map: Option<String>
+}
+
+#[derive(Debug, ValueEnum, Clone, Copy, Serialize, Deserialize)]
+pub enum InvestigationIndexType{
+    /// Use the Gnuplot index
+    GnuplotIndex,
+    /// Use the internal index
+    SliceIndex,
+    /// Use the country code
+    CountryId
+}
+
+impl InvestigationIndexType{
+    pub fn get_interal_index(&self, reference: &Network, idx: usize) -> usize
+    {
+        match self{
+            Self::SliceIndex => idx,
+            Self::GnuplotIndex => idx - 2,
+            Self::CountryId => {
+                let s = idx.to_string();
+                reference.get_index(&s)
+                    .expect("Requested CountryId not found")
+            }
+        }
+    }
 }
 
 #[derive(Parser, Debug)]

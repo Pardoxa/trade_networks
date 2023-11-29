@@ -184,6 +184,12 @@ pub struct Network{
 }
 
 impl Network{
+    pub fn get_index(&self, s: &str) -> Option<usize>
+    {
+        self.nodes
+            .iter()
+            .position(|n| n.identifier == s)
+    }
 
     pub fn graphviz<'a, W>(
         &'a self, 

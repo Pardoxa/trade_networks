@@ -613,8 +613,8 @@ mod tests {
 
         for (n, amount) in networks.iter().zip(years)
         {
-            let z = n.nodes.iter().position(|i| i.identifier == "181");
-            let u = n.nodes.iter().position(|p| p.identifier == "231");
+            let z = n.get_index("181");
+            let u = n.get_index("231");
             match amount{
                 None => {
                     if let Some(zim) = z {

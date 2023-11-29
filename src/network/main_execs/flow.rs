@@ -1,5 +1,6 @@
 use std::collections::*;
 use std::fmt::Display;
+use crate::parser::country_map;
 use crate::{network::*, UNIT_TESTER};
 use crate::network::enriched_digraph::*;
 use std::ops::{Deref, RangeInclusive};
@@ -160,9 +161,7 @@ pub fn shock_exec(opt: ShockOpts, in_file: &str)
         .without_unconnected_nodes();
 
 
-    let focus = network.nodes.iter()
-        .position(|item| item.identifier == opt.top_id)
-        .unwrap();
+    let focus = network.get_index(&opt.top_id).unwrap();
 
     let fracts = shock_distribution(
         &network, 
@@ -364,10 +363,7 @@ pub fn calc_shock(
 
     let (focus, export_frac) = match top_id{
         TopSpecifier::Id(id) => {
-            let focus = export.nodes
-                .iter()
-                .position(|item| item.identifier == id)
-                .unwrap();
+            let focus = export.get_index(&id).unwrap();
             (focus, export_frac)
         },
         TopSpecifier::Rank(r) => {
@@ -521,6 +517,72 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         "{stub}_Item{}", 
         lazy_enrichments.get_item_code_unchecked()
     );
+
+    let country_map = opt.country_map
+        .as_deref()
+        .map(country_map);
+
+    fn c_map<'a>(id: &str, country_map: &'a Option<BTreeMap<String, String>>) -> &'a str
+    {
+        if let Some(map) = country_map{
+            map.get(id).unwrap()
+        } else {
+            ""
+        }
+    }
+
+    opt.investigate
+        .iter()
+        .for_each(
+            |&i|
+            {
+                let internal_idx = opt.invest_type
+                    .get_interal_index(&export_without_unconnected, i);
+                let node = &export_without_unconnected.nodes[internal_idx];
+                let id = &node.identifier;
+                let name = format!("{stub}_investigate{id}.info");
+                let mut b = create_buf_with_command_and_version(name);
+                
+                writeln!(
+                    b, 
+                    "Investigating Country {} {}\nExports:", 
+                    id,
+                    c_map(id, &country_map)
+                ).unwrap();
+                serde_json::to_writer_pretty(&mut b, node)
+                    .unwrap();
+                writeln!(b).unwrap();
+                let write_country_names = |node: &Node, buf: &mut BufWriter<File>|
+                {
+                    if country_map.is_some(){
+                        for e in node.adj.iter(){
+                            let e_id = &export_without_unconnected.nodes[e.index].identifier;
+                            writeln!(
+                                buf, 
+                                "index {} -> id {} -> name {}",
+                                e.index,
+                                e_id,
+                                c_map(e_id, &country_map)
+                            ).unwrap();
+                        }
+                    }
+                };
+                    
+                write_country_names(node, &mut b);
+
+                writeln!(b, "Imports:").unwrap();
+                let node = &import_without_unconnected.nodes[internal_idx];
+                serde_json::to_writer_pretty(&mut b, node).unwrap();
+                let extra_map = lazy_enrichments
+                    .get_year_unckecked(opt.year);
+                
+                let extra = extra_map.get(id);
+                writeln!(b, "\nExtra:").unwrap();
+                serde_json::to_writer_pretty(&mut b, &extra).unwrap();
+                writeln!(b).unwrap();
+                write_country_names(node, &mut b);
+            }
+        );
 
     let var_name = format!("{stub}_var.dat");
     let mut buf_var = create_buf_with_command_and_version(&var_name);
@@ -758,9 +820,6 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         write_res(&mut buf_av_d, *e, d_iter);
     }
 
-
-
-
     let max_gp_index = export_without_unconnected.node_count() + 1;
     let create_gp = |data_name: &str, ylabel: &str, y_min: f64, y_max: f64|
     {
@@ -772,7 +831,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         writeln!(buf, "set xlabel \"export fraction\"").unwrap();
         writeln!(buf, "set ylabel \"{}\"", ylabel).unwrap();
         writeln!(buf, "set output \"{stub}.pdf\"").unwrap();
-        writeln!(buf, "set yrange[{}:{}]", y_min, y_max).unwrap();
+        writeln!(buf, "set yrange [{}:{}]", y_min, y_max).unwrap();
 
         write!(buf, "p ").unwrap();
 
@@ -802,7 +861,9 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     create_gp(&max_name, "Max(delta)", -1.0, 1.0);
     create_gp(&min_name, "Min(delta)", -1.0, 0.0);
     create_gp(&abs_name, "abs(Max - Min)", 0.0, 1.0);
-    create_gp(&av_d_name, "derivative of average", -1.0, 1.0);
+    create_gp(&av_d_name, "derivative of average", 0.0, 2.0);
+    create_gp(&import_name, "Number of imports", 0.0, 20.0);
+    create_gp(&import_totals_name, "Import total", 0.0, 1e6);
 
     if opt.distributions{
         let name = format!("{stub}_abs.dist");
