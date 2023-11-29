@@ -608,6 +608,9 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     let import_totals_name = format!("{stub}_import_totals.dat");
     let mut buf_import_totals = create_buf_with_command_and_version(&import_totals_name);
 
+    let distance_name = format!("{stub}_distance_to_top0.dat");
+    let mut buf_top0_dist = create_buf_with_command_and_version(&distance_name);
+
     let write_header = |buf: &mut BufWriter<File>|
     {
         write!(buf, "#IDX_1_Export_frac").unwrap();
@@ -630,6 +633,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     write_header(&mut buf_av_d);
     write_header(&mut buf_import);
     write_header(&mut buf_import_totals);
+    write_header(&mut buf_top0_dist);
 
     let export_diff = opt.export_end - opt.export_start;
     let export_delta = export_diff / (opt.export_samples - 1) as f64;
@@ -658,6 +662,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         let mut max = vec![f64::NEG_INFINITY; sum.len()];
         let mut min = vec![f64::INFINITY; sum.len()];
         let mut after_shock_avail_total = vec![0.0; sum.len()];
+        let mut is_top = true;
         for s in specifiers.iter(){
             let res = calc_shock(
                 &mut lazy_networks, 
@@ -667,6 +672,38 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 opt.iterations, 
                 &mut lazy_enrichments
             );
+
+            if is_top{
+                is_top = false;
+                let mut export = export_without_unconnected.clone();
+                // remove links that are no linger present
+                export
+                    .nodes
+                    .iter_mut()
+                    .zip(res.after_export_fract.iter())
+                    .for_each(
+                        |(node, &export)|
+                        {
+                            if export <= 0.0 {
+                                node.adj.clear();
+                            }
+                        }
+                    );
+                let distances = export.distance_from_index(res.focus_index);
+                let dist_iter = distances
+                    .into_iter()
+                    .map(
+                        |v|
+                        {
+                            let boxed: Box<dyn Display> = match v{
+                                Some(val) => Box::new(val),
+                                None => Box::new(-0.5_f64)
+                            };
+                            boxed
+                        }
+                    );
+                write_res(&mut buf_top0_dist, e, dist_iter);
+            }
 
             res.available_after_shock.iter()
                 .zip(after_shock_avail_total.iter_mut())
@@ -864,6 +901,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     create_gp(&av_d_name, "derivative of average", 0.0, 2.0);
     create_gp(&import_name, "Number of imports", 0.0, 20.0);
     create_gp(&import_totals_name, "Import total", 0.0, 1e6);
+    create_gp(&distance_name, "Distance from top 0", -1.0, 8.0);
 
     if opt.distributions{
         let name = format!("{stub}_abs.dist");

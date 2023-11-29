@@ -521,6 +521,36 @@ impl Network{
         g
     }
 
+    pub fn distance_from_index(&self, idx: usize) -> Vec<Option<u32>>
+    {
+        let mut processed = vec![false; self.node_count()];
+        let mut current_queue = VecDeque::new();
+        let mut next_queue = VecDeque::new();
+        let mut distance = vec![None; processed.len()];
+
+        current_queue.push_back(idx);
+        processed[idx] = true;
+        let mut level = 0;
+        loop{
+            while let Some(current_index) = current_queue.pop_front() {
+                distance[current_index] = Some(level);
+                let node = &self.nodes[current_index];
+                for edge in node.adj.iter(){
+                    if !processed[edge.index] {
+                        processed[edge.index] = true;
+                        next_queue.push_back(edge.index);
+                    }
+                }
+            }
+            if next_queue.is_empty(){
+                break;
+            }
+            std::mem::swap(&mut current_queue, &mut next_queue);
+            level += 1;
+        }
+        distance       
+    }
+
     pub fn diameter(&self) -> Option<usize>
     {
         let mut diameter = 0;
