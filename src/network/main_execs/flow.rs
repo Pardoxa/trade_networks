@@ -28,6 +28,14 @@ fn derivative(data: &[f64]) -> Vec<f64>
     d
 }
 
+fn integrate(slice: &[f64], delta: f64) -> f64
+{
+    let factor = delta * 0.5;
+    slice.windows(2)
+        .map(|w| (w[0] + w[1]) * factor)
+        .sum()
+}
+
 pub fn flow(opt: FlowOpt, in_file: &str)
 {
     let networks = read_networks(in_file);
@@ -657,6 +665,16 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         .map(|_| Vec::new())
         .collect();
 
+    let mut all_deltas: Vec<Vec<Vec<f64>>> = (0..export_vals.len())
+        .map(
+            |_| 
+            {
+                (0..specifiers.len())
+                    .map(|_| Vec::new())
+                    .collect()
+            }
+        ).collect();
+
     for e in export_vals.iter().copied()
     {
         let mut sum = vec![0.0; export_without_unconnected.node_count()];
@@ -665,7 +683,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         let mut min = vec![f64::INFINITY; sum.len()];
         let mut after_shock_avail_total = vec![0.0; sum.len()];
         let mut is_top = true;
-        for s in specifiers.iter(){
+        for (s_index, s) in specifiers.iter().enumerate(){
             let res = calc_shock(
                 &mut lazy_networks, 
                 opt.year, 
@@ -674,6 +692,15 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 opt.iterations, 
                 &mut lazy_enrichments
             );
+
+            res.delta_iter().zip(all_deltas.iter_mut())
+                .for_each(
+                    |(delta, list_of_lists)|
+                    {
+                        let correct_list = &mut list_of_lists[s_index];
+                        correct_list.push(delta);
+                    }
+                );
 
             if is_top{
                 is_top = false;
@@ -857,17 +884,9 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         .map(|av| derivative(av))
         .collect();
 
-    let factor = export_delta * 0.5;
-    let integrals = av_matrix.iter()
-        .map(
-            |slice|
-            {
-                let i: f64 = slice.windows(2)
-                    .map(|w| (w[0] + w[1]) * factor)
-                    .sum();
-                i
-            }
-        );
+    let integrals = av_matrix
+        .iter()
+        .map(|slice| integrate(slice, export_delta));
 
     let misc_name = format!("{stub}_misc.dat");
     let mut misc_buf = create_buf_with_command_and_version(misc_name);
@@ -942,6 +961,74 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
             }
             
         );
+
+    let all_integrals: Vec<Vec<f64>> = all_deltas
+        .iter()
+        .map(
+            |list_of_deltalists|
+            {
+                list_of_deltalists.iter()
+                    .map(|deltas| integrate(deltas, export_delta))
+                    .collect()
+            }
+        ).collect();
+
+    let worst_integral_name = format!("{stub}worst_integrals.dat");
+    let mut buf_worst_integral = create_buf_with_command_and_version(worst_integral_name);
+
+
+    let mut header_of_worst_integral = vec![
+        "This_country_ID", 
+        "WorstIntegral", 
+        "ResponsibleExporterID"
+    ];
+    if country_map.is_some(){
+        header_of_worst_integral.push("ResponsibleCountryName");
+        header_of_worst_integral.push("ThisCountryName");
+    }
+    write_slice_head(&mut buf_worst_integral, &header_of_worst_integral)
+        .unwrap();
+
+    let mut for_sorting_worst_integral: Vec<_> = export_without_unconnected
+        .nodes
+        .iter()
+        .zip(all_integrals.iter())
+        .map(
+            |(node, integral_res)|
+            {
+                let mut min = integral_res[0];
+                let mut min_index = 0;
+                for (&v, index) in integral_res[1..].iter().zip(1..)
+                {
+                    if v < min {    
+                        min_index = index; 
+                        min = v;
+                    } 
+                }
+                let responsible_exporter_id = export_without_unconnected.nodes[min_index]
+                    .identifier
+                    .as_str();
+                (node.identifier.as_str(), min, responsible_exporter_id)
+            }
+        ).collect();
+
+    for_sorting_worst_integral
+        .sort_unstable_by(|a,b| a.1.total_cmp(&b.1));
+
+    for (id, max, responsible_exporter) in for_sorting_worst_integral{
+        write!(
+            buf_worst_integral, 
+            "{} {max} {responsible_exporter}",
+            id
+        ).unwrap();
+        if let Some(map) = &country_map{
+            let responsible_name = map.get(responsible_exporter).unwrap();
+            let this_name = map.get(id).unwrap();
+            write!(buf_worst_integral, " {responsible_name} {this_name}").unwrap();
+        }
+        writeln!(buf_worst_integral).unwrap();
+    }
+        
 
 
     for (index, e) in export_vals.iter().enumerate(){
