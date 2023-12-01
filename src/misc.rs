@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io::{Write, BufWriter, BufReader};
 use std::fs::File;
 use std::path::Path;
@@ -53,4 +54,16 @@ where P: AsRef<Path>
     write_commands_and_version(&mut buf)
         .expect("Unable to write Version and Command in newly created file");
     buf
+}
+
+pub fn write_slice_head<W, S, D>(mut w: W, slice: S) -> std::io::Result<()>
+where W: std::io::Write,
+    S: IntoIterator<Item=D>,
+    D: Display
+{
+    write!(w, "#")?;
+    for (s, i) in slice.into_iter().zip(1_u16..){
+        write!(w, " {s}_{i}")?;
+    }
+    writeln!(w)
 }

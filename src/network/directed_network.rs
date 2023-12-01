@@ -66,6 +66,11 @@ impl Node {
             adj: Vec::new()
         }
     }
+
+    pub fn trade_amount(&self) -> f64
+    {
+        self.adj.iter().map(|edge| edge.amount).sum()
+    }
 }
 
 #[allow(dead_code)]
@@ -184,6 +189,64 @@ pub struct Network{
 }
 
 impl Network{
+
+    pub fn estimation(&'_ self, focus: usize) -> Vec<f64>
+    {
+        /*
+                New surplus = export - top*reduction = 0
+                => export = top*reduction
+                ergo reduction = export / top
+                reduction = 1 - export fraction
+                ergo export fraction = 1 - export / top
+        */
+        let inverted = self.invert();
+        let (import, export) = match self.direction{
+            Direction::ImportFrom => (self, &inverted),
+            Direction::ExportTo => (&inverted, self)
+        };
+
+        let total_export: Vec<_> = export
+            .nodes.iter()
+            .map(Node::trade_amount)
+            .collect();
+
+        let mut result = vec![None; export.node_count()];
+
+        export.nodes[focus]
+            .adj
+            .iter()
+            .for_each(
+                |edge|
+                {
+                    result[edge.index] = Some(
+                        1.0 - total_export[edge.index] / edge.amount
+                    );
+                }
+            );
+        result[focus] = Some(0.0);
+
+        import.nodes
+            .iter()
+            .map(
+                |n|
+                {
+                    let total_import  = n.trade_amount();
+                    n.adj.iter()
+                        .map(
+                            |edge| 
+                            {
+                                if let Some(v) = result[edge.index]{
+                                    let importance = edge.amount / total_import;
+                                    importance * v.clamp(0.0, 1.0)
+                                } else {
+                                    0.0
+                                }
+                            }
+                        ).sum()
+                }
+            ).collect()
+    }
+
     pub fn get_index(&self, s: &str) -> Option<usize>
     {
         self.nodes

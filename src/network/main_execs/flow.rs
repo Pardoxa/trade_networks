@@ -10,6 +10,8 @@ use std::io::{BufWriter, Write};
 use crate::misc::*;
 use net_ensembles::sampling::{HistF64, Histogram};
 
+const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
+
 fn derivative(data: &[f64]) -> Vec<f64>
 {
     let mut d = vec![f64::NAN; data.len()];
@@ -195,7 +197,7 @@ pub fn shock_exec(opt: ShockOpts, in_file: &str)
             .unwrap();
         let mut buf = BufWriter::new(file);
         write_commands_and_version(&mut buf).unwrap();
-        writeln!(buf, "#Bin_left Bin_right Bin_center hits normalized").unwrap();
+        write_slice_head(&mut buf, HIST_HEADER).unwrap();
         for (bins, hits) in hist.bin_hits_iter()
         {
             let normed = hits as f64 / total_f;
@@ -694,13 +696,18 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                     .into_iter()
                     .map(
                         |v|
-                        {
-                            let boxed: Box<dyn Display> = match v{
-                                Some(val) => Box::new(val),
-                                None => Box::new(-0.5_f64)
-                            };
-                            boxed
-                        }
+                        v.map_or_else(
+                            || -> Box<dyn Display> {Box::new(-0.5_f32)},
+                            |v| -> Box<dyn Display> {Box::new(v)} 
+                        )
+                        // The below was my first approach and is 
+                        // basically equivalent to the one above.
+                        // Only reason for the one above: I wanted to see if I can do it with closures
+                        /*
+                        let boxed: Box<dyn Display> = match v{
+                            Some(val) => Box::new(val),
+                            None => Box::new(-0.5_f64)
+                        };*/
                     );
                 write_res(&mut buf_top0_dist, e, dist_iter);
             }
@@ -773,7 +780,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
             let name = format!("{stub}_abs{e}.dist");
             let mut buf = create_buf_with_command_and_version(&name);
             dist_names.push(GnuplotHelper{file_name: name, title: format!("Export {e}")});
-            writeln!(buf, "#left right center hits normalized").unwrap();
+            write_slice_head(&mut buf, HIST_HEADER).unwrap();
             let total: usize = hist.hist().iter().sum();
             for (bin, hits) in hist.bin_hits_iter(){
                 let center = (bin[0] + bin[1]) / 2.0;
@@ -846,9 +853,96 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     write_focus(&mut buf_import_totals);
 
     let derivatives: Vec<_> = av_matrix
-        .into_iter()
-        .map(|av| derivative(&av))
+        .iter()
+        .map(|av| derivative(av))
         .collect();
+
+    let factor = export_delta * 0.5;
+    let integrals = av_matrix.iter()
+        .map(
+            |slice|
+            {
+                let i: f64 = slice.windows(2)
+                    .map(|w| (w[0] + w[1]) * factor)
+                    .sum();
+                i
+            }
+        );
+
+    let misc_name = format!("{stub}_misc.dat");
+    let mut misc_buf = create_buf_with_command_and_version(misc_name);
+
+    let original_dists = export_without_unconnected.distance_from_index(foci[0]);
+    let extra = lazy_enrichments.get_year_unckecked(opt.year);
+    let focus_id = &export_without_unconnected.nodes[foci[0]].identifier;
+    let flow = flow_calc(&export_without_unconnected, focus_id, opt.iterations, extra);
+
+    let production_u8 = GLOBAL_NODE_INFO_MAP.deref().get("Production");
+
+    let original_exports: Vec<f64> = export_without_unconnected
+        .nodes.iter()
+        .map(|n| n.adj.iter().map(|e| e.amount).sum())
+        .collect();
+    let original_imports: Vec<f64> = import_without_unconnected
+        .nodes.iter()
+        .map(|n| n.adj.iter().map(|e| e.amount).sum())
+        .collect();
+    let original_production: Vec<f64> = export_without_unconnected
+        .nodes
+        .iter()
+        .map(
+            |n| 
+            {
+                extra.get(&n.identifier)
+                    .and_then(|e| 
+                        e.map.get(&production_u8)
+                    ).map_or(0.0, |e| e.amount)
+            }
+        ).collect();
+    
+
+    let head = [
+        "integral", 
+        "depth(top0)", 
+        "num_importing_from", 
+        "num_exporting_to",
+        "flow_imports",
+        "flow_total",
+        "original_exports",
+        "original_imports",
+        "original_production",
+        "estimation"
+    ];
+
+    write_slice_head(&mut misc_buf, head).unwrap();
+    let estimation = import_without_unconnected.estimation(foci[0]);
+    integrals.zip(original_dists)
+        .enumerate()
+        .filter(|(_, (_, o))| o.is_some())
+        .for_each(
+            |(index, (i, o))|
+            {
+                let import_node = &import_without_unconnected.nodes[index];
+                let importing_from = import_node.adj.len(); 
+                let export_node = &export_without_unconnected.nodes[index];
+                let exporting_to = export_node.adj.len();
+
+                writeln!(
+                    misc_buf, 
+                    "{} {} {importing_from} {exporting_to} {} {} {} {} {} {}",
+                    i,
+                    o.unwrap(),
+                    flow.imports[index],
+                    flow.total[index],
+                    original_exports[index],
+                    original_imports[index],
+                    original_production[index],
+                    estimation[index]
+                ).unwrap();
+            }
+            
+        );
+
 
     for (index, e) in export_vals.iter().enumerate(){
         let d_iter = derivatives
@@ -940,7 +1034,6 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
 {
     let mut lazy_networks = LazyNetworks::Filename(in_file.to_string());
     let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file, opt.item_code);
-    let hist_header = "#left right center hits normalized";
     let specifiers = opt.top.get_specifiers();
 
     let mut names = Vec::new();
@@ -1011,7 +1104,7 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             }
         
             let mut buf = create_buf_with_command_and_version(name);
-            writeln!(buf, "{hist_header}").unwrap();
+            write_slice_head(&mut buf, HIST_HEADER).unwrap();
             let total: usize = hist.hist().iter().sum();
         
             for (bin, hits) in hist.bin_hits_iter(){
@@ -1072,7 +1165,7 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
 
             let name = format!("{}.combined", &gp_names[i]);
             let mut buf = create_buf_with_command_and_version(&name);
-            writeln!(buf, "{hist_header}").unwrap();
+            write_slice_head(&mut buf, HIST_HEADER).unwrap();
 
             for (bin, &hits) in bins.iter().zip(hist)
             {
