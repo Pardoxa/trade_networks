@@ -163,6 +163,13 @@ pub struct Tests{
     pub command: SubCommand
 }
 
+#[derive(Parser, Debug)]
+pub struct WorstIntegralCombineOpts{
+    /// First name will be used for sorting
+    #[arg(short, long)]
+    pub filenames: Vec<String>
+}
+
 #[derive(Subcommand, Debug)]
 pub enum SubCommand{
     /// Calculate out component overlap
@@ -178,6 +185,7 @@ pub enum SubCommand{
     ShockDist(ShockDistOpts),
     CountryCount(CountryCountOpt),
     ReduceX(XOpts),
+    CombineWorstIntegrals(WorstIntegralCombineOpts)
 }
 
 
