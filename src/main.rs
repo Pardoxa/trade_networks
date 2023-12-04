@@ -7,6 +7,7 @@ mod network;
 mod misc;
 use network::main_execs::*;
 mod units;
+use parser::parse_all_extras;
 pub use units::*;
 
 fn main() {
@@ -22,7 +23,8 @@ fn main() {
         CmdChooser::Enrichment(opt) => enrich(opt),
         CmdChooser::Tests(t) => test_chooser(&t.in_file, t.command),
         CmdChooser::ParseEnrichment(o) => enrich_to_bin(o),
-        CmdChooser::Three(t) => three_set_exec(t)
+        CmdChooser::Three(t) => three_set_exec(t),
+        CmdChooser::ParseAllEnrichments(opt) => parse_all_extras(opt.in_files)
     }
 }
 

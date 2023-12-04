@@ -77,6 +77,14 @@ pub struct ParseAllNetworksOpt{
 }
 
 #[derive(Parser, Debug)]
+pub struct ParseAllEnrichmentsOpt{
+    #[arg(long, short, required=true)]
+    /// Path to csvs to read in
+    pub in_files: Vec<String>,
+
+}
+
+#[derive(Parser, Debug)]
 pub struct EnrichOpt{
     #[arg(long)]
     /// Path to binary network file
@@ -113,6 +121,7 @@ pub enum CmdChooser{
     ParseAllNetworks(ParseAllNetworksOpt),
     Tests(Tests),
     ParseEnrichment(ParseEnrichOpts),
+    ParseAllEnrichments(ParseAllEnrichmentsOpt),
     Three(ThreeS)
 }
 

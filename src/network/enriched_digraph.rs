@@ -16,7 +16,7 @@ lazy_static! {
 }
 
 
-const POSSIBLE_NODE_INFO: [&str; 26] = [
+const POSSIBLE_NODE_INFO: [&str; 29] = [
     "Area harvested",
     "Domestic supply quantity",
     "Export Quantity",
@@ -30,9 +30,11 @@ const POSSIBLE_NODE_INFO: [&str; 26] = [
     "Import Quantity",
     "Laying",
     "Losses",
+    "Milk Animals",
     "Other uses (non-food)",
     "Processing",
     "Production",
+    "Prod Popultn",
     "Producing Animals/Slaughtered",
     "Protein supply quantity (g/capita/day)",
     "Protein supply quantity (t)",
@@ -40,6 +42,7 @@ const POSSIBLE_NODE_INFO: [&str; 26] = [
     "Seed",
     "Stocks",
     "Stock Variation",
+    "Tourist consumption",
     "Total Population - Both sexes",
     "Yield",
     "Yield/Carcass Weight"
@@ -236,10 +239,16 @@ impl EnrichmentInfos{
         }
     }
 
+    #[inline]
+    pub fn year_to_idx(&self, year: i32) -> usize
+    {
+        (year - self.starting_year) as usize
+    }
+
     pub fn get_year(&self, year: i32) -> & BTreeMap<String, ExtraInfo>
     {
-        let idx =  year - self.starting_year;
-        &self.enrichments[idx as usize]
+        let idx =  self.year_to_idx(year);
+        &self.enrichments[idx]
     }
 
     pub fn get_mut_inserting<'a>(&'a mut self, year_idx: usize, country: &str) -> &'a mut ExtraInfo

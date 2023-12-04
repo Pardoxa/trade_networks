@@ -1,3 +1,5 @@
+use std::{path::Path, collections::*};
+
 use crate::{config::ReadType, misc::*, UNIT_TESTER};
 
 use{
@@ -16,6 +18,47 @@ use{
     crate::network::*,
     crate::parser::enriched_digraph::*
 };
+
+#[derive(Clone, Copy)]
+pub struct Years{
+    pub start_year: i32,
+    pub end_year: i32,
+}
+
+impl Years{
+    pub fn min_max_bounds(&mut self, other: Years)
+    {
+        if self.start_year > other.start_year{
+            self.start_year = other.start_year;
+        }
+        if self.end_year < other.end_year{
+            self.end_year = other.end_year;
+        }
+    }
+}
+
+pub fn get_start_year(header_slice: &[String]) -> Years
+{
+    let mut start_year = i32::MAX;
+    let mut end_year = i32::MIN;
+    for s in header_slice.iter()
+    {
+        if let Some(s) = s.strip_prefix('Y'){
+            let number: i32 = s.parse().unwrap();
+            if number < start_year{
+                start_year = number;
+            }
+            if number > end_year{
+                end_year = number;
+            }
+        }
+    }
+    if start_year == i32::MAX{
+        panic!("Unable to find start year");
+    }
+    Years { start_year, end_year }
+}
+
 
 pub fn line_to_vec(line: &str) -> Vec<String>
 {
@@ -37,6 +80,130 @@ pub fn line_to_vec(line: &str) -> Vec<String>
     all
 }
 
+pub fn parse_all_extras<I, P>(in_files: I)
+where I: IntoIterator<Item = P>,
+    P: AsRef<Path>
+{
+    let paths: Vec<_> = in_files.into_iter().collect();
+    let mut item_codes: HashMap<String, Years> = HashMap::new();
+    for p in paths.iter(){
+        let path = p.as_ref();
+        let reader = open_bufreader(path);
+        let mut lines = reader.lines()
+            .map(Result::unwrap);
+
+        let header = line_to_vec(&lines.next().unwrap());
+        let item_code_idx = header.iter()
+            .position(|item| item == "Item Code")
+            .expect("No Item code available!");
+
+        let year_info = get_start_year(&header);
+
+        for line in lines{
+            let mut line_vec = line_to_vec(&line);
+            let item_code = line_vec.swap_remove(item_code_idx);
+            item_codes.entry(item_code)
+                .and_modify(
+                    |stored_year|
+                    {
+                        stored_year.min_max_bounds(year_info);
+                    }
+                ).or_insert(year_info);
+        }
+    }
+
+    let mut results: HashMap<_, _> = item_codes.iter()
+        .map(
+            |(item_code, year_info)|
+            {
+                let num_entries = year_info.end_year - year_info.start_year + 1;
+                let enrichment = EnrichmentInfos::new(num_entries as usize, year_info.start_year, item_code.clone());
+                (item_code.clone(), enrichment)
+            } 
+        ).collect();
+
+    let global_node_info = GLOBAL_NODE_INFO_MAP.deref();
+    let global_unit_tester = UNIT_TESTER.deref();
+    let mut removed_counter = 0;
+
+    for p in paths{
+        let path = p.as_ref();
+        let reader = open_bufreader(path);
+        
+        let mut lines = reader.lines()
+            .map(Result::unwrap);
+        let header = line_to_vec(&lines.next().unwrap());
+        let year_info = get_start_year(&header);
+        let header_map: HashMap<_,_> = header.into_iter()
+            .zip(0_usize..)
+            .collect();
+
+        let item_code_idx = *header_map.get("Item Code").unwrap();
+
+        let year_start_id = format!("Y{}", year_info.start_year);
+        let year_start_idx = *header_map.get(&year_start_id).unwrap();
+
+        let country_idx = *header_map.get("Area Code").unwrap();
+        let info_idx = *header_map.get("Element")
+            .expect("Does not contain Element");
+        let unit_idx = *header_map.get("Unit")
+            .expect("No Unit found");
+
+        for line in lines {
+            let line_vec = line_to_vec(&line);
+            let item_code = line_vec[item_code_idx].as_str();
+            
+
+            if let Some(enrichment) = results.get_mut(item_code){
+                // enrichment is still valid.
+                // now I need to modify it accordingly
+
+                let country = &line_vec[country_idx];
+
+                let info_type = &line_vec[info_idx];
+                let info_type_u8 = global_node_info.get(info_type);
+                let unit = &line_vec[unit_idx];
+
+                for (s, year) in line_vec[year_start_idx..].iter().zip(year_info.start_year..)
+                {
+                    if !s.is_empty(){
+                        let amount: f64 = s.parse().unwrap();
+                        let year_idx = enrichment.year_to_idx(year);
+                        let entry = enrichment.get_mut_inserting(year_idx, country);
+                        let extra = Extra{
+                            unit: unit.clone(),
+                            amount
+                        };
+                        if let Some(e) = entry.map.get(&info_type_u8){
+                            assert!(
+                                !global_unit_tester.is_equiv(&e.unit, &extra.unit),
+                                "Info already present, but units equivalent?"
+                            );
+                            eprintln!("Removing {item_code} because of unit missmatch");
+                            results.remove(item_code);
+                            removed_counter += 1;
+                            break;
+                        }
+                        
+                        entry.map.insert(info_type_u8, extra);
+                    }
+                }
+            }
+        }
+    }
+
+    if removed_counter > 0 {
+        println!("Removed a total of {removed_counter} due to unit missmatches");
+    }
+
+    for (item_code, enrichment) in results.iter(){
+        let name = format!("e{item_code}.bincode");
+        let buf = create_buf(name);
+        bincode::serialize_into(buf, enrichment)
+            .unwrap();
+    }
+
+}
 
 pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> EnrichmentInfos
 {
