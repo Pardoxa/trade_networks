@@ -342,8 +342,10 @@ pub struct XOpts{
     pub distributions: bool,
 
     /// A negative total for a country will result in NaN or Inf
+    /// for this specific country. All other countries will still be 
+    /// calculated as usual
     #[arg(long)]
-    pub forbit_negative_total: bool,
+    pub forbid_negative_total: bool,
 
     /// Do not write the Acc files
     #[arg(long)]

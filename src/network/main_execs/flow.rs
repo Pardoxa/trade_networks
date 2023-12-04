@@ -341,6 +341,15 @@ impl CalculatedShocks{
                 }
             )
     }
+
+    pub fn choose_delta_iter(&'_ self, nan_for_neg_before: bool) -> Box<dyn Iterator<Item = f64> + '_> 
+    {
+        if nan_for_neg_before{
+            Box::new(self.delta_or_nan_iter())
+        } else {
+            Box::new(self.delta_iter())
+        }
+    }
 }
 
 
@@ -594,31 +603,31 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
             }
         );
 
-    let var_name = format!("{stub}_var.dat");
+    let var_name = format!("{stub}var.dat");
     let mut buf_var = create_buf_with_command_and_version(&var_name);
 
-    let av_name = format!("{stub}_av.dat");
+    let av_name = format!("{stub}av.dat");
     let mut buf_av = create_buf_with_command_and_version(&av_name);
 
-    let av_d_name = format!("{stub}_av_derivative.dat");
+    let av_d_name = format!("{stub}av_derivative.dat");
     let mut buf_av_d = create_buf_with_command_and_version(&av_d_name);
 
-    let max_name = format!("{stub}_max.dat");
+    let max_name = format!("{stub}max.dat");
     let mut buf_max = create_buf_with_command_and_version(&max_name);
 
-    let min_name = format!("{stub}_min.dat");
+    let min_name = format!("{stub}min.dat");
     let mut buf_min = create_buf_with_command_and_version(&min_name);
 
-    let abs_name = format!("{stub}_min_max_abs.dat");
+    let abs_name = format!("{stub}min_max_abs.dat");
     let mut buf_abs = create_buf_with_command_and_version(&abs_name);
 
-    let import_name = format!("{stub}_import.dat");
+    let import_name = format!("{stub}import.dat");
     let mut buf_import = create_buf_with_command_and_version(&import_name);
 
-    let import_totals_name = format!("{stub}_import_totals.dat");
+    let import_totals_name = format!("{stub}import_totals.dat");
     let mut buf_import_totals = create_buf_with_command_and_version(&import_totals_name);
 
-    let distance_name = format!("{stub}_distance_to_top0.dat");
+    let distance_name = format!("{stub}distance_to_top0.dat");
     let mut buf_top0_dist = create_buf_with_command_and_version(&distance_name);
 
     let write_header = |buf: &mut BufWriter<File>|
@@ -693,7 +702,10 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 &mut lazy_enrichments
             );
 
-            res.delta_iter().zip(all_deltas.iter_mut())
+            let iter = res
+                .choose_delta_iter(opt.forbid_negative_total);
+
+            iter.zip(all_deltas.iter_mut())
                 .for_each(
                     |(delta, list_of_lists)|
                     {
@@ -747,11 +759,8 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 foci.push(res.focus_index);
             }
 
-            let iter: Box<dyn Iterator<Item=f64>> = if opt.forbit_negative_total{
-                Box::new(res.delta_or_nan_iter())
-            } else {
-                Box::new(res.delta_iter())
-            };
+            let iter = res
+                .choose_delta_iter(opt.forbid_negative_total);
 
             for (i, delta) in iter.enumerate()
             {
@@ -804,7 +813,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                 }
                 hist.increment_quiet(a);
             }
-            let name = format!("{stub}_abs{e}.dist");
+            let name = format!("{stub}abs{e}.dist");
             let mut buf = create_buf_with_command_and_version(&name);
             dist_names.push(GnuplotHelper{file_name: name, title: format!("Export {e}")});
             write_slice_head(&mut buf, HIST_HEADER).unwrap();
@@ -838,11 +847,11 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                     writeln!(buf, "{i} {val} {id}").unwrap();
                 }
             };
-            let name = format!("{stub}_min{e}.txt");
+            let name = format!("{stub}min{e}.txt");
             write_sorted(&min, &name);
             min_names.push((e, name));
     
-            let name = format!("{stub}_max{e}.txt");
+            let name = format!("{stub}max{e}.txt");
             write_sorted(&max, &name);
             max_names.push((e, name));
         }
@@ -888,7 +897,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         .iter()
         .map(|slice| integrate(slice, export_delta));
 
-    let misc_name = format!("{stub}_misc.dat");
+    let misc_name = format!("{stub}misc.dat");
     let mut misc_buf = create_buf_with_command_and_version(misc_name);
 
     let original_dists = export_without_unconnected.distance_from_index(foci[0]);
@@ -1085,7 +1094,7 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     create_gp(&distance_name, "Distance from top 0", -1.0, 8.0);
 
     if opt.distributions{
-        let name = format!("{stub}_abs.dist");
+        let name = format!("{stub}abs.dist");
         let relative = opt.top.get_relative();
         write_gnuplot(
             &name, 
@@ -1097,8 +1106,8 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
 
     let acc_gnuplot = |name: &str, names: &[(f64, String)]|
     {
-        let gp_name = format!("ACC_{stub}_{name}.gp");
-        let out_name = format!("ACC_{stub}_{name}.pdf");
+        let gp_name = format!("ACC_{stub}{name}.gp");
+        let out_name = format!("ACC_{stub}{name}.pdf");
         let mut buf = create_buf_with_command_and_version(gp_name);
         writeln!(buf, "reset session").unwrap();
         writeln!(buf, "set t pdfcairo").unwrap();
