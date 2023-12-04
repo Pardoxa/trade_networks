@@ -82,6 +82,12 @@ pub struct ParseAllEnrichmentsOpt{
     /// Path to csvs to read in
     pub in_files: Vec<String>,
 
+    /// Only consider specified unit, disregard all other entries.
+    /// Can be used to get infos of items that are in the database with 
+    /// different units
+    #[arg(long, short)]
+    pub only_unit: Option<String>
+
 }
 
 #[derive(Parser, Debug)]

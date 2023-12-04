@@ -80,12 +80,13 @@ pub fn line_to_vec(line: &str) -> Vec<String>
     all
 }
 
-pub fn parse_all_extras<I, P>(in_files: I)
+pub fn parse_all_extras<I, P>(in_files: I, only_unit: Option<String>)
 where I: IntoIterator<Item = P>,
     P: AsRef<Path>
 {
     let paths: Vec<_> = in_files.into_iter().collect();
     let mut item_codes: HashMap<String, Years> = HashMap::new();
+    let global_unit_tester = UNIT_TESTER.deref();
     for p in paths.iter(){
         let path = p.as_ref();
         let reader = open_bufreader(path);
@@ -97,10 +98,20 @@ where I: IntoIterator<Item = P>,
             .position(|item| item == "Item Code")
             .expect("No Item code available!");
 
+        let unit_idx = header.iter()
+            .position(|p| p == "Unit")
+            .unwrap();
+
         let year_info = get_start_year(&header);
 
         for line in lines{
             let mut line_vec = line_to_vec(&line);
+            if let Some(specific) = only_unit.as_deref(){
+                let unit = line_vec[unit_idx].as_str();
+                if !global_unit_tester.is_equiv(specific, unit){
+                    continue;
+                }
+            }
             let item_code = line_vec.swap_remove(item_code_idx);
             item_codes.entry(item_code)
                 .and_modify(
@@ -123,7 +134,7 @@ where I: IntoIterator<Item = P>,
         ).collect();
 
     let global_node_info = GLOBAL_NODE_INFO_MAP.deref();
-    let global_unit_tester = UNIT_TESTER.deref();
+    
     let mut removed_counter = 0;
 
     for p in paths{
@@ -152,7 +163,14 @@ where I: IntoIterator<Item = P>,
         for line in lines {
             let line_vec = line_to_vec(&line);
             let item_code = line_vec[item_code_idx].as_str();
-            
+
+            let unit = &line_vec[unit_idx];
+
+            if let Some(specific_unit) = only_unit.as_deref(){
+                if !global_unit_tester.is_equiv(specific_unit, unit){
+                    continue;
+                }
+            }
 
             if let Some(enrichment) = results.get_mut(item_code){
                 // enrichment is still valid.
@@ -162,7 +180,7 @@ where I: IntoIterator<Item = P>,
 
                 let info_type = &line_vec[info_idx];
                 let info_type_u8 = global_node_info.get(info_type);
-                let unit = &line_vec[unit_idx];
+                
 
                 for (s, year) in line_vec[year_start_idx..].iter().zip(year_info.start_year..)
                 {
