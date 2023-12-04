@@ -145,16 +145,29 @@ impl LazyEnrichmentInfos{
         self.enrichment_infos_unchecked().get_node_map()
     }
 
-    pub fn get_item_code_unchecked(&self) -> &str{
+    pub fn get_item_codes_unchecked(&self) -> &[String]{
         &self.enrichment_infos_unchecked()
-            .item_code
+            .sorted_item_codes
+    }
+
+    pub fn item_codes_as_string_unchecked(&self) -> String
+    {
+        let slice = self.get_item_codes_unchecked();
+        let cap = 10 * slice.len();
+        let mut s = String::with_capacity(cap);
+        for item_code in slice{
+            s.push_str("Item");
+            s.push_str(item_code);
+            s.push('_');
+        }
+        s
     }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentInfos{
     pub starting_year: i32,
-    pub item_code: String,
+    pub sorted_item_codes: Vec<String>,
     pub possible_node_info: Vec<String>,
     pub enrichments: Vec<BTreeMap<String, ExtraInfo>>
 }
@@ -219,7 +232,7 @@ impl EnrichmentInfos{
             starting_year,
             possible_node_info: infos,
             enrichments: e,
-            item_code
+            sorted_item_codes: vec![item_code]
         }
     }
 

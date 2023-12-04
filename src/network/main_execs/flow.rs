@@ -524,8 +524,8 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
 
     let stub = opt.top.get_string();
     let stub = format!(
-        "{stub}_Item{}", 
-        lazy_enrichments.get_item_code_unchecked()
+        "{stub}_{}", 
+        lazy_enrichments.item_codes_as_string_unchecked()
     );
 
     let country_map = opt.country_map
@@ -1133,7 +1133,7 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
             vec![0; opt.bins]
         ).collect();
 
-
+    let enrich_item_name_string = lazy_enrichment.item_codes_as_string_unchecked();
     for s in specifiers.iter(){
         let mut v = Vec::new();
         
@@ -1148,10 +1148,11 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                 &mut lazy_enrichment
             );
 
+            
             let name_stub = format!(
-                "{}_item{}_y{}_e{e}.dat", 
+                "{}_{}_y{}_e{e}.dat", 
                 s.get_string(), 
-                lazy_enrichment.get_item_code_unchecked(), 
+                enrich_item_name_string, 
                 opt.year
             );
 
@@ -1162,7 +1163,7 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
                     format!(
                         "{}_item{}_y{}_e{e}", 
                         s.get_short_str(), 
-                        lazy_enrichment.get_item_code_unchecked(), 
+                        enrich_item_name_string, 
                         opt.year
                     )
                 );
@@ -1281,8 +1282,7 @@ pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
     }
 
     if !combined_names.is_empty(){
-        let item_code = lazy_enrichment.get_item_code_unchecked();
-        let name = format!("{}_combined_Item{}", opt.top.get_string(), item_code);
+        let name = format!("{}_combined_{}", opt.top.get_string(), enrich_item_name_string);
         let iter = combined_names
             .iter()
             .zip(opt.export.iter())

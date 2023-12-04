@@ -185,7 +185,8 @@ pub struct Network{
     pub data_origin: ReadType,
     pub unit: String,
     pub nodes: Vec<Node>,
-    pub year: i32
+    pub year: i32,
+    pub sorted_item_codes: Vec<String>
 }
 
 impl Network{
@@ -355,7 +356,8 @@ impl Network{
             direction: self.direction, 
             year: self.year,
             data_origin: self.data_origin,
-            unit: self.unit.clone()
+            unit: self.unit.clone(),
+            sorted_item_codes: self.sorted_item_codes.clone()
         }
     }
 
@@ -444,7 +446,8 @@ impl Network{
             direction: self.direction.invert(),
             year: self.year,
             data_origin: self.data_origin,
-            unit: self.unit.clone()
+            unit: self.unit.clone(),
+            sorted_item_codes: self.sorted_item_codes.clone()
         }
     }
 
@@ -687,7 +690,8 @@ impl Network{
             direction: self.direction,
             year: self.year,
             data_origin: self.data_origin,
-            unit: self.unit.clone()
+            unit: self.unit.clone(),
+            sorted_item_codes: self.sorted_item_codes.clone()
         }
     }
 

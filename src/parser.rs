@@ -42,12 +42,13 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
 {
     println!("PARSING EXTRA");
     {
-        let check_item_code = |item_code: &str|
+        let check_item_code = |item_codes: &[String]|
         {
+            assert_eq!(1, item_codes.len());
             if let Some(t_item_code) = target_item_code{
                 assert_eq!(
                     t_item_code, 
-                    item_code,
+                    &item_codes[0],
                     "Missmatch in Item code between Request and Savefile"
                 );
             } 
@@ -56,7 +57,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
         if in_file.ends_with(".bincode"){
             let buf = open_bufreader(in_file);
             if let Ok(r) = bincode::deserialize_from::<_, EnrichmentInfos>(buf){
-                check_item_code(&r.item_code);
+                check_item_code(&r.sorted_item_codes);
                 return r;
             }
         }
@@ -64,7 +65,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
         if in_file.ends_with(".json"){
             let buf = open_bufreader(in_file);
             if let Ok(r) = serde_json::from_reader::<_, EnrichmentInfos>(buf){
-                check_item_code(&r.item_code);
+                check_item_code(&r.sorted_item_codes);
                 return r;
             }
         }
@@ -270,7 +271,8 @@ pub fn parse_all_networks(
                         direction,
                         data_origin: read_type,
                         year: *year,
-                        unit: unit.clone()
+                        unit: unit.clone(),
+                        sorted_item_codes: vec![item_code.clone()]
                     }
                 }
             ).collect();
@@ -478,7 +480,8 @@ pub fn network_parser(
                     direction,
                     data_origin: read_type,
                     year: *year,
-                    unit: glob_unit.as_ref().unwrap().clone()
+                    unit: glob_unit.as_ref().unwrap().clone(),
+                    sorted_item_codes: vec![item_code.to_string()]
                 }
             }
         )
