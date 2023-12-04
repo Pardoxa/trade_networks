@@ -122,7 +122,14 @@ pub enum CmdChooser{
     Tests(Tests),
     ParseEnrichment(ParseEnrichOpts),
     ParseAllEnrichments(ParseAllEnrichmentsOpt),
-    Three(ThreeS)
+    Three(ThreeS),
+    PrintNetworkInfos(OnlyNetworks)
+}
+
+#[derive(Parser, Debug)]
+pub struct OnlyNetworks{
+    /// Networks file
+    pub in_file: String
 }
 
 

@@ -24,7 +24,8 @@ fn main() {
         CmdChooser::Tests(t) => test_chooser(&t.in_file, t.command),
         CmdChooser::ParseEnrichment(o) => enrich_to_bin(o),
         CmdChooser::Three(t) => three_set_exec(t),
-        CmdChooser::ParseAllEnrichments(opt) => parse_all_extras(opt.in_files)
+        CmdChooser::ParseAllEnrichments(opt) => parse_all_extras(opt.in_files),
+        CmdChooser::PrintNetworkInfos(opt) => print_network_info(opt)
     }
 }
 

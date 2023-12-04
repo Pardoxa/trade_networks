@@ -177,6 +177,26 @@ impl LazyNetworks{
         panic!("{YEAR_ERR}")
     }
 
+    pub fn export_networks_unchecked(&self) -> &[Network]
+    {
+        match self{
+            Self::Filename(_) => unreachable!(),
+            Self::Networks(_, export) => {
+                export
+            }
+        }
+    }
+
+    pub fn import_networks_unchecked(&self) -> &[Network]
+    {
+        match self{
+            Self::Filename(_) => unreachable!(),
+            Self::Networks(import, _) => {
+                import
+            }
+        }
+    }
+
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

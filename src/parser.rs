@@ -179,7 +179,11 @@ where I: IntoIterator<Item = P>,
                                 !global_unit_tester.is_equiv(&e.unit, &extra.unit),
                                 "Info already present, but units equivalent?"
                             );
-                            eprintln!("Removing {item_code} because of unit missmatch");
+                            eprintln!(
+                                "Removing {item_code} because of unit missmatch: {} vs {}",
+                                e.unit,
+                                extra.unit
+                            );
                             results.remove(item_code);
                             removed_counter += 1;
                             break;
