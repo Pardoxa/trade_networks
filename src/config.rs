@@ -1,4 +1,4 @@
-use std::num::NonZeroUsize;
+use std::{num::NonZeroUsize, path::PathBuf};
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::network::{Direction, NetworkType, main_execs::Relative, Network};
 use serde::{Serialize, Deserialize};
@@ -129,7 +129,8 @@ pub enum CmdChooser{
     ParseEnrichment(ParseEnrichOpts),
     ParseAllEnrichments(ParseAllEnrichmentsOpt),
     Three(ThreeS),
-    PrintNetworkInfos(OnlyNetworks)
+    PrintNetworkInfos(OnlyNetworks),
+    Correlations(CorrelationOpts)
 }
 
 #[derive(Parser, Debug)]
@@ -625,4 +626,12 @@ impl ReadType{
             ReadType::ExportValue | ReadType::ImportValue => NetworkType::Value
         }
     }
+}
+
+#[derive(Parser, Debug)]
+pub struct CorrelationOpts
+{
+    #[arg(required=true)]
+    /// The files to correlate
+    pub files: Vec<PathBuf>
 }

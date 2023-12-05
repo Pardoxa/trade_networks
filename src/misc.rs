@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::io::{Write, BufWriter, BufReader};
+use std::io::{Write, BufWriter, BufReader, BufRead};
 use std::fs::File;
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -45,6 +45,14 @@ where P: AsRef<Path>
     let file = File::open(path)
         .expect("Unable to open file");
     BufReader::new(file)
+}
+
+pub fn open_as_lines_unchecked<P>(path: P) -> impl Iterator<Item = String>
+where P: AsRef<Path>
+{
+    open_bufreader(path)
+        .lines()
+        .map(Result::unwrap)
 }
 
 pub fn create_buf_with_command_and_version<P>(path: P) -> BufWriter<File>

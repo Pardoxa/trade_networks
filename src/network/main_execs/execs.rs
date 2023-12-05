@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::parser::{parse_all_networks, country_map};
 
 use {
@@ -439,75 +437,11 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         SubCommand::ShockAvail(s) => shock_avail(s, in_file),
         SubCommand::ShockDist(d) => shock_dist(d, in_file),
         SubCommand::ReduceX(o) => reduce_x(o, in_file),
-        SubCommand::CombineWorstIntegrals(opts) => worst_integral_sorting(opts)
+        SubCommand::CombineWorstIntegrals(opts) => crate::other_exec::worst_integral_sorting(opts)
     }
 }
 
-pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
-{
-    println!("Sorting");
-    assert!(opt.filenames.len() >= 2, "Nothing to sort, specify more files!");
-    let mut sorting = HashMap::new();
-    let buf = open_bufreader(&opt.filenames[0]);
-    let lines = buf.lines()
-        .map(|l| l.unwrap())
-        .filter(|l| !l.starts_with('#'));
 
-    let mut order_counter = 0_u32;
-    for line in lines {
-        let this_id = line.split_whitespace().next().unwrap();
-        sorting.insert(this_id.to_owned(), order_counter);
-        order_counter += 1;
-    }
-
-    for other_name in opt.filenames[1..].iter(){
-        let filename = other_name.split('/').last().unwrap();
-        let new_name = format!("{filename}.sorted");
-        println!("CREATING {new_name}");
-        let mut buf = create_buf_with_command_and_version(new_name);
-        let reader = open_bufreader(other_name);
-        let lines = reader.lines()
-            .map(|l| l.unwrap());
-
-        let mut for_sorting = Vec::new();
-        for line in lines{
-            if line.starts_with('#'){
-                writeln!(buf, "{line}").unwrap();
-            } else{
-                let country = line.split_whitespace().next().unwrap();
-                if let Some(order) = sorting.get(country){
-                    for_sorting.push((*order, line));
-                } else {
-                    sorting.insert(country.to_owned(), order_counter);
-                    for_sorting.push((order_counter, line));
-                    order_counter += 1;
-                }
-            }
-        }
-
-        for_sorting.sort_unstable_by_key(|a| a.0);
-
-        let mut written_counter = 0;
-        for (order, line) in for_sorting{
-            if written_counter == order{
-                writeln!(buf, "{line}").unwrap();
-                written_counter += 1;
-            }
-            else{
-                let missing = order.checked_sub(written_counter).unwrap();
-                for _ in 0..missing{
-                    writeln!(buf, "NaN NaN NaN NaN NaN").unwrap();
-                }
-                written_counter += missing;
-                writeln!(buf, "{line}").unwrap();
-                written_counter += 1;
-            }
-            
-        }
-
-    }
-
-}
 
 pub fn country_count(in_file: &str, opt: CountryCountOpt){
     let networks = read_networks(in_file);
