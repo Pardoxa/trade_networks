@@ -9,7 +9,8 @@ use {
             BufRead,
             Write
         }
-    }
+    },
+    serde::{Serialize, Deserialize}
 };
 
 pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
@@ -34,7 +35,7 @@ pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
         let new_name = format!("{filename}.sorted");
         println!("CREATING {new_name}");
         let mut buf = create_buf_with_command_and_version(new_name);
-        let lines = open_as_lines_unchecked(other_name);
+        let lines = open_as_unwrapped_lines(other_name);
 
         let mut for_sorting = Vec::new();
         for line in lines{
@@ -127,16 +128,41 @@ fn goods_cor_iter<'a>(a: &'a HashMap<u16, f64>, b: &'a HashMap<u16, f64>) -> imp
         ).filter(|(a, b)| a.is_finite() && b.is_finite())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrelationInput{
+    pub path: String,
+    pub plot_name: String
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrelationMeasurement{
+    pub inputs: Vec<CorrelationInput>
+}
+
+impl Default for CorrelationMeasurement{
+    fn default() -> Self {
+        let example = CorrelationInput{
+            path: "InputPath".to_owned(), 
+            plot_name: "Corresponding Name".to_string()
+        };
+        Self { inputs: vec![example] }
+    }
+}
+
+
 pub fn correlations(opt: CorrelationOpts)
 {
+    let inputs: CorrelationMeasurement = read_or_create(opt.measurement);
+
     let mut all_countries = HashSet::new();
 
-    let all_infos: Vec<HashMap<_, _>> = opt.files
+    let all_infos: Vec<HashMap<_, _>> = inputs.inputs
         .iter()
         .map(
-            |path|
+            |i|
             {
-                open_as_lines_unchecked(path)
+                let path = i.path.as_str();
+                open_as_unwrapped_lines(path)
                     .filter(|l| !l.starts_with('#'))
                     .map(
                         |line|

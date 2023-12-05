@@ -631,7 +631,6 @@ impl ReadType{
 #[derive(Parser, Debug)]
 pub struct CorrelationOpts
 {
-    #[arg(required=true)]
     /// The files to correlate
-    pub files: Vec<PathBuf>
+    pub measurement: PathBuf
 }
