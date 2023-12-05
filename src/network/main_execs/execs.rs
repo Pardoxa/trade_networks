@@ -1096,31 +1096,26 @@ pub fn to_three_sets(file: &str, border_low: f64, border_high: f64) -> ThreeSets
 
 pub fn print_network_info(opt: OnlyNetworks)
 {
+    fn print_info(n: &Network)
+    {
+        let without_unconnected = n.without_unconnected_nodes();
+        println!(
+            "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}", 
+            n.unit, 
+            n.data_origin, 
+            n.year,
+            n.direction,
+            without_unconnected.node_count()
+        );
+    }
+
     let mut networks = LazyNetworks::Filename(opt.in_file);
     networks.assure_availability();
     let export = networks.export_networks_unchecked();
     println!("Export:");
-    for n in export{
-        
-        println!(
-            "Unit: {} DataOrigin {:?} Year {} Direction {:?}", 
-            n.unit, 
-            n.data_origin, 
-            n.year,
-            n.direction
-        );
-    }
+    export.iter().for_each(print_info);
 
     let import = networks.import_networks_unchecked();
     println!("Import:");
-    for n in import{
-        
-        println!(
-            "Unit: {} DataOrigin {:?} Year {} Direction {:?}", 
-            n.unit, 
-            n.data_origin, 
-            n.year,
-            n.direction
-        );
-    }
+    import.iter().for_each(print_info);
 }
