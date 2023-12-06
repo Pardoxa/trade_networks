@@ -11,7 +11,8 @@ use {
         }
     },
     serde::{Serialize, Deserialize},
-    sampling::{GnuplotTerminal, GnuplotSettings, GnuplotAxis}
+    sampling::{GnuplotTerminal, GnuplotSettings, GnuplotAxis},
+    itertools::Itertools
 };
 
 pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
@@ -159,7 +160,7 @@ pub fn correlations(opt: CorrelationOpts)
 {
     let inputs: CorrelationMeasurement = read_or_create(opt.measurement);
 
-    let mut all_countries = HashSet::new();
+    let mut all_countries = BTreeSet::new();
 
     let all_infos: Vec<HashMap<_, _>> = inputs.inputs
         .iter()
@@ -229,6 +230,89 @@ pub fn correlations(opt: CorrelationOpts)
         inputs.inputs.len(), 
         inputs.inputs.len(), 
         matrix_name
+    ).unwrap();
+
+    // Now I need to calculate the other correlations.
+    let country_matrix_name = format!("{}_country.matrix", inputs.output_stub);
+    let mut buf = create_buf_with_command_and_version(&country_matrix_name);
+    let old_country_len = all_countries.len();
+    all_countries
+        .retain(
+            |country|
+            {
+                all_infos
+                    .iter()
+                    .filter_map(|set| set.get(country))
+                    .filter(|val| val.is_finite())
+                    .tuple_windows()
+                    .any(|(a,b)| a.ne(b))
+            }
+        );
+    println!("REMOVED {} countries", old_country_len - all_countries.len());
+
+    let mut nan_counter = 0;
+    // NOTE: So far I do not ignore countries that trade not enough goods
+    all_countries
+        .iter()
+        .for_each(
+            |this|
+            {
+                all_countries
+                    .iter()
+                    .for_each(
+                        |other|
+                        {
+                            let iter = all_infos
+                                .iter()
+                                .filter_map(
+                                    |map|
+                                    {
+                                        map.get(this)
+                                            .zip(map.get(other))
+                                    }
+                                )
+                                .filter(|(a,b)| a.is_finite() && b.is_finite())
+                                .map(|(a,b)| (*a, *b));
+
+                            let pearson = pearson_correlation_coefficient(iter);
+                            if pearson.is_nan(){
+                                println!("NaN for: THIS {this} other {other}:");
+                                nan_counter += 1;
+                            }
+                            write!(buf, "{pearson} ").unwrap();
+                        }
+                    );
+                    writeln!(buf).unwrap();
+            }
+        );
+    println!("NaN counter {nan_counter}");
+
+    let names = all_countries
+        .iter()
+        .map(|v| v.to_string())
+        .collect();
+    let mut x_axis = GnuplotAxis::from_labels(names);
+    let y_axis = x_axis.clone();
+    x_axis.set_rotation(65.1);
+    let output_stub = format!("{}_country", inputs.output_stub);
+    let gp_name = format!("{output_stub}.gp");
+    let terminal = GnuplotTerminal::PDF(output_stub);
+
+    settings
+        .x_axis(x_axis)
+        .y_axis(y_axis)
+        .terminal(terminal)
+        .size("35in,30in")
+        .palette(sampling::GnuplotPalette::PresetRGB)
+        .x_label("Country ID")
+        .y_label("Country ID");
+
+    let buf = create_buf_with_command_and_version(gp_name);
+    settings.write_heatmap_external_matrix(
+        buf, 
+        all_countries.len(), 
+        all_countries.len(), 
+        country_matrix_name
     ).unwrap();
 
 }
