@@ -632,5 +632,8 @@ impl ReadType{
 pub struct CorrelationOpts
 {
     /// The files to correlate
-    pub measurement: PathBuf
+    pub measurement: PathBuf,
+
+    /// If the label file should contain the country names instead of the Ids
+    pub country_name_file: Option<PathBuf>
 }

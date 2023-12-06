@@ -579,7 +579,7 @@ pub fn first_layer_overlap(in_file: &str, cmd: FirstLayerOpt){
     }
 
     if let Some(country_file) = cmd.print_graph{
-        let map = Some(parser::country_map(&country_file));
+        let map = Some(parser::country_map(country_file));
         let iter = layers
             .iter_mut()
             .zip(ordering.iter())
@@ -696,7 +696,7 @@ pub fn flow_of_top_first_layer(in_file: &str, opt: FirstLayerOpt)
     let buf = create_buf(graph_name);
 
     let map = opt.print_graph
-        .map(|s| parser::country_map(&s));
+        .map(parser::country_map);
 
     flow_of_top_first_layer_helper(
         &network, 
@@ -839,7 +839,7 @@ pub fn three_set_exec(opt: ThreeS)
 {
     let map = opt.id_map_file
         .as_ref()
-        .map(|c| country_map(c));
+        .map(country_map);
     let sets: Vec<_> = opt.files.iter()
         .map(|f| to_three_sets(f, opt.border_low, opt.border_high))
         .collect();

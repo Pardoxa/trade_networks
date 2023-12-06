@@ -296,6 +296,7 @@ pub fn correlations(opt: CorrelationOpts)
     x_axis.set_rotation(65.1);
     let output_stub = format!("{}_country", inputs.output_stub);
     let gp_name = format!("{output_stub}.gp");
+    let label_name = format!("{output_stub}.labels");
     let terminal = GnuplotTerminal::PDF(output_stub);
 
     settings
@@ -314,5 +315,26 @@ pub fn correlations(opt: CorrelationOpts)
         all_countries.len(), 
         country_matrix_name
     ).unwrap();
+
+    
+    let mut writer = create_buf_with_command_and_version(label_name);
+
+    let country_name_map = opt.country_name_file
+        .map(crate::parser::country_map);
+
+    all_countries.iter()
+        .for_each(
+            |c|
+            {
+                match &country_name_map{
+                    None => writeln!(writer, "{c}"),
+                    Some(m) => {
+                        let name = m.get(&c.to_string())
+                            .unwrap();
+                        writeln!(writer, "{name}")
+                    }
+                }.unwrap();
+            }
+        )
 
 }

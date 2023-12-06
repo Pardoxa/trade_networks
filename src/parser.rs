@@ -730,7 +730,8 @@ pub fn network_parser(
 }
 
 
-pub fn country_map(code_file: &str) -> BTreeMap<String, String>
+pub fn country_map<P>(code_file: P) -> BTreeMap<String, String>
+where P: AsRef<Path>
 {
     let buf_reader = open_bufreader(code_file);
     let lines = buf_reader
