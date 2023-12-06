@@ -16,6 +16,6 @@ indicatif="^0.17.7"
 anyhow = "^1.0.75"
 strum = { version = "0.25", features = ["derive"] }
 lazy_static = "^1.4.0"
-
+sampling = { git = "https://github.com/Pardoxa/sampling.git", rev = "1f271e3ff97e52efcaeac9e807e6dffa05722cd9" }
 [profile.release]
 #lto = true

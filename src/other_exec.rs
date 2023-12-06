@@ -10,7 +10,8 @@ use {
             Write
         }
     },
-    serde::{Serialize, Deserialize}
+    serde::{Serialize, Deserialize},
+    sampling::{GnuplotTerminal, GnuplotPalette, GnuplotSettings, GnuplotAxis}
 };
 
 pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
@@ -136,7 +137,8 @@ pub struct CorrelationInput{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorrelationMeasurement{
-    pub inputs: Vec<CorrelationInput>
+    pub inputs: Vec<CorrelationInput>,
+    pub output_stub: String
 }
 
 impl Default for CorrelationMeasurement{
@@ -145,7 +147,10 @@ impl Default for CorrelationMeasurement{
             path: "InputPath".to_owned(), 
             plot_name: "Corresponding Name".to_string()
         };
-        Self { inputs: vec![example] }
+        Self { 
+            inputs: vec![example],
+            output_stub: "example".to_owned()
+        }
     }
 }
 
@@ -177,9 +182,10 @@ pub fn correlations(opt: CorrelationOpts)
             }
         ).collect();
 
-    let name = "test.cor";
-    let mut buf = create_buf_with_command_and_version(name);
+    let matrix_name = format!("{}.matrix", &inputs.output_stub);
+    let mut buf = create_buf_with_command_and_version(matrix_name.as_str());
 
+    // writing matrix that contains the pearson correlation coeffizients
     all_infos
         .iter()
         .for_each(
@@ -198,5 +204,36 @@ pub fn correlations(opt: CorrelationOpts)
                 writeln!(buf).unwrap();
             }
         );
+
+    let labels = inputs.inputs
+        .iter()
+        .map(|c| c.plot_name.clone())
+        .collect();
+    let mut axis = GnuplotAxis::from_labels(labels);
+    let y_axis = axis.clone();
+    axis.set_rotation(45.0);
+    let terminal = GnuplotTerminal::PDF(inputs.output_stub.clone());
+    let palette = GnuplotPalette::PresetHSV;
+    let size = "5in,5in".to_owned();
+    
+    let settings = GnuplotSettings{
+        x_label: "".to_owned(),
+        y_label: "".to_owned(),
+        x_axis: Some(axis),
+        y_axis: Some(y_axis),
+        title: "Pearson Correlation Coefficients".to_owned(),
+        terminal,
+        palette,
+        size
+    };
+
+    let gp_name = format!("{}.gp", inputs.output_stub);
+    let writer = create_buf_with_command_and_version(gp_name);
+    settings.write_heatmap_external_matrix(
+        writer, 
+        inputs.inputs.len(), 
+        inputs.inputs.len(), 
+        matrix_name
+    ).unwrap();
 
 }
