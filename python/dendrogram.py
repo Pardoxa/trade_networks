@@ -2,9 +2,7 @@
 
 import numpy as np
 import sys
-from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
-from scipy.spatial.distance import squareform
-import matplotlib.pyplot as plt
+from seaborn import clustermap
 
 filename = sys.argv[1]
 label_name = sys.argv[2]
@@ -18,9 +16,9 @@ print(labels)
 
 print(len(data))
 print(len(data[0]))
-plt.figure(figsize=(5,12))
 dissimilarity = 1 - abs(data)
-print(dissimilarity)
-Z = linkage(dissimilarity, 'complete')
-dendrogram(Z, orientation='left', leaf_rotation=0, labels=labels)
-plt.savefig("den.pdf", format="pdf", bbox_inches="tight")
+
+res=clustermap(dissimilarity, yticklabels=labels, xticklabels=labels, figsize=(30,30))
+res.savefig("dissimilarity.pdf")
+res=clustermap(data, yticklabels=labels, xticklabels=labels, figsize=(30,30))
+res.savefig("correlation.pdf")
