@@ -11,7 +11,7 @@ use {
         }
     },
     serde::{Serialize, Deserialize},
-    sampling::{GnuplotTerminal, GnuplotPalette, GnuplotSettings, GnuplotAxis}
+    sampling::{GnuplotTerminal, GnuplotSettings, GnuplotAxis}
 };
 
 pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
@@ -213,19 +213,14 @@ pub fn correlations(opt: CorrelationOpts)
     let y_axis = axis.clone();
     axis.set_rotation(45.0);
     let terminal = GnuplotTerminal::PDF(inputs.output_stub.clone());
-    let palette = GnuplotPalette::PresetHSV;
-    let size = "5in,5in".to_owned();
     
-    let settings = GnuplotSettings{
-        x_label: "".to_owned(),
-        y_label: "".to_owned(),
-        x_axis: Some(axis),
-        y_axis: Some(y_axis),
-        title: "Pearson Correlation Coefficients".to_owned(),
-        terminal,
-        palette,
-        size
-    };
+    let mut settings = GnuplotSettings::default();
+    settings.x_axis(axis)
+        .y_axis(y_axis)
+        .terminal(terminal)
+        .title("Pearson Correlation Coefficients")
+        .size("5in,5in");
+
 
     let gp_name = format!("{}.gp", inputs.output_stub);
     let writer = create_buf_with_command_and_version(gp_name);
