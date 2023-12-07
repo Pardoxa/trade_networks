@@ -257,12 +257,7 @@ pub fn correlations(opt: CorrelationOpts)
                     .iter()
                     .filter_map(|set| set.get(country))
                     .filter(|val| val.is_finite())
-                    .inspect(
-                        |_| 
-                        {
-                            count += 1
-                        }
-                    )
+                    .inspect(|_| count += 1)
                     .tuple_windows()
                     .any(|(a,b)| a.ne(b));
                 if country_name_map.is_some() && !any {

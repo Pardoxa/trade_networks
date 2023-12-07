@@ -976,7 +976,8 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
         .map(
             |list_of_deltalists|
             {
-                list_of_deltalists.iter()
+                list_of_deltalists
+                    .iter()
                     .map(|deltas| integrate(deltas, export_delta))
                     .collect()
             }
@@ -998,6 +999,36 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
     write_slice_head(&mut buf_worst_integral, &header_of_worst_integral)
         .unwrap();
 
+    for (i, responsible) in foci.iter().enumerate(){
+        let integral_name = format!("{stub}_integral_{i}.dat");
+        let mut integral_buf = create_buf_with_command_and_version(integral_name);
+
+        let iter = export_without_unconnected.nodes
+            .iter()
+            .zip(all_integrals.iter());
+
+        let responsible_exporter_id = export_without_unconnected
+            .nodes[*responsible]
+            .identifier
+            .as_str();
+        
+
+        for (node, integral) in iter {
+            let id = node.identifier.as_str();
+            write!(
+                integral_buf, 
+                "{id} {} {responsible_exporter_id}",
+                integral[i]
+            ).unwrap();
+            if let Some(map) = &country_map{
+                let responsible_name = map.get(responsible_exporter_id).unwrap();
+                let this_name = map.get(id).unwrap();
+                write!(integral_buf, " {responsible_name} {this_name}").unwrap();
+            }
+            writeln!(integral_buf).unwrap(); 
+        }
+    }
+
     let mut for_sorting_worst_integral: Vec<_> = export_without_unconnected
         .nodes
         .iter()
@@ -1014,7 +1045,10 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
                         min = v;
                     } 
                 }
-                let responsible_exporter_id = export_without_unconnected.nodes[min_index]
+                let responsible_exporter_network_idx = foci[min_index];
+                
+                let responsible_exporter_id = export_without_unconnected
+                    .nodes[responsible_exporter_network_idx]
                     .identifier
                     .as_str();
                 (node.identifier.as_str(), min, responsible_exporter_id)
