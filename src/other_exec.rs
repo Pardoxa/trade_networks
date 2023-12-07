@@ -8,7 +8,8 @@ use {
         io::{
             BufRead,
             Write
-        }
+        },
+        borrow::Borrow
     },
     serde::{Serialize, Deserialize},
     sampling::{GnuplotTerminal, GnuplotSettings, GnuplotAxis},
@@ -79,8 +80,9 @@ pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
 
 }
 
-fn pearson_correlation_coefficient<I>(iterator: I) -> f64
-where I: IntoIterator<Item = (f64, f64)>
+fn pearson_correlation_coefficient<I, F>(iterator: I) -> f64
+where I: IntoIterator<Item = (F, F)>,
+    F: Borrow<f64>
 {
     let mut product_sum = 0.0;
     let mut x_sum = 0.0;
@@ -91,6 +93,8 @@ where I: IntoIterator<Item = (f64, f64)>
 
     for (x, y) in iterator
     {
+        let x = *x.borrow();
+        let y = *y.borrow();
         product_sum = x.mul_add(y, product_sum);
         x_sq_sum = x.mul_add(x, x_sq_sum);
         y_sq_sum = y.mul_add(y, y_sq_sum);
@@ -273,12 +277,21 @@ pub fn correlations(opt: CorrelationOpts)
                                 .filter_map(
                                     |map|
                                     {
-                                        map.get(this)
-                                            .zip(map.get(other))
+                                        match map.get(this)
+                                        {
+                                            Some(t) if t.is_finite() => 
+                                            {
+                                                match map.get(other){
+                                                    Some(o) if o.is_finite() => {
+                                                        Some((t, o))
+                                                    },
+                                                    _ => None
+                                                }
+                                            },
+                                            _ => None
+                                        }
                                     }
-                                )
-                                .filter(|(a,b)| a.is_finite() && b.is_finite())
-                                .map(|(a,b)| (*a, *b));
+                                );
 
                             let pearson = pearson_correlation_coefficient(iter);
                             if pearson.is_nan(){

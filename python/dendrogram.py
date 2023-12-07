@@ -11,14 +11,14 @@ def plot_all(data, name: str, labels, fig_size, method):
     dis_name = "%s_all.pdf" % name
     res.savefig(dis_name)
     plt.clf()
-    hierarchy.dendrogram(res.dendrogram_row.linkage, orientation="left", labels = labels,distance_sort=False) 
+    hierarchy.dendrogram(res.dendrogram_row.linkage, orientation="left", labels = labels,distance_sort=False, color_threshold=6) 
     dis_den_name = "%s_dendro.pdf" % name
     plt.savefig(dis_den_name)
 
 argv=sys.argv
 a_len=len(argv)
 usage="Usage:\n%s <correlation_matrix_file> <label_file> <output_stub> <method> optional: <scaling>" % argv[0]
-possible_methods="Possible methods: average single weighted centroid median ward"
+possible_methods="Possible methods: average single weighted centroid median ward complete"
 if a_len < 5:
     print("Too few arguments")
     print(usage)
