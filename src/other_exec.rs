@@ -162,6 +162,8 @@ impl Default for CorrelationMeasurement{
 
 pub fn correlations(opt: CorrelationOpts)
 {
+    let country_name_map = opt.country_name_file
+        .map(crate::parser::country_map);
     let inputs: CorrelationMeasurement = read_or_create(opt.measurement);
 
     let mut all_countries = BTreeSet::new();
@@ -250,18 +252,33 @@ pub fn correlations(opt: CorrelationOpts)
         .retain(
             |country|
             {
-                all_infos
+                let mut count = 0;
+                let any = all_infos
                     .iter()
                     .filter_map(|set| set.get(country))
                     .filter(|val| val.is_finite())
+                    .inspect(
+                        |_| 
+                        {
+                            count += 1
+                        }
+                    )
                     .tuple_windows()
-                    .any(|(a,b)| a.ne(b))
+                    .any(|(a,b)| a.ne(b));
+                if country_name_map.is_some() && !any {
+                    let country = country_name_map.as_ref().unwrap().get(&country.to_string()).unwrap();
+                    println!("Country: {country} {count}");
+                }
+                any
             }
         );
+
     println!("REMOVED {} countries", old_country_len - all_countries.len());
 
     let mut nan_counter = 0;
     // NOTE: So far I do not ignore countries that trade not enough goods
+    let mut counter = 0;
+    let mut in_common = 0;
     all_countries
         .iter()
         .for_each(
@@ -291,7 +308,8 @@ pub fn correlations(opt: CorrelationOpts)
                                             _ => None
                                         }
                                     }
-                                );
+                                ).inspect(|_| in_common += 1);
+                            counter += 1;
 
                             let pearson = pearson_correlation_coefficient(iter);
                             if pearson.is_nan(){
@@ -304,6 +322,8 @@ pub fn correlations(opt: CorrelationOpts)
                     writeln!(buf).unwrap();
             }
         );
+    let percentage = in_common as f64 / counter as f64;
+    println!("In common: {percentage}");
     println!("NaN counter {nan_counter}");
 
     let names = all_countries
@@ -338,8 +358,7 @@ pub fn correlations(opt: CorrelationOpts)
     
     let mut writer = create_buf_with_command_and_version(label_name);
 
-    let country_name_map = opt.country_name_file
-        .map(crate::parser::country_map);
+
 
     all_countries.iter()
         .for_each(
