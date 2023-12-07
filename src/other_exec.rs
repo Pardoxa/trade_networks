@@ -206,10 +206,16 @@ pub fn correlations(opt: CorrelationOpts)
             }
         );
 
-    let labels = inputs.inputs
+    let labels: Vec<_> = inputs.inputs
         .iter()
         .map(|c| c.plot_name.clone())
         .collect();
+
+    let label_name = format!("{}.labels", inputs.output_stub);
+    let mut label_buf = create_buf_with_command_and_version(label_name);
+    labels.iter().for_each(|l| writeln!(label_buf, "{l}").unwrap());
+    drop(label_buf);
+
     let mut axis = GnuplotAxis::from_labels(labels);
     let y_axis = axis.clone();
     axis.set_rotation(45.0);
