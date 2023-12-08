@@ -83,7 +83,10 @@ pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
 #[derive(Clone, Copy, Debug)]
 pub struct Stats{
     pub average: f64,
-    pub variance: f64
+    pub variance: f64,
+    pub min: f64,
+    pub max: f64,
+    pub median: f64
 }
 
 impl Stats{
@@ -103,20 +106,37 @@ impl FromIterator<f64> for Stats{
         let mut sum = 0.0;
         let mut sum_sq = 0.0;
         let mut counter = 0_u64;
+        let mut min = f64::INFINITY;
+        let mut max = f64::NEG_INFINITY;
 
-        iter.into_iter()
+        let mut vals: Vec<_> = iter.into_iter().collect();
+        vals.iter()
             .for_each(
                 |v| 
                 {
                     sum += v;
-                    sum_sq = v.mul_add(v, sum_sq);
+                    sum_sq = v.mul_add(*v, sum_sq);
                     counter += 1;
+                    min = min.min(*v);
+                    max = max.max(*v);
                 }
             );
+        vals.sort_unstable_by(|a, b| a.total_cmp(b));
+        let median = match vals.len(){
+            0 => f64::NAN,
+            1 => vals[0],
+            len if len % 2 == 0 => {
+                let mid = len / 2;
+                (vals[mid] + vals[mid - 1]) / 2.0
+            },
+            len => vals[len / 2]
+        };
+
+
         let factor = (counter as f64).recip();
         let average = sum * factor;
         let variance = sum_sq * factor - average * average;
-        Self { average, variance }
+        Self { average, variance, min, max, median }
     }
 }
 
@@ -240,6 +260,9 @@ pub fn correlations(opt: CorrelationOpts)
         "Variance",
         "STD_DEV",
         "CV",
+        "Median",
+        "Min",
+        "Max",
         "Country_ID"
     ];
     if country_name_map.is_some(){
@@ -260,11 +283,14 @@ pub fn correlations(opt: CorrelationOpts)
                 let stats: Stats = iter.collect();
                 write!(
                     buf_av_var_c, 
-                    "{:e} {:e} {:e} {:e} {}",
+                    "{:e} {:e} {:e} {:e} {:e} {:e} {:e} {}",
                     stats.average,
                     stats.variance,
                     stats.get_std_dev(),
                     stats.get_cv(),
+                    stats.median,
+                    stats.min,
+                    stats.max,
                     country
                 ).unwrap();
                 if let Some(country_map) = country_name_map.as_ref() {
@@ -284,7 +310,11 @@ pub fn correlations(opt: CorrelationOpts)
         "Average",
         "Variance",
         "STD_DEV",
-        "CV"
+        "CV",
+        "Median",
+        "Min",
+        "Max",
+        "Info"
     ];
     write_slice_head(&mut buf_av_var, head).unwrap();
     all_infos
@@ -300,11 +330,14 @@ pub fn correlations(opt: CorrelationOpts)
                 let stats: Stats = iter.collect();
                 writeln!(
                     buf_av_var, 
-                    "{:e} {:e} {:e} {:e} {}",
+                    "{:e} {:e} {:e} {:e} {:e} {:e} {:e} {}",
                     stats.average,
                     stats.variance,
                     stats.get_std_dev(),
                     stats.get_cv(),
+                    stats.median,
+                    stats.min,
+                    stats.max,
                     input.plot_name
                 ).unwrap();
             }
