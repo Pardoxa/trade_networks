@@ -80,6 +80,46 @@ pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
 
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Stats{
+    pub average: f64,
+    pub variance: f64
+}
+
+impl Stats{
+    pub fn get_std_dev(&self) -> f64
+    {
+        self.variance.sqrt()
+    }
+
+    pub fn get_cv(&self) -> f64
+    {
+        self.get_std_dev() / self.average
+    }
+}
+
+impl FromIterator<f64> for Stats{
+    fn from_iter<T: IntoIterator<Item = f64>>(iter: T) -> Self {
+        let mut sum = 0.0;
+        let mut sum_sq = 0.0;
+        let mut counter = 0_u64;
+
+        iter.into_iter()
+            .for_each(
+                |v| 
+                {
+                    sum += v;
+                    sum_sq = v.mul_add(v, sum_sq);
+                    counter += 1;
+                }
+            );
+        let factor = (counter as f64).recip();
+        let average = sum * factor;
+        let variance = sum_sq * factor - average * average;
+        Self { average, variance }
+    }
+}
+
 fn pearson_correlation_coefficient<I, F>(iterator: I) -> f64
 where I: IntoIterator<Item = (F, F)>,
     F: Borrow<f64>
@@ -190,7 +230,87 @@ pub fn correlations(opt: CorrelationOpts)
         ).collect();
 
     let matrix_name = format!("{}.matrix", &inputs.output_stub);
-    let mut buf = create_buf_with_command_and_version(matrix_name.as_str());
+    let mut buf_pearson = create_buf_with_command_and_version(matrix_name.as_str());
+
+    let average_variance_c_name = format!("{}.av_var", &inputs.output_stub);
+    let mut buf_av_var_c = create_buf_with_command_and_version(average_variance_c_name);
+
+    let mut stats_header = vec![
+        "Average",
+        "Variance",
+        "STD_DEV",
+        "CV",
+        "Country_ID"
+    ];
+    if country_name_map.is_some(){
+        stats_header.push("Country_name");
+    }
+    write_slice_head(&mut buf_av_var_c, &stats_header).unwrap();
+
+    all_countries
+        .iter()
+        .for_each(
+            |country|
+            {
+                let iter = all_infos
+                    .iter()
+                    .filter_map(|v| v.get(country))
+                    .filter(|v| v.is_finite())
+                    .copied();
+                let stats: Stats = iter.collect();
+                write!(
+                    buf_av_var_c, 
+                    "{:e} {:e} {:e} {:e} {}",
+                    stats.average,
+                    stats.variance,
+                    stats.get_std_dev(),
+                    stats.get_cv(),
+                    country
+                ).unwrap();
+                if let Some(country_map) = country_name_map.as_ref() {
+                    writeln!(
+                        buf_av_var_c,
+                        " {}",
+                        country_map.get(&country.to_string()).unwrap()
+                    )
+                } else {
+                    writeln!(buf_av_var_c)
+                }.unwrap();
+            }
+        );
+    let average_variance_name = format!("{}_goods.av_var", &inputs.output_stub);
+    let mut buf_av_var = create_buf_with_command_and_version(average_variance_name);
+    let head = [
+        "Average",
+        "Variance",
+        "STD_DEV",
+        "CV"
+    ];
+    write_slice_head(&mut buf_av_var, head).unwrap();
+    all_infos
+        .iter()
+        .zip(inputs.inputs.iter())
+        .for_each(
+            |(table, input)|
+            {
+                let iter = table
+                    .values()
+                    .filter(|v| v.is_finite())
+                    .copied();
+                let stats: Stats = iter.collect();
+                writeln!(
+                    buf_av_var, 
+                    "{:e} {:e} {:e} {:e} {}",
+                    stats.average,
+                    stats.variance,
+                    stats.get_std_dev(),
+                    stats.get_cv(),
+                    input.plot_name
+                ).unwrap();
+            }
+        );
+
+
 
     // writing matrix that contains the pearson correlation coeffizients
     all_infos
@@ -198,6 +318,7 @@ pub fn correlations(opt: CorrelationOpts)
         .for_each(
             |a|
             {
+                // correlations
                 all_infos.iter()
                     .for_each(
                         |b|
@@ -205,10 +326,14 @@ pub fn correlations(opt: CorrelationOpts)
                             let pearson = pearson_correlation_coefficient(
                                 goods_cor_iter(a, b)
                             );
-                            write!(buf, "{pearson} ").unwrap();
+                            write!(
+                                buf_pearson, 
+                                "{} ",
+                                pearson
+                            ).unwrap();
                         }
                     );
-                writeln!(buf).unwrap();
+                writeln!(buf_pearson).unwrap();
             }
         );
 
@@ -246,7 +371,7 @@ pub fn correlations(opt: CorrelationOpts)
 
     // Now I need to calculate the other correlations.
     let country_matrix_name = format!("{}_country.matrix", inputs.output_stub);
-    let mut buf = create_buf_with_command_and_version(&country_matrix_name);
+    let mut buf_pearson = create_buf_with_command_and_version(&country_matrix_name);
     let old_country_len = all_countries.len();
     all_countries
         .retain(
@@ -311,10 +436,14 @@ pub fn correlations(opt: CorrelationOpts)
                                 println!("NaN for: THIS {this} other {other}:");
                                 nan_counter += 1;
                             }
-                            write!(buf, "{pearson} ").unwrap();
+                            write!(
+                                buf_pearson, 
+                                "{} ",
+                                pearson
+                            ).unwrap();
                         }
                     );
-                    writeln!(buf).unwrap();
+                    writeln!(buf_pearson).unwrap();
             }
         );
     let percentage = in_common as f64 / counter as f64;

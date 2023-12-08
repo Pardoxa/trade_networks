@@ -1015,6 +1015,9 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
 
         for (node, integral) in iter {
             let id = node.identifier.as_str();
+            if id == responsible_exporter_id {
+                continue;
+            }
             write!(
                 integral_buf, 
                 "{id} {} {responsible_exporter_id}",
