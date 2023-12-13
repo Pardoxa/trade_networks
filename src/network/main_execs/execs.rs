@@ -437,10 +437,77 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         SubCommand::ShockAvail(s) => shock_avail(s, in_file),
         SubCommand::ShockDist(d) => shock_dist(d, in_file),
         SubCommand::ReduceX(o) => reduce_x(o, in_file),
-        SubCommand::CombineWorstIntegrals(opts) => crate::other_exec::worst_integral_sorting(opts)
+        SubCommand::CombineWorstIntegrals(opts) => crate::other_exec::worst_integral_sorting(opts),
+        SubCommand::VolumeOrder(order_opt) => order_trade_volume(order_opt, in_file)
     }
 }
 
+fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
+{
+    let map = opt
+        .country_name_file
+        .map(country_map);
+    let mut head = vec![
+            "order_index",
+            "ID",
+            "total_trade",
+            "relative_trade",
+            "running_sum",
+            "running_relative"
+        ];
+    if map.is_some(){
+        head.push("Country_name");
+    }
+    
+
+    let write_output = |name_addition, network: &Network|
+    {
+        let mut sorted = network.ordered_by_trade_volume();
+        let name = format!("{}_{name_addition}_Y{}.dat", opt.output_stub, opt.year);
+        let mut buf = create_buf_with_command_and_version(name);
+        write_slice_head(&mut buf, &head).unwrap();
+        let total: f64 = sorted.iter()
+            .map(|entry| entry.0)
+            .sum();
+        let mut running_sum = 0.0;
+
+        if let Some(top) = opt.top {
+            sorted.truncate(top.get());
+        }
+
+        let iter = sorted.into_iter().enumerate();
+
+        for (order_index, (amount, node)) in iter {
+            running_sum += amount;
+            let running_relative = running_sum / total;
+            let relative = amount / total;
+            let id = node.identifier.as_str();
+            write!(
+                buf, 
+                "{order_index} {id} {amount} {relative} {running_sum} {running_relative}"
+            ).unwrap();
+            match &map {
+                Some(country_map) => {
+                    let name = country_map
+                        .get(id)
+                        .unwrap();
+                    writeln!(buf, " {name}")
+                },
+                None => writeln!(buf)
+            }.unwrap();
+        }
+        
+    };
+
+    let mut lazy = LazyNetworks::Filename(in_file.to_owned());
+    lazy.assure_availability();
+    let import = lazy.get_import_network_unchecked(opt.year);
+    let import_without = import.without_unconnected_nodes();
+    write_output("import", &import_without);
+    let export = lazy.get_export_network_unchecked(opt.year);
+    let export_without = export.without_unconnected_nodes();
+    write_output("export", &export_without);
+}
 
 
 pub fn country_count(in_file: &str, opt: CountryCountOpt){

@@ -208,7 +208,28 @@ pub enum SubCommand{
     ShockDist(ShockDistOpts),
     CountryCount(CountryCountOpt),
     ReduceX(XOpts),
-    CombineWorstIntegrals(WorstIntegralCombineOpts)
+    CombineWorstIntegrals(WorstIntegralCombineOpts),
+    /// Order by trade volume
+    VolumeOrder(OrderedTradeVolue)
+}
+
+#[derive(Parser, Debug)]
+pub struct OrderedTradeVolue
+{
+    /// Year to print
+    pub year: i32,
+    
+    /// For creating output names
+    pub output_stub: String,
+
+    /// If you do not want the ID numbers but the names instead you can 
+    /// provide the mapping file
+    #[arg(long, short)]
+    pub country_name_file: Option<PathBuf>,
+
+    /// Limit output to top amount
+    #[arg(long, short)]
+    pub top: Option<NonZeroUsize>
 }
 
 

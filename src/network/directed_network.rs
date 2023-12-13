@@ -211,6 +211,23 @@ pub struct Network{
 
 impl Network{
 
+    #[allow(dead_code)]
+    pub fn ordered_by_trade_volume(&self) -> Vec<(f64, &Node)>
+    {
+        let mut list: Vec<_> = self.nodes
+            .iter()
+            .map(
+                |node|
+                {
+                    let amount = node.trade_amount();
+                    (amount, node)
+                }
+            ).collect();
+
+        list.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        list
+    }
+
     pub fn estimation(&'_ self, focus: usize) -> Vec<f64>
     {
         /*
@@ -507,9 +524,9 @@ impl Network{
         self.nodes.iter().map(|n| n.adj.len()).sum()
     }
 
-    #[allow(dead_code)]
     /// NOTE: Untested, but should work
     /// Only Intended for normalized networks
+    #[allow(dead_code)]
     pub fn dikstra_normalized(&self, initial_node: usize) -> (Vec<f64>, Vec<DikstraState>)
     {
         let mut distances = vec![f64::INFINITY; self.node_count()];
