@@ -1,6 +1,14 @@
-use std::{num::NonZeroUsize, path::PathBuf};
+use std::{
+    num::NonZeroUsize, 
+    path::{PathBuf, Path}, 
+    io::BufWriter,
+    fs::File
+};
 use clap::{Parser, Subcommand, ValueEnum};
-use crate::network::{Direction, NetworkType, main_execs::Relative, Network};
+use crate::{
+    network::{Direction, NetworkType, main_execs::Relative, Network}, 
+    misc::{create_buf, create_buf_with_command_and_version}
+};
 use serde::{Serialize, Deserialize};
 
 #[derive(Parser, Debug)]
@@ -130,7 +138,78 @@ pub enum CmdChooser{
     ParseAllEnrichments(ParseAllEnrichmentsOpt),
     Three(ThreeS),
     PrintNetworkInfos(OnlyNetworks),
-    Correlations(CorrelationOpts)
+    Correlations(CorrelationOpts),
+    Filter(FilterOpts)
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy)]
+pub enum HowToFilter{
+    Retain,
+    Remove
+}
+
+impl HowToFilter {
+    pub fn is_remove(self) -> bool
+    {
+        matches!(self, Self::Remove)
+    }
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy)]
+pub enum Comments{
+    /// Keep old comments and create new ones
+    Keep,
+    /// Remove old comments but create new ones
+    Remove,
+    /// No comments allowed!
+    None
+}
+
+impl Comments{
+    pub fn get_create_buf_fun<P>(self) -> fn (P) -> BufWriter<File>
+    where P: AsRef<Path>
+    {
+        match self {
+            Self::None => {
+                create_buf
+            },
+            _ =>  create_buf_with_command_and_version
+        }
+    }
+
+    pub fn is_keep(self) -> bool
+    {
+        matches!(self, Self::Keep)
+    }
+}
+
+#[derive(Parser, Debug)]
+pub struct FilterOpts
+{
+    /// Path to the file that is used to filter the other file
+    pub filter_by: PathBuf,
+
+    /// Which column of the filter_by file contains the information on which to filter?
+    pub filter_by_col: usize,
+
+    /// Path to the file that you want to filter
+    pub other_file: PathBuf,
+
+    /// Which col of the other_file contains the information on which to filter?
+    pub other_col: usize,
+    
+    /// Do you want to keep or remove the specified entries?
+    #[arg(value_enum, short, long, default_value_t=HowToFilter::Retain)]
+    pub filter_opt: HowToFilter,
+
+    /// Do you want to keep or remove comments?
+    #[arg(value_enum, short, long, default_value_t=Comments::Keep)]
+    pub comments: Comments,
+
+    /// Output file to create. If not given, the output will be written 
+    /// to the terminal instead
+    #[arg(long, short)]
+    pub out: Option<PathBuf>
 }
 
 #[derive(Parser, Debug)]

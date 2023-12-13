@@ -1,3 +1,5 @@
+use std::io::stdout;
+
 use {
     super::{
         config::*,
@@ -532,4 +534,56 @@ pub fn correlations(opt: CorrelationOpts)
             }
         )
 
+}
+
+pub fn filter_files(opt: FilterOpts)
+{
+    match opt.out.as_deref(){
+        Some(out_path) => {
+            let buf = opt.comments.get_create_buf_fun()(out_path);
+            filter_files_helper(opt, buf)
+        },
+        None => {
+            filter_files_helper(opt, stdout())
+        }
+    }
+}
+
+fn filter_files_helper<W>(opt: FilterOpts, mut writer: W)
+where W: Write
+{
+    let filter_set: HashSet<String> = open_as_unwrapped_lines(opt.filter_by)
+        .filter(|line| !line.starts_with('#'))
+        .map(
+            |line|
+            {
+                line.split_whitespace()
+                    .nth(opt.filter_by_col)
+                    .expect("filter_by column not found")
+                    .to_owned()
+            }
+        ).collect();
+    
+    let iter = open_as_unwrapped_lines(opt.other_file);
+    for line in iter {
+        if line.starts_with('#')
+        {
+            if opt.comments.is_keep(){
+                writeln!(writer, "{line}").unwrap();
+            }
+            continue;
+        }
+        let col_of_interest = line
+            .split_whitespace()
+            .nth(opt.other_col)
+            .expect("Other column not found");
+        
+        let mut proceed = filter_set.contains(col_of_interest);
+        if opt.filter_opt.is_remove() {
+            proceed = !proceed;
+        }
+        if proceed {
+            writeln!(writer, "{line}").unwrap();
+        }
+    }
 }

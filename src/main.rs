@@ -28,7 +28,8 @@ fn main() {
         CmdChooser::Three(t) => three_set_exec(t),
         CmdChooser::ParseAllEnrichments(opt) => parse_all_extras(opt.in_files, opt.only_unit),
         CmdChooser::PrintNetworkInfos(opt) => print_network_info(opt),
-        CmdChooser::Correlations(opt) => correlations(opt)
+        CmdChooser::Correlations(opt) => correlations(opt),
+        CmdChooser::Filter(filter_opts) => filter_files(filter_opts)
     }
 }
 
