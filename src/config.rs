@@ -181,6 +181,11 @@ impl Comments{
     {
         matches!(self, Self::Keep)
     }
+
+    pub fn is_none(self) -> bool 
+    {
+        matches!(self, Self::None)
+    }
 }
 
 #[derive(Parser, Debug)]

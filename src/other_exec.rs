@@ -544,7 +544,11 @@ pub fn filter_files(opt: FilterOpts)
             filter_files_helper(opt, buf)
         },
         None => {
-            filter_files_helper(opt, stdout())
+            let mut writer = stdout();
+            if !opt.comments.is_none(){
+                write_commands_and_version(&mut writer).unwrap();
+            }
+            filter_files_helper(opt, writer)
         }
     }
 }
