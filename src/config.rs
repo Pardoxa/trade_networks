@@ -2,7 +2,8 @@ use std::{
     num::NonZeroUsize, 
     path::{PathBuf, Path}, 
     io::BufWriter,
-    fs::File
+    fs::File, 
+    cmp::Ordering
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
@@ -142,6 +143,49 @@ pub enum CmdChooser{
     Filter(FilterOpts)
 }
 
+#[derive(Clone, Copy, ValueEnum, Default, Debug)]
+pub enum OrderHelper {
+    StartWithSmallest,
+    #[default]
+    StartWithLargest
+}
+
+impl OrderHelper{
+    pub fn get_order_fun(&self) -> fn(f64, f64) -> Ordering
+    {
+        pub fn s(a: f64, b: f64) -> Ordering{
+            a.total_cmp(&b)
+        }
+
+        pub fn l(a: f64, b: f64) -> Ordering{
+            b.total_cmp(&a)
+        }
+
+        match self{
+            Self::StartWithSmallest => s,
+            _ =>  l
+        }
+    }
+
+    pub fn get_cmp_fun(&self) -> fn(f64, f64) -> bool
+    {
+        pub fn smaller(a: f64, b: f64) -> bool
+        {
+            a <= b
+        }
+
+        pub fn larger(a: f64, b: f64) -> bool
+        {
+            a >= b
+        }
+
+        match self {
+            Self::StartWithSmallest => smaller,
+            _ => larger
+        }
+    }
+}
+
 #[derive(Debug, Parser)]
 pub struct PartitionOpts{
     #[arg(required=true)]
@@ -157,7 +201,10 @@ pub struct PartitionOpts{
 
     /// Index of column used for partitioning
     #[arg(long, short)]
-    pub col_index: usize
+    pub col_index: usize,
+
+    #[arg(long, value_enum, default_value_t)]
+    pub order_direction: OrderHelper
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]

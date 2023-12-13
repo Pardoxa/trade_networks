@@ -592,7 +592,7 @@ where W: Write
     }
 }
 
-pub fn partition(opt: PartitionOpts, in_file: &str){
+pub fn partition(mut opt: PartitionOpts, in_file: &str){
     let iter = open_as_unwrapped_lines(in_file)
             .filter(|s| !s.starts_with('#'))
             .map(
@@ -607,36 +607,40 @@ pub fn partition(opt: PartitionOpts, in_file: &str){
                     (val, s)
                 }
             );
+    let order_fun = opt.order_direction.get_order_fun();
+    opt.partition.sort_unstable_by(|&a, &b| order_fun(a, b));
     
     if opt.sort{
         let mut all = iter
             .collect_vec();
-        all.sort_by(|a, b| a.0.total_cmp(&b.0));
-        partition_helper(&opt.output_stub, all, &opt.partition);
+        
+        all.sort_by(|a, b| order_fun(a.0, b.0));
+        partition_helper(&opt.output_stub, all, opt.partition, opt.order_direction);
     } else {
-        partition_helper(&opt.output_stub, iter, &opt.partition);
+        partition_helper(&opt.output_stub, iter, opt.partition, opt.order_direction);
     }
 }
 
-fn partition_helper<I>(stub: &str, iter: I, partition: &[f64])
-where I: IntoIterator<Item=(f64, String)>
+fn partition_helper<I, I2>(stub: &str, iter: I, partition: I2, order_helper: OrderHelper)
+where I: IntoIterator<Item=(f64, String)>,
+    I2: IntoIterator<Item=f64>
 {
-    // TODO: Implement possibility to reverse ordering
-    let mut par_iter = partition
-        .iter()
-        .copied();
+    
+    let mut par_iter = partition.into_iter();
     let mut next = par_iter.next();
     let mut counter = 0_u32;
     let name = format!("{counter}_{stub}");
     let mut buf = create_buf_with_command_and_version(name);
+    
+    let cmp_fun = order_helper.get_cmp_fun();
     for (val, line) in iter {
         match next {
-            Some(v) if val > v => {
+            Some(v) if !cmp_fun(val, v) => {
                 loop{
                     next = par_iter.next();
                     counter += 1;
                     match next {
-                         Some(v) if val > v =>  {
+                         Some(v) if !cmp_fun(val, v) =>  {
                             continue;
                         },
                         _ => {
