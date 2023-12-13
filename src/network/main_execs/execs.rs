@@ -1,4 +1,4 @@
-use crate::parser::{parse_all_networks, country_map};
+use crate::{parser::{parse_all_networks, country_map}, partition};
 
 use {
     std::{
@@ -423,22 +423,18 @@ pub fn enrich_to_bin(opt: ParseEnrichOpts){
 pub fn test_chooser(in_file: &str, cmd: SubCommand){
     match cmd
     {
-        SubCommand::OutComp(o) => {
-            out_comparison(in_file, o)
-        },
-        SubCommand::FirstLayerOverlap(o) => {
-            first_layer_overlap(in_file, o)
-        },
+        SubCommand::OutComp(o) => out_comparison(in_file, o),
+        SubCommand::FirstLayerOverlap(o) => first_layer_overlap(in_file, o),
         SubCommand::FirstLayerAll(a) => flow_of_top_first_layer(in_file, a),
         SubCommand::Flow(f) => super::flow(f, in_file),
-        
         SubCommand::Shock(s) => super::shock_exec(s, in_file),
         SubCommand::CountryCount(c) => country_count(in_file, c),
         SubCommand::ShockAvail(s) => shock_avail(s, in_file),
         SubCommand::ShockDist(d) => shock_dist(d, in_file),
         SubCommand::ReduceX(o) => reduce_x(o, in_file),
         SubCommand::CombineWorstIntegrals(opts) => crate::other_exec::worst_integral_sorting(opts),
-        SubCommand::VolumeOrder(order_opt) => order_trade_volume(order_opt, in_file)
+        SubCommand::VolumeOrder(order_opt) => order_trade_volume(order_opt, in_file),
+        SubCommand::Partition(opt) => partition(opt, in_file)
     }
 }
 

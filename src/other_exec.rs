@@ -591,3 +591,66 @@ where W: Write
         }
     }
 }
+
+pub fn partition(opt: PartitionOpts, in_file: &str){
+    let iter = open_as_unwrapped_lines(in_file)
+            .filter(|s| !s.starts_with('#'))
+            .map(
+                |s|
+                {
+                    let val_str = s.split_whitespace()
+                        .nth(opt.col_index)
+                        .expect("Column not long enough");
+                    let val: f64 = val_str
+                        .parse()
+                        .expect("Parsing error");
+                    (val, s)
+                }
+            );
+    
+    if opt.sort{
+        let mut all = iter
+            .collect_vec();
+        all.sort_by(|a, b| a.0.total_cmp(&b.0));
+        partition_helper(&opt.output_stub, all, &opt.partition);
+    } else {
+        partition_helper(&opt.output_stub, iter, &opt.partition);
+    }
+}
+
+fn partition_helper<I>(stub: &str, iter: I, partition: &[f64])
+where I: IntoIterator<Item=(f64, String)>
+{
+    // TODO: Implement possibility to reverse ordering
+    let mut par_iter = partition
+        .iter()
+        .copied();
+    let mut next = par_iter.next();
+    let mut counter = 0_u32;
+    let name = format!("{counter}_{stub}");
+    let mut buf = create_buf_with_command_and_version(name);
+    for (val, line) in iter {
+        match next {
+            Some(v) if val > v => {
+                loop{
+                    next = par_iter.next();
+                    counter += 1;
+                    match next {
+                         Some(v) if val > v =>  {
+                            continue;
+                        },
+                        _ => {
+                            break;
+                        }
+                    }
+                }
+                let name = format!("{counter}_{stub}");
+                buf = create_buf_with_command_and_version(name);
+            },
+            _ => {
+                
+            }
+        }
+        writeln!(buf, "{line}").unwrap();
+    }
+}

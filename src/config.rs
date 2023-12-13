@@ -142,6 +142,24 @@ pub enum CmdChooser{
     Filter(FilterOpts)
 }
 
+#[derive(Debug, Parser)]
+pub struct PartitionOpts{
+    #[arg(required=true)]
+    pub partition: Vec<f64>,
+
+    /// Without this option the program will assume that the data is already sorted
+    #[arg(long, short)]
+    pub sort: bool,
+
+    /// Stub of output file
+    #[arg(long, short)]
+    pub output_stub: String,
+
+    /// Index of column used for partitioning
+    #[arg(long, short)]
+    pub col_index: usize
+}
+
 #[derive(ValueEnum, Debug, Clone, Copy)]
 pub enum HowToFilter{
     Retain,
@@ -294,7 +312,9 @@ pub enum SubCommand{
     ReduceX(XOpts),
     CombineWorstIntegrals(WorstIntegralCombineOpts),
     /// Order by trade volume
-    VolumeOrder(OrderedTradeVolue)
+    VolumeOrder(OrderedTradeVolue),
+    /// Partition a file according to "partition"
+    Partition(PartitionOpts)
 }
 
 #[derive(Parser, Debug)]
