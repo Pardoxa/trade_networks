@@ -458,8 +458,9 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
 
     let write_output = |name_addition, network: &Network|
     {
-        let mut sorted = network.ordered_by_trade_volume(opt.ordering);
-        let name = format!("{}_{name_addition}_Y{}.dat", opt.output_stub, opt.year);
+        let network_without_unconnected = network.without_unconnected_nodes();
+        let mut sorted = network_without_unconnected.ordered_by_trade_volume(opt.ordering);
+        let name = format!("{}_{name_addition}_Y{}.dat", opt.output_stub, network_without_unconnected.year);
         let mut buf = create_buf_with_command_and_version(name);
         write_slice_head(&mut buf, &head).unwrap();
         let total: f64 = sorted.iter()
@@ -497,12 +498,26 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
 
     let mut lazy = LazyNetworks::Filename(in_file.to_owned());
     lazy.assure_availability();
-    let import = lazy.get_import_network_unchecked(opt.year);
-    let import_without = import.without_unconnected_nodes();
-    write_output("import", &import_without);
-    let export = lazy.get_export_network_unchecked(opt.year);
-    let export_without = export.without_unconnected_nodes();
-    write_output("export", &export_without);
+    let import_str = "import";
+    let export_str = "export";
+    if let Some(year) = opt.year {
+        let import = lazy.get_import_network_unchecked(year);
+        write_output(import_str, import);
+        let export = lazy.get_export_network_unchecked(year);
+        write_output(export_str, export);
+    } else {
+        let all_writer = |name_addition: &'static str, network_slice: &[Network]|
+        {
+            network_slice
+                .iter()
+                .for_each(
+                    |network| write_output(name_addition, network)
+                )
+        };
+        all_writer(import_str, lazy.import_networks_unchecked());
+        all_writer(export_str, lazy.export_networks_unchecked());
+    }
+    
 }
 
 

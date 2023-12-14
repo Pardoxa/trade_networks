@@ -366,12 +366,13 @@ pub enum SubCommand{
 
 #[derive(Parser, Debug)]
 pub struct OrderedTradeVolue
-{
-    /// Year to print
-    pub year: i32,
-    
+{    
     /// For creating output names
     pub output_stub: String,
+
+    /// Year to print. If not specified it will print all available years
+    #[arg(long, short)]
+    pub year: Option<i32>,
 
     /// If you do not want the ID numbers but the names instead you can 
     /// provide the mapping file
