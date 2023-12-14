@@ -640,9 +640,10 @@ where I: IntoIterator<Item=(f64, String)>,
     let mut par_iter = partition.into_iter();
     let mut next = par_iter.next();
     let mut counter = 0_u32;
-    let new_buf = |counter: u32| {
+    let new_buf = |counter: u32, partition_border| {
         let name = format!("{counter}_{stub}");
         let mut buf = create_buf_with_command_and_version(name);
+        writeln!(buf, "# HOW? {order_helper:?} Next Partition at: {partition_border:?}").unwrap();
         if let Some(comments) = comments.as_deref()
         {
             comments.iter()
@@ -650,7 +651,7 @@ where I: IntoIterator<Item=(f64, String)>,
         }
         buf
     };
-    let mut buf = new_buf(counter);
+    let mut buf = new_buf(counter, next);
     
     let cmp_fun = order_helper.get_cmp_fun();
     for (val, line) in iter {
@@ -668,7 +669,7 @@ where I: IntoIterator<Item=(f64, String)>,
                         }
                     }
                 }
-                buf = new_buf(counter);
+                buf = new_buf(counter, next);
             },
             _ => {
                 
