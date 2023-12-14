@@ -457,12 +457,13 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
     let mut total_head = vec![
         "order_index",
         "ID",
-        "TotalExport",
-        "RelativeExport",
-        "RunningTotalExport",
-        "RunningRelativeExport",
+        "TotalTrade",
+        "RelativeTrade",
+        "RunningTotalTrade",
+        "RunningRelativeTrade",
         "TotalImport",
-        "TotalExport"
+        "TotalExport",
+        "TotalImport/(TotalImport+TotalExport)"
     ];
     if map.is_some(){
         let c_n = "Country_name";
@@ -516,9 +517,10 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
             let relative_export = e.0 / total;
             running_sum += e.0;
             let running_relative = running_sum / total;
+            let import_frac = e.1/e.0;
             write!(
                 buf, 
-                "{index} {} {:e} {relative_export:e} {running_sum:e} {running_relative:e} {} {}",
+                "{index} {} {:e} {relative_export:e} {running_sum:e} {running_relative:e} {} {} {import_frac}",
                 e.3,
                 e.0,
                 e.1,
