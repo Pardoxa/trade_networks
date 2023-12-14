@@ -19,4 +19,5 @@ lazy_static = "^1.4.0"
 sampling = { git = "https://github.com/Pardoxa/sampling.git", rev = "1f271e3ff97e52efcaeac9e807e6dffa05722cd9" }
 itertools = "0.12.0"
 [profile.release]
-#lto = true
+# lto = true
+# strip = true

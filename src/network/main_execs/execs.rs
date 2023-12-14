@@ -458,7 +458,7 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
 
     let write_output = |name_addition, network: &Network|
     {
-        let mut sorted = network.ordered_by_trade_volume();
+        let mut sorted = network.ordered_by_trade_volume(opt.ordering);
         let name = format!("{}_{name_addition}_Y{}.dat", opt.output_stub, opt.year);
         let mut buf = create_buf_with_command_and_version(name);
         write_slice_head(&mut buf, &head).unwrap();

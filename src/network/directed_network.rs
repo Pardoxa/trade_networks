@@ -211,8 +211,7 @@ pub struct Network{
 
 impl Network{
 
-    #[allow(dead_code)]
-    pub fn ordered_by_trade_volume(&self) -> Vec<(f64, &Node)>
+    pub fn ordered_by_trade_volume(&self, order_helper: OrderHelper) -> Vec<(f64, &Node)>
     {
         let mut list: Vec<_> = self.nodes
             .iter()
@@ -223,8 +222,9 @@ impl Network{
                     (amount, node)
                 }
             ).collect();
-
-        list.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
+        
+        let order_fn = order_helper.get_order_fun();
+        list.sort_unstable_by(|a, b| order_fn(a.0, b.0));
         list
     }
 

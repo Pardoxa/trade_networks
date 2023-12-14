@@ -380,7 +380,11 @@ pub struct OrderedTradeVolue
 
     /// Limit output to top amount
     #[arg(long, short)]
-    pub top: Option<NonZeroUsize>
+    pub top: Option<NonZeroUsize>,
+
+    /// how to order:
+    #[arg(long, short, value_enum, default_value_t)]
+    pub ordering: OrderHelper
 }
 
 
