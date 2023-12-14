@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::{parser::{parse_all_networks, country_map}, partition};
 
 use {
@@ -451,9 +453,80 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
             "running_sum",
             "running_relative"
         ];
+
+    let mut total_head = vec![
+        "order_index",
+        "ID",
+        "TotalExport",
+        "RelativeExport",
+        "RunningTotalExport",
+        "RunningRelativeExport",
+        "TotalImport",
+        "TotalExport"
+    ];
     if map.is_some(){
-        head.push("Country_name");
+        let c_n = "Country_name";
+        head.push(c_n);
+        total_head.push(c_n);
     }
+
+    let write_id_or_newline = |id: &str, buf: &mut BufWriter<File>| 
+    {
+        match &map {
+            Some(country_map) => {
+                let name = country_map
+                    .get(id)
+                    .unwrap();
+                writeln!(buf, " {name}")
+            },
+            None => writeln!(buf)
+        }.unwrap();
+    };
+
+    let sort_fun = opt.ordering.get_order_fun();
+    let total_trade_volume = |import: &Network, export: &Network|
+    {
+        assert_eq!(import.year, export.year);
+        let import_without = import.without_unconnected_nodes();
+        let export_without = export.without_unconnected_nodes();
+
+        let mut trade = import_without.nodes.iter()
+            .zip(export_without.nodes.iter())
+            .map(
+                |(import_node, export_node)|
+                {
+                    assert_eq!(import_node.identifier, export_node.identifier);
+                    let total_import = import_node.trade_amount();
+                    let total_export = export_node.trade_amount();
+                    let total = total_export + total_import;
+                    (total, total_import, total_export, import_node.identifier.as_str())
+                }
+            ).collect_vec();
+
+
+        trade.sort_unstable_by(|a,b| sort_fun(a.0, b.0));
+        let name = format!("{}_TotalTradeVolume_Y{}.dat", opt.output_stub, import.year);
+        let mut buf = create_buf_with_command_and_version(name);
+        write_slice_head(&mut buf, &total_head).unwrap();
+        let total: f64 = trade.iter().map(|a| a.0).sum();
+        let mut running_sum = 0.0;
+
+        for (index, e) in trade.into_iter().enumerate()
+        {
+            let relative_export = e.0 / total;
+            running_sum += e.0;
+            let running_relative = running_sum / total;
+            write!(
+                buf, 
+                "{index} {} {:e} {relative_export:e} {running_sum:e} {running_relative:e} {} {}",
+                e.3,
+                e.0,
+                e.1,
+                e.2
+            ).unwrap();
+            write_id_or_newline(e.3, &mut buf);
+        }
+    };
     
 
     let write_output = |name_addition, network: &Network|
@@ -483,15 +556,7 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
                 buf, 
                 "{order_index} {id} {amount} {relative} {running_sum} {running_relative}"
             ).unwrap();
-            match &map {
-                Some(country_map) => {
-                    let name = country_map
-                        .get(id)
-                        .unwrap();
-                    writeln!(buf, " {name}")
-                },
-                None => writeln!(buf)
-            }.unwrap();
+            write_id_or_newline(id, &mut buf);
         }
         
     };
@@ -505,6 +570,7 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
         write_output(import_str, import);
         let export = lazy.get_export_network_unchecked(year);
         write_output(export_str, export);
+        total_trade_volume(import, export);
     } else {
         let all_writer = |name_addition: &'static str, network_slice: &[Network]|
         {
@@ -514,8 +580,13 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
                     |network| write_output(name_addition, network)
                 )
         };
-        all_writer(import_str, lazy.import_networks_unchecked());
-        all_writer(export_str, lazy.export_networks_unchecked());
+        let import = lazy.import_networks_unchecked();
+        let export = lazy.export_networks_unchecked();
+        all_writer(import_str, import);
+        all_writer(export_str, export);
+        import.iter().zip(export)
+            .for_each(|(import, export)| total_trade_volume(import, export));
+
     }
     
 }

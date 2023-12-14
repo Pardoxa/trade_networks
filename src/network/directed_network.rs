@@ -162,7 +162,7 @@ impl LazyNetworks{
         panic!("{YEAR_ERR}")
     }
 
-    pub fn get_import_network_unchecked(&mut self, year: i32) -> &Network
+    pub fn get_import_network_unchecked(&self, year: i32) -> &Network
     {
         if let Self::Networks(import_networks, _) = self {
             for n in import_networks.iter(){
