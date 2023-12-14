@@ -593,6 +593,17 @@ where W: Write
 }
 
 pub fn partition(mut opt: PartitionOpts, in_file: &str){
+
+    let comments = (!opt.remove_comments)
+        .then(
+            ||
+            {
+                open_as_unwrapped_lines(in_file)
+                    .filter(|s| s.starts_with('#'))
+                    .collect_vec()
+            }
+        );
+
     let iter = open_as_unwrapped_lines(in_file)
             .filter(|s| !s.starts_with('#'))
             .map(
@@ -615,13 +626,13 @@ pub fn partition(mut opt: PartitionOpts, in_file: &str){
             .collect_vec();
         
         all.sort_by(|a, b| order_fun(a.0, b.0));
-        partition_helper(&opt.output_stub, all, opt.partition, opt.order_direction);
+        partition_helper(&opt.output_stub, all, opt.partition, opt.order_direction, comments);
     } else {
-        partition_helper(&opt.output_stub, iter, opt.partition, opt.order_direction);
+        partition_helper(&opt.output_stub, iter, opt.partition, opt.order_direction, comments);
     }
 }
 
-fn partition_helper<I, I2>(stub: &str, iter: I, partition: I2, order_helper: OrderHelper)
+fn partition_helper<I, I2>(stub: &str, iter: I, partition: I2, order_helper: OrderHelper, comments: Option<Vec<String>>)
 where I: IntoIterator<Item=(f64, String)>,
     I2: IntoIterator<Item=f64>
 {
@@ -629,8 +640,17 @@ where I: IntoIterator<Item=(f64, String)>,
     let mut par_iter = partition.into_iter();
     let mut next = par_iter.next();
     let mut counter = 0_u32;
-    let name = format!("{counter}_{stub}");
-    let mut buf = create_buf_with_command_and_version(name);
+    let new_buf = |counter: u32| {
+        let name = format!("{counter}_{stub}");
+        let mut buf = create_buf_with_command_and_version(name);
+        if let Some(comments) = comments.as_deref()
+        {
+            comments.iter()
+                .for_each(|comment| writeln!(buf, "{comment}").unwrap())
+        }
+        buf
+    };
+    let mut buf = new_buf(counter);
     
     let cmp_fun = order_helper.get_cmp_fun();
     for (val, line) in iter {
@@ -648,8 +668,7 @@ where I: IntoIterator<Item=(f64, String)>,
                         }
                     }
                 }
-                let name = format!("{counter}_{stub}");
-                buf = create_buf_with_command_and_version(name);
+                buf = new_buf(counter);
             },
             _ => {
                 

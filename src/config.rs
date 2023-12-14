@@ -204,7 +204,11 @@ pub struct PartitionOpts{
     pub col_index: usize,
 
     #[arg(long, value_enum, default_value_t)]
-    pub order_direction: OrderHelper
+    pub order_direction: OrderHelper,
+
+    /// Remove comments from old file
+    #[arg(long, short)]
+    pub remove_comments: bool
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
