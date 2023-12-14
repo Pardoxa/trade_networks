@@ -436,7 +436,8 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
         SubCommand::ReduceX(o) => reduce_x(o, in_file),
         SubCommand::CombineWorstIntegrals(opts) => crate::other_exec::worst_integral_sorting(opts),
         SubCommand::VolumeOrder(order_opt) => order_trade_volume(order_opt, in_file),
-        SubCommand::Partition(opt) => partition(opt, in_file)
+        SubCommand::Partition(opt) => partition(opt, in_file),
+        SubCommand::BeefIds(opt) => crate::other_exec::beef_map_to_id(in_file, opt)
     }
 }
 

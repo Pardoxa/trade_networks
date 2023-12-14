@@ -1,4 +1,7 @@
+use core::panic;
 use std::io::stdout;
+
+use crate::parser::{country_map, line_to_vec};
 
 use {
     super::{
@@ -677,4 +680,46 @@ where I: IntoIterator<Item=(f64, String)>,
         }
         writeln!(buf, "{line}").unwrap();
     }
+}
+
+
+
+
+pub fn beef_map_to_id(in_file: &str, opt: BeefMap)
+{
+    let country_map = country_map(opt.country_file);
+    // need to reverse the map
+    let country_map: HashMap<String, String> = country_map.into_iter()
+        .map(|(a, b)| (b, a))
+        .collect();
+
+    let mut buf = create_buf_with_command_and_version(opt.out_file);
+    let mut line_iter = open_as_unwrapped_lines(in_file);
+
+    let header_line = line_iter.next().unwrap();
+    writeln!(buf, "#{header_line}").unwrap();
+    line_iter
+        .for_each(
+            |line|
+            {
+                let v = line_to_vec(&line);
+                let exporter = v[0].as_str();
+                let exporter_id = match country_map.get(exporter){
+                    Some(c) => c,
+                    None => panic!("Exporter {exporter} unknown")
+                };
+                let importer = v[1].as_str();
+                let importer_id = match country_map.get(importer){
+                    Some(c) => c,
+                    None => panic!("Importer {importer} unknown")
+                };
+
+                write!(buf, " {exporter_id},{importer_id}").unwrap();
+                for entry in &v[2..]
+                {
+                    write!(buf, ",{entry}").unwrap();
+                }
+                writeln!(buf).unwrap();
+            }
+        )
 }

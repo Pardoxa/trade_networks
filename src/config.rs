@@ -365,7 +365,15 @@ pub enum SubCommand{
     /// Order by trade volume
     VolumeOrder(OrderedTradeVolue),
     /// Partition a file according to "partition"
-    Partition(PartitionOpts)
+    Partition(PartitionOpts),
+    /// Beef ids
+    BeefIds(BeefMap)
+}
+
+#[derive(Parser, Debug)]
+pub struct BeefMap {
+    pub country_file: PathBuf,
+    pub out_file: PathBuf
 }
 
 #[derive(Parser, Debug)]
