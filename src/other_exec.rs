@@ -1,5 +1,5 @@
 use {
-    crate::parser::{country_map, line_to_vec},
+    crate::parser::{country_map, line_to_vec, LineIter},
     super::{
         config::*,
         misc::*
@@ -707,28 +707,37 @@ where P: AsRef<Path>
 
     let header_line = line_iter.next().unwrap();
     writeln!(buf, "#{header_line}").unwrap();
-    line_iter
-        .for_each(
-            |line|
-            {
-                let v = line_to_vec(&line);
-                let exporter = v[0].as_str();
-                let exporter_id = match country_map.get(exporter){
-                    Some(c) => c,
-                    None => panic!("Exporter {exporter} unknown")
-                };
-                let importer = v[1].as_str();
-                let importer_id = match country_map.get(importer){
-                    Some(c) => c,
-                    None => panic!("Importer {importer} unknown")
-                };
-
-                write!(buf, " {exporter_id},{importer_id}").unwrap();
-                for entry in &v[2..]
-                {
-                    write!(buf, ",{entry}").unwrap();
-                }
-                writeln!(buf).unwrap();
+    let mut unknown_exporter = HashSet::new();
+    let mut unknown_importer = HashSet::new();
+    for line in line_iter{
+        let mut iter = LineIter::new(&line);
+        let exporter = iter.next().unwrap();
+        let exporter_id = match country_map.get(exporter){
+            Some(c) => c,
+            None => {
+                unknown_exporter.insert(exporter.to_owned());
+                continue;
             }
-        )
+        };
+        let importer = iter.next().unwrap();
+        let importer_id = match country_map.get(importer){
+            Some(c) => c,
+            None => {
+                unknown_importer.insert(importer.to_owned());
+                continue;
+            }
+        };
+
+        write!(buf, " {exporter_id},{importer_id}").unwrap();
+        let rest: &str = iter.into();
+        writeln!(buf, "{rest}").unwrap();
+    }
+    if !unknown_exporter.is_empty(){
+        println!("Unknown exporter! {}", unknown_exporter.len());
+        dbg!(unknown_exporter);
+    }
+    if !unknown_importer.is_empty(){
+        println!("Unknown exporter! {}", unknown_importer.len());
+        dbg!(unknown_importer);
+    }
 }

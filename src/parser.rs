@@ -59,6 +59,66 @@ pub fn get_start_year(header_slice: &[String]) -> Years
     Years { start_year, end_year }
 }
 
+pub struct LineIter<'a>
+{
+    line: &'a str,
+}
+
+impl<'a> LineIter<'a> {
+    pub fn new(line: &'a str) -> Self
+    {
+        Self{line}
+    }
+}
+
+impl<'a> From<LineIter<'a>> for &'a str
+{
+    fn from(value: LineIter<'a>) -> Self {
+        value.line
+    }
+}
+
+impl<'a> Iterator for LineIter<'a>
+{
+    type Item = &'a str;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.line.is_empty(){
+            return None;
+        }
+        if let Some(rest) = self.line.strip_prefix('"')
+        {
+            let (next, rest) = rest.split_once('"')
+                .expect("pattern wrong");
+            // skip next "," if it exists
+            match rest.strip_prefix(','){
+                Some(remaining) => self.line = remaining,
+                None => {
+                    assert!(rest.is_empty());
+                    self.line = rest;
+                } 
+            }
+            Some(next)
+        } else {
+            match self.line.split_once(','){
+                Some((next, rest)) => {
+                    self.line = rest;
+                    Some(next)
+                },
+                None => {
+                    let (next, rest) = self.line.split_at(self.line.len());
+                    self.line = rest;
+                    Some(next)
+                }
+            }
+        }
+    }
+}
+
+pub fn line_to_str_vec(line: &'_ str) -> Vec<&'_ str>
+{
+    LineIter::new(line).collect()
+}
+
 
 pub fn line_to_vec(line: &str) -> Vec<String>
 {
@@ -105,14 +165,14 @@ where I: IntoIterator<Item = P>,
         let year_info = get_start_year(&header);
 
         for line in lines{
-            let mut line_vec = line_to_vec(&line);
+            let line_vec = line_to_str_vec(&line);
             if let Some(specific) = only_unit.as_deref(){
-                let unit = line_vec[unit_idx].as_str();
+                let unit = line_vec[unit_idx];
                 if !global_unit_tester.is_equiv(specific, unit){
                     continue;
                 }
             }
-            let item_code = line_vec.swap_remove(item_code_idx);
+            let item_code = line_vec[item_code_idx].to_string();
             item_codes.entry(item_code)
                 .and_modify(
                     |stored_year|
@@ -161,10 +221,10 @@ where I: IntoIterator<Item = P>,
             .expect("No Unit found");
 
         for line in lines {
-            let line_vec = line_to_vec(&line);
-            let item_code = line_vec[item_code_idx].as_str();
+            let line_vec = line_to_str_vec(&line);
+            let item_code = line_vec[item_code_idx];
 
-            let unit = &line_vec[unit_idx];
+            let unit = line_vec[unit_idx];
 
             if let Some(specific_unit) = only_unit.as_deref(){
                 if !global_unit_tester.is_equiv(specific_unit, unit){
@@ -176,9 +236,9 @@ where I: IntoIterator<Item = P>,
                 // enrichment is still valid.
                 // now I need to modify it accordingly
 
-                let country = &line_vec[country_idx];
+                let country = line_vec[country_idx];
 
-                let info_type = &line_vec[info_idx];
+                let info_type = line_vec[info_idx];
                 let info_type_u8 = global_node_info.get(info_type);
                 
 
@@ -189,7 +249,7 @@ where I: IntoIterator<Item = P>,
                         let year_idx = enrichment.year_to_idx(year);
                         let entry = enrichment.get_mut_inserting(year_idx, country);
                         let extra = Extra{
-                            unit: unit.clone(),
+                            unit: unit.to_string(),
                             amount
                         };
                         if let Some(e) = entry.map.get(&info_type_u8){
@@ -306,13 +366,13 @@ where P: AsRef<Path>
     );
     let mut not_even_once = true;
     for l in lines{
-        let v = line_to_vec(&l);
-        let item_code = &v[item_code_id];
+        let v = line_to_str_vec(&l);
+        let item_code = v[item_code_id];
         if item_code == target_item_code{
-            let unit = &v[unit_id];
-            let info_type = &v[info_id];
+            let unit = v[unit_id];
+            let info_type = v[info_id];
             let entry_id = map.get(info_type);
-            let country = &v[country_id];
+            let country = v[country_id];
             not_even_once = false;
             
             for (year_idx, amount_str) in v[start_year_id..].iter().enumerate(){
@@ -321,7 +381,7 @@ where P: AsRef<Path>
                 }
                 let amount: f64 = amount_str.parse()
                     .expect("Error in parsing amount as float");
-                let extra = Extra{unit: unit.clone(), amount};
+                let extra = Extra{unit: unit.to_owned(), amount};
                 let country_info = enrichments.get_mut_inserting(year_idx, country);
                 country_info.push(entry_id, extra);
             }
@@ -735,22 +795,18 @@ pub fn network_parser(
 pub fn country_map<P>(code_file: P) -> BTreeMap<String, String>
 where P: AsRef<Path>
 {
-    let buf_reader = open_bufreader(code_file);
-    let lines = buf_reader
-        .lines()
-        .map(|r| r.unwrap())
+    let lines = open_as_unwrapped_lines(code_file)
         .skip(1);
 
     let mut code_country_map: BTreeMap<_,_> = BTreeMap::new();
 
     for line in lines {
-        let mut s_iter = line.split(',');
+        let mut s_iter = LineIter{line: &line};
         let code = s_iter.next().unwrap();
         let name = s_iter.nth(1).unwrap();
 
         code_country_map.insert(code.to_owned(), name.to_owned());
     }
-
     code_country_map
 
 }

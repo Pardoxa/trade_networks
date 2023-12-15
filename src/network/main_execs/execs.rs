@@ -360,12 +360,11 @@ pub fn misc(opt: MiscOpt)
             .filtered_network(scc_components[index_largest_scc].iter());
         let largest_scc_diameter = scc_network.diameter();
         res_map.insert("largest_scc", Box::new(scc_network.node_count()));
-        let diam = if let Some(dia) = largest_scc_diameter {
-            format!("{}", dia)
-        } else {
-            "NaN".to_owned()
+        let diam: Box<dyn Display> = match largest_scc_diameter{
+            Some(dia) => Box::new(dia),
+            None => Box::new("NaN")
         };
-        res_map.insert("largest_scc_diameter", Box::new(diam));
+        res_map.insert("largest_scc_diameter", diam);
 
         write!(buf, "{}", res_map.get(entries[0]).unwrap()).unwrap();
         for e in entries[1..].iter()
