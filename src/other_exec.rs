@@ -728,7 +728,7 @@ where P: AsRef<Path>
             }
         };
 
-        write!(buf, " {exporter_id},{importer_id},").unwrap();
+        write!(buf, "{exporter_id},{importer_id},").unwrap();
         let rest: &str = iter.into();
         writeln!(buf, "{rest}").unwrap();
     }
