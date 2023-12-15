@@ -105,8 +105,8 @@ impl<'a> Iterator for LineIter<'a>
                     Some(next)
                 },
                 None => {
-                    let (next, rest) = self.line.split_at(self.line.len());
-                    self.line = rest;
+                    let next = self.line;
+                    self.line = "";
                     Some(next)
                 }
             }
