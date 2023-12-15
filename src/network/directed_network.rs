@@ -3,7 +3,11 @@ use{
         collections::{BTreeMap, VecDeque}, 
         num::NonZeroU32,
         fs::File,
-        io::{BufReader, Write}
+        io::{BufReader, Write},
+        path::{
+            Path,
+            PathBuf
+        }
     },
     net_ensembles::Graph,
     serde::{Serialize, Deserialize},
@@ -81,15 +85,17 @@ pub struct Edge{
 }
 
 
-pub fn read_networks(file_name: &str) -> Vec<Network>
+pub fn read_networks<P>(file_name: P) -> Vec<Network>
+where P: AsRef<Path>
 {
-    let file = File::open(file_name).unwrap();
+    let path: &Path = file_name.as_ref();
+    let file = File::open(path).unwrap();
     let reader = BufReader::new(file);
     let res = bincode::deserialize_from(reader);
     match res{
         Ok(o) => o,
         Err(e) => {
-            let file = File::open(file_name).unwrap();
+            let file = File::open(path).unwrap();
             let reader = BufReader::new(file);
             match serde_json::from_reader(reader){
                 Ok(o) => o,
@@ -113,7 +119,7 @@ pub struct GraphVizExtra{
 
 #[derive(Clone, Debug)]
 pub enum LazyNetworks{
-    Filename(String),
+    Filename(PathBuf),
     Networks(Vec<Network>, Vec<Network>)
 }
 

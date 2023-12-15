@@ -1,14 +1,31 @@
-use std::collections::*;
-use std::fmt::Display;
-use crate::parser::country_map;
-use crate::{network::*, UNIT_TESTER};
-use crate::network::enriched_digraph::*;
-use std::ops::{Deref, RangeInclusive};
-use crate::config::*;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use crate::misc::*;
-use net_ensembles::sampling::{HistF64, Histogram};
+use{
+    std::{
+        collections::*,
+        path::Path,
+        fmt::Display,
+        ops::{
+            Deref, 
+            RangeInclusive
+        },
+        fs::File,
+        io::{
+            BufWriter, 
+            Write
+        }
+    },
+    crate::{
+        parser::country_map,
+        network::*, 
+        UNIT_TESTER,
+        network::enriched_digraph::*,
+        config::*,
+        misc::*
+    },
+    net_ensembles::sampling::{
+        HistF64, 
+        Histogram
+    }
+};
 
 const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
 
@@ -36,7 +53,8 @@ fn integrate(slice: &[f64], delta: f64) -> f64
         .sum()
 }
 
-pub fn flow(opt: FlowOpt, in_file: &str)
+pub fn flow<P>(opt: FlowOpt, in_file: P)
+    where P: AsRef<Path>
 {
     let networks = read_networks(in_file);
 
@@ -155,7 +173,8 @@ pub struct Flow{
     pub imports: Vec<f64>
 }
 
-pub fn shock_exec(opt: ShockOpts, in_file: &str)
+pub fn shock_exec<P>(opt: ShockOpts, in_file: P)
+    where P: AsRef<Path>
 {
     let networks = read_networks(in_file);
 
@@ -457,8 +476,10 @@ pub fn calc_shock(
     }
 }
 
-pub fn shock_avail(opt: ShockAvailOpts, in_file: &str){
-    let mut lazy_network = LazyNetworks::Filename(in_file.to_owned());
+pub fn shock_avail<P>(opt: ShockAvailOpts, in_file: P)
+where P: AsRef<Path>
+{
+    let mut lazy_network = LazyNetworks::Filename(in_file.as_ref().to_owned());
     let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file.clone(), opt.item_code.clone());
     let res = calc_shock(
         &mut lazy_network, 
@@ -514,11 +535,12 @@ where I: IntoIterator<Item = A>,
 }
 
 
-pub fn reduce_x(opt: XOpts, in_file: &str)
+pub fn reduce_x<P>(opt: XOpts, in_file: P)
+where P: AsRef<Path>
 {
     let specifiers: Vec<_> = opt.top.get_specifiers();
 
-    let mut lazy_networks = LazyNetworks::Filename(in_file.to_owned());
+    let mut lazy_networks = LazyNetworks::Filename(in_file.as_ref().to_owned());
     lazy_networks.assure_availability();
     let export_without_unconnected = lazy_networks
         .get_export_network_unchecked(opt.year)
@@ -1163,9 +1185,10 @@ pub fn reduce_x(opt: XOpts, in_file: &str)
 
 }
 
-pub fn shock_dist(opt: ShockDistOpts, in_file: &str)
+pub fn shock_dist<P>(opt: ShockDistOpts, in_file: P)
+where P: AsRef<Path>
 {
-    let mut lazy_networks = LazyNetworks::Filename(in_file.to_string());
+    let mut lazy_networks = LazyNetworks::Filename(in_file.as_ref().to_path_buf());
     let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file, opt.item_code);
     let specifiers = opt.top.get_specifiers();
 

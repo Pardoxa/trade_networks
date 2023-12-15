@@ -227,8 +227,10 @@ where I: IntoIterator<Item = P>,
 
 }
 
-pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> EnrichmentInfos
+pub fn parse_extra<P>(in_file: P, target_item_code: &Option<String>) -> EnrichmentInfos
+where P: AsRef<Path>
 {
+    let path = in_file.as_ref();
     println!("PARSING EXTRA");
     {
         let check_item_code = |item_codes: &[String]|
@@ -243,16 +245,16 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
             } 
         };
 
-        if in_file.ends_with(".bincode"){
-            let buf = open_bufreader(in_file);
+        if path.extension().is_some_and(|ext| ext == "bincode"){
+            let buf = open_bufreader(path);
             if let Ok(r) = bincode::deserialize_from::<_, EnrichmentInfos>(buf){
                 check_item_code(&r.sorted_item_codes);
                 return r;
             }
         }
         
-        if in_file.ends_with(".json"){
-            let buf = open_bufreader(in_file);
+        if path.extension().is_some_and(|ext| ext == "json") {
+            let buf = open_bufreader(path);
             if let Ok(r) = serde_json::from_reader::<_, EnrichmentInfos>(buf){
                 check_item_code(&r.sorted_item_codes);
                 return r;
@@ -265,7 +267,7 @@ pub fn parse_extra(in_file: &str, target_item_code: &Option<String>) -> Enrichme
         .expect("Cannot parse as Json or Bincode -> item code required");
     let map = crate::network::enriched_digraph::NodeInfoMap::new();
 
-    let buf = open_bufreader(in_file);
+    let buf = open_bufreader(path);
     let mut lines = buf.lines()
         .map(|l| l.expect("read error"));
     let first_line = lines.next()

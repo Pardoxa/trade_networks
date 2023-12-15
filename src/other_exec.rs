@@ -1,9 +1,5 @@
-use core::panic;
-use std::io::stdout;
-
-use crate::parser::{country_map, line_to_vec};
-
 use {
+    crate::parser::{country_map, line_to_vec},
     super::{
         config::*,
         misc::*
@@ -12,9 +8,11 @@ use {
         collections::*,
         io::{
             BufRead,
-            Write
+            Write,
+            stdout
         },
-        borrow::Borrow
+        borrow::Borrow,
+        path::Path
     },
     serde::{Serialize, Deserialize},
     sampling::{GnuplotTerminal, GnuplotSettings, GnuplotAxis},
@@ -603,13 +601,15 @@ where W: Write
     }
 }
 
-pub fn partition(mut opt: PartitionOpts, in_file: &str){
-
+pub fn partition<P>(mut opt: PartitionOpts, in_file: P)
+where P: AsRef<Path>
+{
+    let path = in_file.as_ref();
     let comments = (!opt.remove_comments)
         .then(
             ||
             {
-                open_as_unwrapped_lines(in_file)
+                open_as_unwrapped_lines(path)
                     .filter(|s| s.starts_with('#'))
                     .collect_vec()
             }
@@ -693,7 +693,8 @@ where I: IntoIterator<Item=(f64, String)>,
 
 
 
-pub fn beef_map_to_id(in_file: &str, opt: BeefMap)
+pub fn beef_map_to_id<P>(in_file: P, opt: BeefMap)
+where P: AsRef<Path>
 {
     let country_map = country_map(opt.country_file);
     // need to reverse the map

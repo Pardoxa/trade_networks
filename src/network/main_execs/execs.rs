@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use itertools::Itertools;
 
 use crate::{parser::{parse_all_networks, country_map}, partition};
@@ -8,7 +10,8 @@ use {
         io::{BufWriter, Write, BufRead},
         collections::{BTreeSet, BTreeMap}, 
         fmt::Display,
-        f64::consts::TAU
+        f64::consts::TAU,
+        path::Path
     },
     crate::network::{*, helper_structs::*},
     crate::{config::*, misc::*, parser},
@@ -422,7 +425,7 @@ pub fn enrich_to_bin(opt: ParseEnrichOpts){
 
 }
 
-pub fn test_chooser(in_file: &str, cmd: SubCommand){
+pub fn test_chooser(in_file: PathBuf, cmd: SubCommand){
     match cmd
     {
         SubCommand::OutComp(o) => out_comparison(in_file, o),
@@ -441,8 +444,10 @@ pub fn test_chooser(in_file: &str, cmd: SubCommand){
     }
 }
 
-fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
+fn order_trade_volume<P>(opt: OrderedTradeVolue, in_file: P)
+where P: AsRef<Path>
 {
+    let in_file = in_file.as_ref();
     let map = opt
         .country_name_file
         .map(country_map);
@@ -595,7 +600,9 @@ fn order_trade_volume(opt: OrderedTradeVolue, in_file: &str)
 }
 
 
-pub fn country_count(in_file: &str, opt: CountryCountOpt){
+pub fn country_count<P>(in_file: P, opt: CountryCountOpt)
+where P: AsRef<Path>
+{
     let networks = read_networks(in_file);
 
     let mut buf = create_buf_with_command_and_version(opt.out);
@@ -616,7 +623,7 @@ pub fn country_count(in_file: &str, opt: CountryCountOpt){
     }
 }
 
-pub fn out_comparison(in_file: &str, cmd: OutOpt){
+pub fn out_comparison(in_file: PathBuf, cmd: OutOpt){
     let networks = read_networks(in_file);
 
     let mut network = None;
@@ -670,7 +677,9 @@ pub fn out_comparison(in_file: &str, cmd: OutOpt){
 
 }
 
-pub fn first_layer_overlap(in_file: &str, cmd: FirstLayerOpt){
+pub fn first_layer_overlap<P>(in_file: P, cmd: FirstLayerOpt)
+    where P: AsRef<Path>
+{
     let networks = read_networks(in_file);
 
     let mut network = None;
@@ -827,7 +836,7 @@ where W: Write
     writeln!(w, "}}")
 }
 
-pub fn flow_of_top_first_layer(in_file: &str, opt: FirstLayerOpt)
+pub fn flow_of_top_first_layer<P: AsRef<Path>>(in_file: P, opt: FirstLayerOpt)
 {
     let networks = read_networks(in_file);
 

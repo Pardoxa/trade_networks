@@ -289,7 +289,7 @@ pub struct FilterOpts
 #[derive(Parser, Debug)]
 pub struct OnlyNetworks{
     /// Networks file
-    pub in_file: String
+    pub in_file: PathBuf
 }
 
 
@@ -333,7 +333,7 @@ pub struct MiscOpt{
 pub struct Tests{
     /// input
     #[arg(short, long)]
-    pub in_file: String,
+    pub in_file: PathBuf,
 
     #[command(subcommand)]
     pub command: SubCommand
