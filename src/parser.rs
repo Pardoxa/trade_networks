@@ -1,5 +1,7 @@
 use std::{path::Path, collections::*};
 
+use itertools::Itertools;
+
 use crate::{config::ReadType, misc::*, UNIT_TESTER};
 
 use{
@@ -396,6 +398,91 @@ where P: AsRef<Path>
     enrichments
 }
 
+
+pub fn parse_beef_network<P>(
+    input: P
+)   -> Vec<Network>
+    where P: AsRef<Path>
+{
+    let path = input.as_ref();
+    let lines = open_as_unwrapped_lines_filter_comments(path);
+    // Let us first check which nodes we have over all.
+    let mut countries = BTreeSet::new();
+
+    let beef_id = "Beef";
+
+    for line in lines{
+        let mut iter = LineIter::new(&line);
+        let importer = iter.next().unwrap();
+        let exporter = iter.next().unwrap();
+        let item = iter.next().unwrap();
+        if item != beef_id
+        {
+            continue;
+        }
+        countries.insert(importer.to_owned());
+        countries.insert(exporter.to_owned());
+    }
+
+    let all_nodes = countries
+        .into_iter()
+        .map(Node::new)
+        .collect_vec();
+
+    let node_map: HashMap<_, _> = all_nodes.iter()
+        .map(|n| n.identifier.as_str())
+        .zip(0_usize..)
+        .collect();
+        
+
+
+    let lines = open_as_unwrapped_lines_filter_comments(path);
+    let mut year_map = BTreeMap::new();
+
+    for line in lines {
+        let mut iter = LineIter::new(&line);
+        let exporter = iter.next().unwrap();
+        let importer = iter.next().unwrap();
+        let item = iter.next().unwrap();
+        if item != beef_id
+        {
+            continue;
+        }
+        let year_str = iter.next().unwrap();
+        let year: i32 = year_str.parse().unwrap();
+        let quantity_str = iter.next().unwrap();
+        let quantity: f64 = quantity_str.parse().unwrap();
+        if quantity == 0.0 {
+            continue;
+        }
+        let _value: &str = iter.into();
+
+        let network = year_map.entry(year)
+            .or_insert_with(
+                || 
+                {
+                    Network{
+                        nodes: all_nodes.clone(), 
+                        direction: Direction::ExportTo,
+                        data_origin: ReadType::Beef,
+                        year,
+                        unit: "Unknown".to_string(),
+                        sorted_item_codes: vec!["Beef".to_owned()]
+                    }
+                }
+            );
+        let import_index = *node_map.get(importer).unwrap();
+        let export_index = *node_map.get(exporter).unwrap();
+
+        let edge = Edge{
+            amount: quantity,
+            index: import_index
+        };
+
+        network.nodes[export_index].adj.push(edge);
+    }
+    year_map.into_values().collect()
+}
 
 pub fn parse_all_networks(
     file_name: &str,

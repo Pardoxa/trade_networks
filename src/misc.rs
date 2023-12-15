@@ -59,6 +59,15 @@ where P: AsRef<Path>
         .map(Result::unwrap)
 }
 
+pub fn open_as_unwrapped_lines_filter_comments<P>(path: P) -> impl Iterator<Item = String>
+where P: AsRef<Path>
+{
+    open_bufreader(path)
+        .lines()
+        .map(Result::unwrap)
+        .filter(|line| !line.starts_with('#'))
+}
+
 pub fn create_buf_with_command_and_version<P>(path: P) -> BufWriter<File>
 where P: AsRef<Path>
 {

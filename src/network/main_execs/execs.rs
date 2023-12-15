@@ -20,6 +20,9 @@ use {
     net_ensembles::sampling::*
 };
 
+const JSON_CREATION_ERROR: &str = "unable to create json";
+const BINCODE_CREATION_ERROR: &str = "bincode serialization issue";
+
 fn assert_same_direction_write_direction<W>(networks: &[Network], mut writer: W)
 where W: Write
 {
@@ -38,6 +41,24 @@ fn force_direction(networks: &mut [Network], direction: Direction)
         .for_each(|n| n.force_direction(direction));
 }
 
+
+
+pub fn parse_beef_network(opt: BeefParser)
+{
+    let networks = crate::parser::parse_beef_network(opt.input);
+
+    if opt.json{
+        let buf = create_buf("beef.json");
+        serde_json::to_writer_pretty(buf, &networks)
+            .expect(JSON_CREATION_ERROR)
+    } else {
+        let buf = create_buf("beef.bincode");
+        bincode::serialize_into(buf, &networks)
+            .expect(BINCODE_CREATION_ERROR)
+    }
+
+}
+
 pub fn parse_networks(opt: ParseNetworkOpt)
 {
     let networks = crate::parser::network_parser(
@@ -50,10 +71,10 @@ pub fn parse_networks(opt: ParseNetworkOpt)
     let buf = create_buf(&opt.out);
     if opt.json{
         serde_json::to_writer_pretty(buf, &networks)
-            .expect("unable to create json");
+            .expect(JSON_CREATION_ERROR);
     } else {
         bincode::serialize_into(buf, &networks)
-            .expect("serialization issue");
+            .expect(BINCODE_CREATION_ERROR);
     }
     
 }
@@ -71,14 +92,14 @@ pub fn to_binary_all(opt: ParseAllNetworksOpt)
             let output_name = format!("{item_code}.bincode");
             let buf = create_buf(output_name);
             bincode::serialize_into(buf, &networks)
-                .expect("serialization issue");
+                .expect(BINCODE_CREATION_ERROR);
         }
     } else {
         let name = "everything.bincode";
         println!("creating {name}");
         let buf = create_buf(name);
         bincode::serialize_into(buf, &all)
-                .expect("serialization issue");
+                .expect(BINCODE_CREATION_ERROR);
     }
     
 

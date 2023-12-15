@@ -7,7 +7,7 @@ use std::{
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
-    network::{Direction, NetworkType, main_execs::Relative, Network}, 
+    network::{Direction, main_execs::Relative, Network}, 
     misc::{create_buf, create_buf_with_command_and_version}
 };
 use serde::{Serialize, Deserialize};
@@ -28,6 +28,13 @@ pub struct ParseEnrichOpts{
 
     #[arg(short, long)]
     /// Use json output format instead of bincode
+    pub json: bool
+}
+
+#[derive(Debug, Parser)]
+pub struct BeefParser{
+    pub input: PathBuf,
+    #[arg(long, short)]
     pub json: bool
 }
 
@@ -134,6 +141,7 @@ pub enum CmdChooser{
     Out10(MiscOpt),
     ParseNetworks(ParseNetworkOpt),
     ParseAllNetworks(ParseAllNetworksOpt),
+    ParseBeef(BeefParser),
     Tests(Tests),
     ParseEnrichment(ParseEnrichOpts),
     ParseAllEnrichments(ParseAllEnrichmentsOpt),
@@ -785,7 +793,9 @@ pub enum ReadType{
     /// Use reported Import Quantity
     ImportQuantity,
     /// Use reported Export Quantity
-    ExportQuantity
+    ExportQuantity,
+    /// Beef Database
+    Beef
 }
 
 impl ReadType{
@@ -795,7 +805,8 @@ impl ReadType{
             ReadType::ImportQuantity => "Import Quantity",
             ReadType::ExportQuantity => "Export Quantity",
             ReadType::ExportValue => "Export Value",
-            ReadType::ImportValue => "Import Value"
+            ReadType::ImportValue => "Import Value",
+            ReadType::Beef => "Beef"
         }
     }
 
@@ -803,16 +814,8 @@ impl ReadType{
     {
         match self{
             ReadType::ExportQuantity | ReadType::ExportValue => Direction::ExportTo,
-            ReadType::ImportQuantity | ReadType::ImportValue => Direction::ImportFrom
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn get_network_type(&self) -> NetworkType
-    {
-        match self{
-            ReadType::ExportQuantity | ReadType::ImportQuantity => NetworkType::Quantity,
-            ReadType::ExportValue | ReadType::ImportValue => NetworkType::Value
+            ReadType::ImportQuantity | ReadType::ImportValue => Direction::ImportFrom,
+            ReadType::Beef => unimplemented!()
         }
     }
 }
