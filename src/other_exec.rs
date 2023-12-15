@@ -559,18 +559,26 @@ pub fn filter_files(opt: FilterOpts)
 fn filter_files_helper<W>(opt: FilterOpts, mut writer: W)
 where W: Write
 {
+    let csv = opt.filter_by
+        .extension()
+        .is_some_and(|ext| ext == "csv");
     let filter_set: HashSet<String> = open_as_unwrapped_lines(opt.filter_by)
         .filter(|line| !line.starts_with('#'))
         .map(
             |line|
             {
-                line.split_whitespace()
-                    .nth(opt.filter_by_col)
-                    .expect("filter_by column not found")
-                    .to_owned()
+                if csv {
+                    let mut v = line_to_vec(&line);
+                    v.swap_remove(opt.filter_by_col)
+                } else {
+                    line.split_whitespace()
+                        .nth(opt.filter_by_col)
+                        .expect("filter_by column not found")
+                        .to_owned()
+                }
             }
         ).collect();
-    
+
     let iter = open_as_unwrapped_lines(opt.other_file);
     for line in iter {
         if line.starts_with('#')
