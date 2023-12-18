@@ -299,7 +299,7 @@ pub fn correlations(opt: CorrelationOpts)
                 if let Some(country_map) = country_name_map.as_ref() {
                     writeln!(
                         buf_av_var_c,
-                        " {}",
+                        " \"{}\"",
                         country_map.get(&country.to_string()).unwrap()
                     )
                 } else {
