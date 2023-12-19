@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use {
     crate::parser::{country_map, line_to_vec, LineIter},
     super::{
@@ -539,28 +541,46 @@ pub fn correlations(opt: CorrelationOpts)
 
 pub fn filter_files(opt: FilterOpts)
 {
-    match opt.out.as_deref(){
-        Some(out_path) => {
-            let buf = opt.comments.get_create_buf_fun()(out_path);
-            filter_files_helper(opt, buf)
-        },
-        None => {
-            let mut writer = stdout();
-            if !opt.comments.is_none(){
-                write_commands_and_version(&mut writer).unwrap();
+
+    if opt.glob{
+        let iter = glob::glob(&opt.other_file)
+            .expect("globbing_error")
+            .map(Result::unwrap);
+        let buf_creation = opt.comments.get_create_buf_fun();
+        for path in iter {
+            let file_name = path.file_name().expect("no file name");
+            let mut new_name = PathBuf::from(file_name);
+            new_name.set_extension("filtered");
+            println!("Reading: {path:?}, creating: {:?}", new_name);
+            let buf = buf_creation(new_name);
+            filter_files_helper(&opt, buf, path);
+        }
+    } else {
+        let path = opt.other_file.as_str();
+        match opt.out.as_deref(){
+            Some(out_path) => {
+                let buf = opt.comments.get_create_buf_fun()(out_path);
+                filter_files_helper(&opt, buf, path)
+            },
+            None => {
+                let mut writer = stdout();
+                if !opt.comments.is_none(){
+                    write_commands_and_version(&mut writer).unwrap();
+                }
+                filter_files_helper(&opt, writer, path)
             }
-            filter_files_helper(opt, writer)
         }
     }
 }
 
-fn filter_files_helper<W>(opt: FilterOpts, mut writer: W)
-where W: Write
+fn filter_files_helper<W, P>(opt: &FilterOpts, mut writer: W, work_file: P)
+where W: Write,
+    P: AsRef<Path>
 {
     let csv = opt.filter_by
         .extension()
         .is_some_and(|ext| ext == "csv");
-    let filter_set: HashSet<String> = open_as_unwrapped_lines(opt.filter_by)
+    let filter_set: HashSet<String> = open_as_unwrapped_lines(opt.filter_by.as_path())
         .filter(|line| !line.starts_with('#'))
         .map(
             |line|
@@ -577,7 +597,7 @@ where W: Write
             }
         ).collect();
 
-    let iter = open_as_unwrapped_lines(opt.other_file);
+    let iter = open_as_unwrapped_lines(work_file);
     for line in iter {
         if line.starts_with('#')
         {

@@ -275,7 +275,7 @@ pub struct FilterOpts
     pub filter_by_col: usize,
 
     /// Path to the file that you want to filter
-    pub other_file: PathBuf,
+    pub other_file: String,
 
     /// Which col of the other_file contains the information on which to filter?
     pub other_col: usize,
@@ -289,9 +289,15 @@ pub struct FilterOpts
     pub comments: Comments,
 
     /// Output file to create. If not given, the output will be written 
-    /// to the terminal instead
-    #[arg(long, short)]
-    pub out: Option<PathBuf>
+    /// to the terminal instead. This is overwritten by the 'glob' option
+    #[arg(long, short, conflicts_with = "glob")]
+    pub out: Option<PathBuf>,
+
+    /// Use globbing to filter multiple files. "other_file" will be treaded 
+    /// as globbing and output files will be created by appending .filter to
+    /// old filenames. 
+    #[arg(long, short, conflicts_with = "out")]
+    pub glob: bool
 }
 
 #[derive(Parser, Debug)]
