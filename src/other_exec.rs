@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-
 use clap::ValueEnum;
 use {
     crate::parser::{country_map, line_to_vec, LineIter},
@@ -216,7 +215,7 @@ where I: IntoIterator<Item = (F, F)>,
         vec.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
         let all_unique = vec.windows(2)
             .all(|slice| slice[0].0 != slice[1].0);
-        let mut map = vec![0_isize; vec.len()];
+        let mut map = vec![0_i64; vec.len()];
         if all_unique{
             vec.into_iter()
                 .zip(0..)
@@ -252,10 +251,10 @@ where I: IntoIterator<Item = (F, F)>,
             .zip(b_map.iter())
             .map(
                 |(&a, &b)| {
-                    let dif = a - b;
+                    let dif = a.abs_diff(b);
                     dif * dif
                 }
-            ).sum::<isize>() * 6;
+            ).sum::<u64>() * 6;
         1.0 - d_sq_6 as f64 / (n * (n * n - 1)) as f64
     } else {
         let iter = a_map
