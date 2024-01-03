@@ -210,35 +210,63 @@ where I: IntoIterator<Item = (F, F)>,
         
         ).unzip();
 
-    let create_map = |mut vec: Vec<(f64, usize)>|
+    let mut always_unique = true;
+    let mut create_map = |mut vec: Vec<(f64, usize)>|
     {
         vec.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
+        // they have to be all unique, otherwise the spearman calculation below is wrong,
+        // instead another calculation can be done, but that one is not implemented yet,
+        // hopefully I will not need it
+        let all_unique = vec.windows(2)
+            .all(|slice| slice[0].0 != slice[1].0);
         let mut map = vec![0_isize; vec.len()];
-        vec.into_iter()
-            .zip(0..)
-            .for_each(
-                |((_, old_idx), new_idx)|
-                {
-                    map[old_idx] = new_idx;
+        if all_unique{
+            vec.into_iter()
+                .zip(0..)
+                .for_each(
+                    |((_, old_idx), new_idx)|
+                    {
+                        map[old_idx] = new_idx;
+                    }
+                );
+        } else {
+            always_unique = false;
+            let mut counter = -1;
+            let mut last_val = f64::NEG_INFINITY;
+            for (val, old_idx) in vec 
+            {
+                if last_val != val {
+                    counter += 1;
+                    last_val = val;
                 }
-            );
+                map[old_idx] = counter;
+            }
+        }
+        
         map
     };
     
     let a_map = create_map(a);
     let b_map = create_map(b);
 
-    let n = a_map.len();
-    let d_sq_6 = a_map.iter()
-        .zip(b_map.iter())
-        .map(
-            |(&a, &b)| {
-                let dif = a - b;
-                dif * dif
-            }
-        ).sum::<isize>() * 6;
-    1.0 - d_sq_6 as f64 / (n * (n * n - 1)) as f64
-    
+    if always_unique{
+        let n = a_map.len();
+        let d_sq_6 = a_map.iter()
+            .zip(b_map.iter())
+            .map(
+                |(&a, &b)| {
+                    let dif = a - b;
+                    dif * dif
+                }
+            ).sum::<isize>() * 6;
+        1.0 - d_sq_6 as f64 / (n * (n * n - 1)) as f64
+    } else {
+        let iter = a_map
+            .iter()
+            .zip(b_map.iter())
+            .map(|(&a, &b)| (a as f64, b as f64));
+        pearson_correlation_coefficient(iter)
+    }
 }
 
 fn pearson_correlation_coefficient<I, F>(iterator: I) -> f64
