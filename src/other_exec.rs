@@ -193,6 +193,54 @@ where I: IntoIterator<Item = (F, F)>,
 
 }
 
+fn spearman_correlation_coefficent<I, F>(iterator: I) -> f64
+where I: IntoIterator<Item = (F, F)>,
+    F: Borrow<f64>
+{
+    let (a, b) = iterator
+        .into_iter()
+        .enumerate()
+        .map(
+            |(idx, item)| 
+            {
+                let a = *item.0.borrow();
+                let b = *item.1.borrow();
+                ((a, idx), (b, idx))
+            }    
+        
+        ).unzip();
+
+    let create_map = |mut vec: Vec<(f64, usize)>|
+    {
+        vec.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
+        let mut map = vec![0_isize; vec.len()];
+        vec.into_iter()
+            .zip(0..)
+            .for_each(
+                |((_, old_idx), new_idx)|
+                {
+                    map[old_idx] = new_idx;
+                }
+            );
+        map
+    };
+    
+    let a_map = create_map(a);
+    let b_map = create_map(b);
+
+    let n = a_map.len();
+    let d_sq_6 = a_map.iter()
+        .zip(b_map.iter())
+        .map(
+            |(&a, &b)| {
+                let dif = a - b;
+                dif * dif
+            }
+        ).sum::<isize>() * 6;
+    1.0 - d_sq_6 as f64 / (n * (n * n - 1)) as f64
+    
+}
+
 fn pearson_correlation_coefficient<I, F>(iterator: I) -> f64
 where I: IntoIterator<Item = (F, F)>,
     F: Borrow<f64>
@@ -512,6 +560,9 @@ pub fn correlations(opt: CorrelationOpts)
     let matrix_name = format!("{}.matrix", &inputs.output_stub);
     let mut buf_pearson = create_buf_with_command_and_version(matrix_name.as_str());
 
+    let matrix_name_spear = format!("{}_spear.matrix", &inputs.output_stub);
+    let mut buf_spear = create_buf_with_command_and_version(matrix_name_spear.as_str());
+
     let mut weight_cor_name = None;
     let mut buf_weighted_cor = has_weights.then(
         ||
@@ -633,6 +684,9 @@ pub fn correlations(opt: CorrelationOpts)
                             let pearson = pearson_correlation_coefficient(
                                 goods_cor_iter(a, b)
                             );
+                            let spear = spearman_correlation_coefficent(
+                                goods_cor_iter(a, b)
+                            );
                             if let Some(w) = weights.as_deref(){
                                 let w_a = &w[index_a];
                                 let w_b = &w[index_b];
@@ -646,9 +700,15 @@ pub fn correlations(opt: CorrelationOpts)
                                 "{} ",
                                 pearson
                             ).unwrap();
+                            write!(
+                                buf_spear,
+                                "{} ",
+                                spear
+                            ).unwrap();
                         }
                     );
                 writeln!(buf_pearson).unwrap();
+                writeln!(buf_spear).unwrap();
                 if let Some(buf) = buf_weighted_cor.as_mut(){
                     writeln!(buf).unwrap();
                 }
@@ -687,6 +747,19 @@ pub fn correlations(opt: CorrelationOpts)
         good_len, 
         matrix_name
     ).unwrap();
+    // now spear
+    let spear_gp_stub = format!("{}_spear", inputs.output_stub);
+    let mut spear_gp = PathBuf::from(&spear_gp_stub);
+    spear_gp.set_extension("gp");
+    let spear_gp_writer = create_buf_with_command_and_version(spear_gp);
+    let spear_terminal = GnuplotTerminal::PDF(spear_gp_stub);
+    settings.terminal(spear_terminal)
+        .write_heatmap_external_matrix(
+            spear_gp_writer, 
+            good_len, 
+            good_len, 
+            matrix_name_spear
+        ).unwrap();
 
     // now wrte the weighted heatmap if applicable
     if let Some(weighted_matrix_name) = weight_cor_name{
@@ -707,6 +780,8 @@ pub fn correlations(opt: CorrelationOpts)
     // Now I need to calculate the other correlations.
     let country_matrix_name = format!("{}_country.matrix", inputs.output_stub);
     let mut buf_pearson = create_buf_with_command_and_version(&country_matrix_name);
+    let country_spear_matrix_name = format!("{}_country_spear.matrix", inputs.output_stub);
+    let mut buf_spear = create_buf_with_command_and_version(&country_spear_matrix_name);
     let old_country_len = all_countries.len();
     all_countries
         .retain(
@@ -765,8 +840,9 @@ pub fn correlations(opt: CorrelationOpts)
                                     }
                                 ).inspect(|_| in_common += 1);
                             counter += 1;
-
-                            let pearson = pearson_correlation_coefficient(iter);
+                            let all = iter.collect_vec();
+                            let pearson = pearson_correlation_coefficient(all.clone());
+                            let spear = spearman_correlation_coefficent(all);
                             if pearson.is_nan(){
                                 println!("NaN for: THIS {this} other {other}:");
                                 nan_counter += 1;
@@ -776,9 +852,15 @@ pub fn correlations(opt: CorrelationOpts)
                                 "{} ",
                                 pearson
                             ).unwrap();
+                            write!(
+                                buf_spear,
+                                "{} ",
+                                spear
+                            ).unwrap();
                         }
                     );
                     writeln!(buf_pearson).unwrap();
+                    writeln!(buf_spear).unwrap();
             }
         );
     let percentage = in_common as f64 / counter as f64;
@@ -814,6 +896,17 @@ pub fn correlations(opt: CorrelationOpts)
         country_matrix_name
     ).unwrap();
 
+    let output_stub = format!("{}_country_spear", inputs.output_stub);
+    let gp_name = format!("{output_stub}_spear.gp");
+    let terminal = GnuplotTerminal::PDF(output_stub);
+    settings.terminal(terminal);
+    let buf = create_buf_with_command_and_version(gp_name);
+    settings.write_heatmap_external_matrix(
+        buf, 
+        all_countries.len(), 
+        all_countries.len(), 
+        country_spear_matrix_name
+    ).unwrap();
     
     let mut writer = create_buf_with_command_and_version(label_name);
 
