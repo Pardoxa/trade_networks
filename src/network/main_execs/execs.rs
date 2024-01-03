@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 
-use crate::{parser::{parse_all_networks, country_map}, partition};
+use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::LazyEnrichmentInfos};
 
 use {
     std::{
@@ -460,7 +460,60 @@ pub fn test_chooser(in_file: PathBuf, cmd: SubCommand){
         SubCommand::CombineWorstIntegrals(opts) => crate::other_exec::worst_integral_sorting(opts),
         SubCommand::VolumeOrder(order_opt) => order_trade_volume(order_opt, in_file),
         SubCommand::Partition(opt) => partition(opt, in_file),
-        SubCommand::BeefIds(opt) => crate::other_exec::beef_map_to_id(in_file, opt)
+        SubCommand::BeefIds(opt) => crate::other_exec::beef_map_to_id(in_file, opt),
+        SubCommand::Weights(opt) => calc_cor_weights(in_file, opt)
+    }
+}
+
+fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
+{
+    let mut networks = LazyNetworks::Filename(in_file);
+    networks.assure_availability();
+    let import = networks.get_import_network_unchecked(opt.year);
+
+    let enrichment = opt.enrichment
+        .map(
+            |name| 
+            {
+                let mut e = LazyEnrichmentInfos::Filename(name, None);
+                e.assure_availability();
+                e
+            }
+        );
+
+    let production_id = enrichment
+        .as_ref()
+        .map(|e| e.node_map_unchecked().get("Production"))
+        .unwrap_or_default();
+    
+    let enriched_year = enrichment
+        .as_ref()
+        .map(
+            |e|
+            e.get_year_unckecked(opt.year)
+        );
+
+    let mut buf = create_buf_with_command_and_version(opt.output);
+
+    let mut header = vec![
+        "CountryID",
+        "Import"
+    ];
+    if enriched_year.is_some(){
+        header.push("Production");
+    }
+    write_slice_head(&mut buf, &header).unwrap();
+
+    for node in import.nodes.iter(){
+        let total_import = node.trade_amount();
+        write!(buf, "{} {}", node.identifier, total_import).unwrap();
+        let p = enriched_year
+            .and_then(|e| e.get(&node.identifier))
+            .and_then(|extra| extra.map.get(&production_id));
+        match p {
+            None => writeln!(buf),
+            Some(extra) => writeln!(buf, " {}", extra.amount)
+        }.unwrap();
     }
 }
 

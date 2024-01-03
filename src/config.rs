@@ -360,6 +360,21 @@ pub struct WorstIntegralCombineOpts{
     pub filenames: Vec<String>
 }
 
+#[derive(Parser, Debug)]
+pub struct CalcWeights{
+    #[arg(short, long)]
+    /// If I want to include the production values
+    pub enrichment: Option<String>,
+
+    #[arg(long, short)]
+    /// The year of interest
+    pub year: i32,
+
+    /// Name of output file
+    #[arg(long, short)]
+    pub output: PathBuf
+}
+
 #[derive(Subcommand, Debug)]
 pub enum SubCommand{
     /// Calculate out component overlap
@@ -381,7 +396,9 @@ pub enum SubCommand{
     /// Partition a file according to "partition"
     Partition(PartitionOpts),
     /// Beef ids
-    BeefIds(BeefMap)
+    BeefIds(BeefMap),
+    /// Calculate weights for correlation
+    Weights(CalcWeights)
 }
 
 #[derive(Parser, Debug)]

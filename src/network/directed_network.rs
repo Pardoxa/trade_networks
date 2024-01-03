@@ -583,6 +583,7 @@ impl Network{
     }
 
     /// only for normalized networks
+    #[allow(dead_code)]
     pub fn my_centrality_normalized(&self) -> Vec<u32>
     {
         let mut centrality = vec![0; self.node_count()];

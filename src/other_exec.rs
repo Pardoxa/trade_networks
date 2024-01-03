@@ -208,7 +208,7 @@ pub struct CorrelationInput{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorrelationMeasurement{
     pub inputs: Vec<CorrelationInput>,
-    pub output_stub: String
+    pub output_stub: String,
 }
 
 impl Default for CorrelationMeasurement{
