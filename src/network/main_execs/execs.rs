@@ -470,6 +470,8 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
     let mut networks = LazyNetworks::Filename(in_file);
     networks.assure_availability();
     let import = networks.get_import_network_unchecked(opt.year);
+    let item = import.item_codes_as_string();
+    let out_name = format!("Item{item}Y{}Weights.dat", opt.year);
 
     let enrichment = opt.enrichment
         .map(
@@ -486,6 +488,13 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
         .map(|e| e.node_map_unchecked().get("Production"))
         .unwrap_or_default();
     
+    if let Some(enrichment) = enrichment.as_ref()
+    {
+        let items_e = enrichment.get_item_codes_unchecked();
+        let items_n = import.sorted_item_codes.as_slice();
+        assert_eq!(items_e, items_n);
+    }
+
     let enriched_year = enrichment
         .as_ref()
         .map(
@@ -493,7 +502,7 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
             e.get_year_unckecked(opt.year)
         );
 
-    let mut buf = create_buf_with_command_and_version(opt.output);
+    let mut buf = create_buf_with_command_and_version(out_name);
 
     let mut header = vec![
         "CountryID",
@@ -508,8 +517,10 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
         let total_import = node.trade_amount();
         write!(buf, "{} {}", node.identifier, total_import).unwrap();
         let p = enriched_year
-            .and_then(|e| e.get(&node.identifier))
-            .and_then(|extra| extra.map.get(&production_id));
+            .and_then(|e| 
+                e.get(&node.identifier)
+                    .and_then(|extra| extra.map.get(&production_id))
+            );
         match p {
             None => writeln!(buf),
             Some(extra) => writeln!(buf, " {}", extra.amount)

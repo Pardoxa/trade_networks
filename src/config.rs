@@ -369,10 +369,6 @@ pub struct CalcWeights{
     #[arg(long, short)]
     /// The year of interest
     pub year: i32,
-
-    /// Name of output file
-    #[arg(long, short)]
-    pub output: PathBuf
 }
 
 #[derive(Subcommand, Debug)]

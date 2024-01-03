@@ -216,6 +216,18 @@ pub struct Network{
 
 impl Network{
 
+    pub fn item_codes_as_string(&self) -> String
+    {
+        let slice = self.sorted_item_codes.as_slice();
+        let (first, rest) = slice.split_first().unwrap();
+        let mut result = first.clone();
+        for other in rest {
+            result.push('_');
+            result.push_str(other);
+        }
+        result
+    }
+
     pub fn ordered_by_trade_volume(&self, order_helper: OrderHelper) -> Vec<(f64, &Node)>
     {
         let mut list: Vec<_> = self.nodes
