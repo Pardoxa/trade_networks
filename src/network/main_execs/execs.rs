@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 
-use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::LazyEnrichmentInfos};
+use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION_ID}};
 
 use {
     std::{
@@ -485,7 +485,7 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
 
     let production_id = enrichment
         .as_ref()
-        .map(|e| e.node_map_unchecked().get("Production"))
+        .map(|e| e.node_map_unchecked().get(PRODUCTION_ID))
         .unwrap_or_default();
     
     if let Some(enrichment) = enrichment.as_ref()
@@ -509,7 +509,7 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
         "Import"
     ];
     if enriched_year.is_some(){
-        header.push("Production");
+        header.push(PRODUCTION_ID);
     }
     write_slice_head(&mut buf, &header).unwrap();
 

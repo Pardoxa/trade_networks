@@ -95,7 +95,7 @@ pub fn flow_calc(
 {
     let info_map = crate::network::enriched_digraph::GLOBAL_NODE_INFO_MAP.deref();
     let unit_tester = crate::UNIT_TESTER.deref();
-    let info_idx = info_map.get("Production");
+    let info_idx = info_map.get(PRODUCTION_ID);
     let mut percent = vec![0.0; net.node_count()];
     let mut new_percent = percent.clone();
 
@@ -927,7 +927,7 @@ where P: AsRef<Path>
     let focus_id = &export_without_unconnected.nodes[foci[0]].identifier;
     let flow = flow_calc(&export_without_unconnected, focus_id, opt.iterations, extra);
 
-    let production_u8 = GLOBAL_NODE_INFO_MAP.deref().get("Production");
+    let production_u8 = GLOBAL_NODE_INFO_MAP.deref().get(PRODUCTION_ID);
 
     let original_exports: Vec<f64> = export_without_unconnected
         .nodes.iter()
@@ -1465,7 +1465,7 @@ fn calc_available(
     let original_export = calc_acc_trade(export);
 
 
-    let production_id = node_map.get("Production");
+    let production_id = node_map.get(PRODUCTION_ID);
     let mut at_least_some_production = false;
     let unit = &import.unit;
     let unit_tester = UNIT_TESTER.deref();

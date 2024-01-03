@@ -15,6 +15,7 @@ lazy_static! {
     };
 }
 
+pub const PRODUCTION_ID: &str = "Production";
 
 const POSSIBLE_NODE_INFO: [&str; 29] = [
     "Area harvested",
@@ -33,7 +34,7 @@ const POSSIBLE_NODE_INFO: [&str; 29] = [
     "Milk Animals",
     "Other uses (non-food)",
     "Processing",
-    "Production",
+    PRODUCTION_ID,
     "Prod Popultn",
     "Producing Animals/Slaughtered",
     "Protein supply quantity (g/capita/day)",
