@@ -214,9 +214,6 @@ where I: IntoIterator<Item = (F, F)>,
     let mut create_map = |mut vec: Vec<(f64, usize)>|
     {
         vec.sort_unstable_by(|a,b| a.0.total_cmp(&b.0));
-        // they have to be all unique, otherwise the spearman calculation below is wrong,
-        // instead another calculation can be done, but that one is not implemented yet,
-        // hopefully I will not need it
         let all_unique = vec.windows(2)
             .all(|slice| slice[0].0 != slice[1].0);
         let mut map = vec![0_isize; vec.len()];
