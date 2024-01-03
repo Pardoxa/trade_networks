@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use clap::ValueEnum;
 use {
     crate::parser::{country_map, line_to_vec, LineIter},
     super::{
@@ -145,6 +146,53 @@ impl FromIterator<f64> for Stats{
     }
 }
 
+fn weighted_pearson_correlation_coefficient<'a, I, F, WF>(
+    iterator: I,
+    weight_fun: WF
+) -> f64
+where I: IntoIterator<Item = (F, F)>,
+    F: Borrow<CorrelationItem<'a>>,
+    WF: Fn(ImportAndProduction, ImportAndProduction) -> f64
+{   
+    let mut weight_sum = 0_f64;
+    let mut a_w_sum = 0_f64;
+    let mut b_w_sum = 0_f64;
+    let mut a_w_sq_sum = 0_f64;
+    let mut b_w_sq_sum = 0_f64;
+    let mut ab_w_sum = 0_f64;
+
+    for (a, b) in iterator{
+        let a = a.borrow();
+        let b = b.borrow();
+        let a_val = a.val;
+        let b_val = b.val;
+        let w = weight_fun(*a.production, *b.production);
+        
+        weight_sum += w;
+        a_w_sum = a_val.mul_add(w, a_w_sum);
+        b_w_sum = b_val.mul_add(w, b_w_sum);
+        a_w_sq_sum = (a_val * a_val).mul_add(w, a_w_sq_sum);
+        b_w_sq_sum = (b_val * b_val).mul_add(w, b_w_sq_sum);
+        ab_w_sum = (a_val * b_val).mul_add(w, ab_w_sum);
+    }
+    let w_recip = weight_sum.recip();
+    let a_av = a_w_sum * w_recip;
+    let b_av = b_w_sum * w_recip;
+    let ab_av = ab_w_sum * w_recip;
+    let a2_av = a_w_sq_sum * w_recip;
+    let b2_av = b_w_sq_sum * w_recip;
+
+    let variance_a = a2_av - a_av * a_av;
+    let variance_b = b2_av - b_av * b_av;
+    let std_a = variance_a.sqrt();
+    let std_b = variance_b.sqrt();
+
+    let cov = ab_av - a_av * b_av;
+
+    cov / (std_a * std_b)
+
+}
+
 fn pearson_correlation_coefficient<I, F>(iterator: I) -> f64
 where I: IntoIterator<Item = (F, F)>,
     F: Borrow<f64>
@@ -193,16 +241,75 @@ fn goods_cor_iter<'a>(a: &'a HashMap<u16, f64>, b: &'a HashMap<u16, f64>) -> imp
         .filter_map(
             |(key, value)|
             {
-                large.get(key)
-                    .map(|other_val| (*value, *other_val))
+                if !value.is_finite(){
+                    None
+                } else {
+                    large.get(key)
+                        .filter(|v| v.is_finite())
+                        .map(|other_val| (*value, *other_val))
+                }   
             }
-        ).filter(|(a, b)| a.is_finite() && b.is_finite())
+        )
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CorrelationItem<'a>
+{
+    val: f64,
+    production: &'a ImportAndProduction
+}
+
+fn weighted_goods_cor_iter<'a>(
+    a: &'a HashMap<u16, f64>, 
+    b: &'a HashMap<u16, f64>,
+    weights_a: &'a ProductionImportMap,
+    weights_b: &'a ProductionImportMap
+)-> impl Iterator<Item = (CorrelationItem<'a>, CorrelationItem<'a>)> + 'a
+{
+    let (small, large) = if a.len() <= b.len() {
+        ((a, weights_a), (b, weights_b))
+    } else {
+        ((b, weights_b), (a, weights_a))
+    };
+
+    small.0.iter()
+        .filter_map(
+            |(key, value)|
+            {
+                if !value.is_finite(){
+                    None
+                } else {
+                    large.0
+                        .get(key)
+                        .filter(|val| val.is_finite())
+                        .map(
+                            |other_val| 
+                            {
+                                let small_p = small.1.map.get(key).unwrap();
+                                let large_p = large.1.map.get(key).unwrap();
+                                (
+                                    CorrelationItem{val: *value, production: small_p},
+                                    CorrelationItem{val: *other_val, production: large_p}
+                                )
+                            }
+                        )
+                }
+                
+            }
+        )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorrelationInput{
     pub path: String,
-    pub plot_name: String
+    pub plot_name: String,
+    pub weight_path: Option<String>
+}
+
+impl CorrelationInput{
+    pub fn has_weights(&self) -> bool{
+        self.weight_path.is_some()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,7 +322,8 @@ impl Default for CorrelationMeasurement{
     fn default() -> Self {
         let example = CorrelationInput{
             path: "InputPath".to_owned(), 
-            plot_name: "Corresponding Name".to_string()
+            plot_name: "Corresponding Name".to_string(),
+            weight_path: None
         };
         Self { 
             inputs: vec![example],
@@ -224,12 +332,135 @@ impl Default for CorrelationMeasurement{
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ImportAndProduction
+{
+    import: f64,
+    production: f64
+}
+
+impl ImportAndProduction{
+    fn sum(self) -> f64
+    {
+        self.import + self.production
+    }
+}
+
+pub struct ProductionImportMap{
+    map: HashMap<u16, ImportAndProduction>,
+    has_production_data: bool
+}
+
+fn read_weights<P>(weight_file: P) -> ProductionImportMap
+where P: AsRef<Path>
+{
+    let mut any_production_data = false;
+    let map = open_as_unwrapped_lines_filter_comments(weight_file)
+        .map(
+            |line|
+            {
+                let mut iter = line.split_whitespace();
+                let country_id = iter.next().unwrap().parse().unwrap();
+                let import = iter.next().unwrap().parse().unwrap();
+                let mut production = 0.0;
+                if let Some(p) = iter.next(){
+                    any_production_data = true;
+                    production = p.parse().unwrap();
+                }
+                let val = ImportAndProduction{import, production};
+                (country_id, val)
+            }
+        ).collect();
+    ProductionImportMap{
+        map,
+        has_production_data: any_production_data
+    }
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug)]
+pub enum WeightFun{
+    NoWeight,
+    Product,
+    Min,
+    Max
+}
+
+impl WeightFun{
+    pub fn stub(self) -> &'static str
+    {
+        match self{
+            Self::NoWeight => "NoWeight",
+            Self::Product => "Product",
+            Self::Max => "Max",
+            Self::Min => "Min"
+        }
+    }
+
+    pub fn get_fun(self) -> fn (ImportAndProduction, ImportAndProduction) -> f64
+    {
+        fn no_weight(_: ImportAndProduction, _: ImportAndProduction) -> f64
+        {
+            2.0
+        }
+
+        fn product(a: ImportAndProduction, b: ImportAndProduction) -> f64
+        {
+            a.sum() * b.sum()
+        }
+
+        fn min(a: ImportAndProduction, b: ImportAndProduction) -> f64
+        {
+            a.sum().min(b.sum())
+        }
+
+        fn max(a: ImportAndProduction, b: ImportAndProduction) -> f64
+        {
+            a.sum().max(b.sum())
+        }
+
+        match self{
+            WeightFun::NoWeight => no_weight,
+            WeightFun::Product => product,
+            WeightFun::Max => max,
+            WeightFun::Min => min
+        }
+    }
+}
 
 pub fn correlations(opt: CorrelationOpts)
 {
     let country_name_map = opt.country_name_file
         .map(crate::parser::country_map);
     let inputs: CorrelationMeasurement = read_or_create(opt.measurement);
+    assert!(!inputs.inputs.is_empty());
+
+    let has_weights = inputs.inputs
+        .iter()
+        .any(CorrelationInput::has_weights);
+    if has_weights
+    {
+        assert!(
+            inputs.inputs.iter().all(CorrelationInput::has_weights),
+            "Some, but not all inputs have associated weights. Abbort!"
+        );
+    }
+    let weights = has_weights.then(
+        ||
+        inputs.inputs
+            .iter()
+            .map(|i| read_weights(i.weight_path.as_deref().unwrap()))
+            .collect_vec()
+    );
+
+    if let Some(w) = weights.as_deref()
+    {
+        let mut iter = w.iter();
+        let production = unsafe{iter.next().unwrap_unchecked()}.has_production_data;
+        let different = iter.any(|e| e.has_production_data != production);
+        if different{
+            eprintln!("Warning: Only some of the data has production info");
+        }
+    }
 
     let mut all_countries = BTreeSet::new();
 
@@ -256,6 +487,17 @@ pub fn correlations(opt: CorrelationOpts)
 
     let matrix_name = format!("{}.matrix", &inputs.output_stub);
     let mut buf_pearson = create_buf_with_command_and_version(matrix_name.as_str());
+
+    let mut weight_cor_name = None;
+    let mut buf_weighted_cor = has_weights.then(
+        ||
+        {
+            let name = format!("{}_{}Weighted.matrix", &inputs.output_stub, opt.weight_fun.stub());
+            let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
+            weight_cor_name = Some(name);
+            buf
+        }
+    );
 
     let average_variance_c_name = format!("{}.av_var", &inputs.output_stub);
     let mut buf_av_var_c = create_buf_with_command_and_version(average_variance_c_name);
@@ -349,21 +591,32 @@ pub fn correlations(opt: CorrelationOpts)
         );
 
 
+    let w_fun = opt.weight_fun.get_fun();
 
-    // writing matrix that contains the pearson correlation coeffizients
+    // writing matrix that contains the pearson correlation coefficients
     all_infos
         .iter()
+        .enumerate()
         .for_each(
-            |a|
+            |(index_a, a)|
             {
                 // correlations
                 all_infos.iter()
+                    .enumerate()
                     .for_each(
-                        |b|
+                        |(index_b, b)|
                         {
                             let pearson = pearson_correlation_coefficient(
                                 goods_cor_iter(a, b)
                             );
+                            if let Some(w) = weights.as_deref(){
+                                let w_a = &w[index_a];
+                                let w_b = &w[index_b];
+                                let iter = weighted_goods_cor_iter(a, b, w_a, w_b);
+                                let w_pearson = weighted_pearson_correlation_coefficient(iter, w_fun);
+                                let buf = buf_weighted_cor.as_mut().unwrap();
+                                write!(buf, "{:e} ", w_pearson).unwrap();
+                            }
                             write!(
                                 buf_pearson, 
                                 "{} ",
@@ -372,6 +625,9 @@ pub fn correlations(opt: CorrelationOpts)
                         }
                     );
                 writeln!(buf_pearson).unwrap();
+                if let Some(buf) = buf_weighted_cor.as_mut(){
+                    writeln!(buf).unwrap();
+                }
             }
         );
 
@@ -400,12 +656,29 @@ pub fn correlations(opt: CorrelationOpts)
 
     let gp_name = format!("{}.gp", inputs.output_stub);
     let writer = create_buf_with_command_and_version(gp_name);
+    let good_len = inputs.inputs.len();
     settings.write_heatmap_external_matrix(
         writer, 
-        inputs.inputs.len(), 
-        inputs.inputs.len(), 
+        good_len, 
+        good_len, 
         matrix_name
     ).unwrap();
+
+    // now wrte the weighted heatmap if applicable
+    if let Some(weighted_matrix_name) = weight_cor_name{
+        let gp_stub = format!("{}_{}Weighted", inputs.output_stub, opt.weight_fun.stub());
+        let gp_name = format!("{gp_stub}.gp");
+        let writer = create_buf_with_command_and_version(gp_name);
+        let terminal = GnuplotTerminal::PDF(gp_stub);
+        settings.terminal(terminal)
+            .write_heatmap_external_matrix(
+                writer, 
+                good_len, 
+                good_len, 
+                weighted_matrix_name
+            ).unwrap();
+    }
+    
 
     // Now I need to calculate the other correlations.
     let country_matrix_name = format!("{}_country.matrix", inputs.output_stub);

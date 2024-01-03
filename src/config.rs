@@ -8,7 +8,7 @@ use std::{
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
     network::{Direction, main_execs::Relative, Network}, 
-    misc::{create_buf, create_buf_with_command_and_version}
+    misc::{create_buf, create_buf_with_command_and_version}, WeightFun
 };
 use serde::{Serialize, Deserialize};
 
@@ -846,5 +846,9 @@ pub struct CorrelationOpts
     pub measurement: PathBuf,
 
     /// If the label file should contain the country names instead of the Ids
-    pub country_name_file: Option<PathBuf>
+    pub country_name_file: Option<PathBuf>,
+
+    /// Weight function. Only applicable for weighted calculations
+    #[arg(long, short, value_enum, default_value_t=WeightFun::NoWeight)]
+    pub weight_fun: WeightFun
 }
