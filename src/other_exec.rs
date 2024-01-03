@@ -382,7 +382,10 @@ pub enum WeightFun{
     NoWeight,
     Product,
     Min,
-    Max
+    Max,
+    OnlyImportProduct,
+    OnlyImportMin,
+    OnlyImportMax
 }
 
 impl WeightFun{
@@ -392,7 +395,10 @@ impl WeightFun{
             Self::NoWeight => "NoWeight",
             Self::Product => "Product",
             Self::Max => "Max",
-            Self::Min => "Min"
+            Self::Min => "Min",
+            Self::OnlyImportProduct => "OnlyImportProduct",
+            Self::OnlyImportMax => "OnlyImportMax",
+            Self::OnlyImportMin => "OnlyImportMin"
         }
     }
 
@@ -408,9 +414,19 @@ impl WeightFun{
             a.sum() * b.sum()
         }
 
+        fn only_import_product(a: ImportAndProduction, b: ImportAndProduction) -> f64
+        {
+            a.import * b.import
+        }
+
         fn min(a: ImportAndProduction, b: ImportAndProduction) -> f64
         {
             a.sum().min(b.sum())
+        }
+
+        fn only_import_min(a: ImportAndProduction, b: ImportAndProduction) -> f64
+        {
+            a.import.min(b.import)
         }
 
         fn max(a: ImportAndProduction, b: ImportAndProduction) -> f64
@@ -418,11 +434,19 @@ impl WeightFun{
             a.sum().max(b.sum())
         }
 
+        fn only_import_max(a: ImportAndProduction, b: ImportAndProduction) -> f64
+        {
+            a.import.max(b.import)
+        }
+
         match self{
-            WeightFun::NoWeight => no_weight,
-            WeightFun::Product => product,
-            WeightFun::Max => max,
-            WeightFun::Min => min
+            Self::NoWeight => no_weight,
+            Self::Product => product,
+            Self::Max => max,
+            Self::Min => min,
+            Self::OnlyImportProduct => only_import_product,
+            Self::OnlyImportMax => only_import_max,
+            Self::OnlyImportMin => only_import_min
         }
     }
 }
