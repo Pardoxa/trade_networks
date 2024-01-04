@@ -11,6 +11,8 @@ use parser::parse_all_extras;
 pub use units::*;
 mod other_exec;
 pub use other_exec::*;
+mod correlation_coef;
+pub use correlation_coef::*;
 
 fn main() {
     let option = CmdChooser::parse();
