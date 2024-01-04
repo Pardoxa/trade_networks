@@ -88,7 +88,7 @@ impl FromIterator<f64> for Stats{
 pub struct CorrelationItem<'a>
 {
     val: f64,
-    production: &'a ImportAndProduction
+    weight: &'a ImportAndProduction
 }
 
 fn weighted_goods_cor_iter<'a>(
@@ -120,8 +120,8 @@ fn weighted_goods_cor_iter<'a>(
                                 let small_p = small.1.map.get(key).unwrap();
                                 let large_p = large.1.map.get(key).unwrap();
                                 (
-                                    CorrelationItem{val: *value, production: small_p},
-                                    CorrelationItem{val: *other_val, production: large_p}
+                                    CorrelationItem{val: *value, weight: small_p},
+                                    CorrelationItem{val: *other_val, weight: large_p}
                                 )
                             }
                         )
@@ -148,8 +148,8 @@ where I: IntoIterator<Item = (F, F)>,
     {
         let a: &CorrelationItem<'a> = a.borrow();
         let b = b.borrow();
-        let weight_a = a.production.sum();
-        let weight_b = b.production.sum();
+        let weight_a = a.weight.sum();
+        let weight_b = b.weight.sum();
         weight_sum_a += weight_a;
         weight_sum_b += weight_b;
         sum_a = weight_a.mul_add(a.val, sum_a);
@@ -167,8 +167,8 @@ where I: IntoIterator<Item = (F, F)>,
     {
         let a = a.borrow();
         let b = b.borrow();
-        let weight_a = a.production.sum();
-        let weight_b = b.production.sum();
+        let weight_a = a.weight.sum();
+        let weight_b = b.weight.sum();
         let a_diff = a.val - average_a;
         let b_diff = b.val - average_b;
         sum_above += a_diff * b_diff * (weight_a * weight_b).sqrt();
@@ -201,7 +201,7 @@ where I: IntoIterator<Item = (F, F)>,
         let b = b.borrow();
         let a_val = a.val;
         let b_val = b.val;
-        let w = weight_fun(*a.production, *b.production);
+        let w = weight_fun(*a.weight, *b.weight);
         
         weight_sum += w;
         a_w_sum = a_val.mul_add(w, a_w_sum);
@@ -824,6 +824,31 @@ pub fn correlations(opt: CorrelationOpts)
     let mut buf_pearson = create_buf_with_command_and_version(&country_matrix_name);
     let country_spear_matrix_name = format!("{}_country_spear.matrix", inputs.output_stub);
     let mut buf_spear = create_buf_with_command_and_version(&country_spear_matrix_name);
+
+    let mut country_weighted_pearson_matrix_name = None;
+    let mut country_weighted_paper_matrix_name = None;
+
+    let mut country_weighted_pearson_buf = has_weights.then(
+        ||
+        {
+            let name = format!("{}_{}Weighted_country.matrix", &inputs.output_stub, opt.weight_fun.stub());
+            let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
+            country_weighted_pearson_matrix_name = Some(name);
+            buf
+        }
+    );
+
+    let mut country_weighted_paper_matrix_buf = has_weights.then(
+        ||
+        {
+            let name = format!("{}_PaperWeighted_country.matrix", &inputs.output_stub);
+            let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
+            country_weighted_paper_matrix_name = Some(name);
+            buf
+        }
+    );
+
+
     let old_country_len = all_countries.len();
     all_countries
         .retain(
@@ -861,7 +886,7 @@ pub fn correlations(opt: CorrelationOpts)
                     .for_each(
                         |other|
                         {
-                            let iter = all_infos
+                            let all = all_infos
                                 .iter()
                                 .filter_map(
                                     |map|
@@ -880,11 +905,48 @@ pub fn correlations(opt: CorrelationOpts)
                                             _ => None
                                         }
                                     }
-                                ).inspect(|_| in_common += 1);
+                                ).inspect(|_| in_common += 1)
+                                .collect_vec();
                             counter += 1;
-                            let all = iter.collect_vec();
                             let pearson = pearson_correlation_coefficient(all.clone());
                             let spear = spearman_correlation_coefficent(all);
+                            if let Some(weight_slice) = weights.as_deref(){
+                                let samples = all_infos
+                                    .iter()
+                                    .zip(weight_slice)
+                                    .filter_map(
+                                        |(all_info_map, weight_map)|
+                                        {
+                                            match all_info_map.get(this){
+                                                Some(t) if t.is_finite() => {
+                                                    match all_info_map.get(other)
+                                                    {
+                                                        Some(o) if o.is_finite() => {
+                                                            let weight_this = weight_map.map.get(this).unwrap();
+                                                            let weight_other = weight_map.map.get(other).unwrap();
+                                                            let c_this = CorrelationItem{val: *t, weight: weight_this};
+                                                            let c_other = CorrelationItem{val: *o, weight: weight_other};
+                                                            Some((c_this, c_other))
+                                                        },
+                                                        _ => None
+                                                    }
+                                                },
+                                                _ => None,
+                                            }
+                                        }
+                                    ).collect_vec();
+                                let pearson_weighted = weighted_pearson_correlation_coefficient(
+                                    samples.iter().copied(), 
+                                    opt.weight_fun.get_fun()
+                                );
+                                let w_pearson_buf = country_weighted_pearson_buf.as_mut().unwrap();
+                                write!(w_pearson_buf, "{pearson_weighted:e} ").unwrap();
+                                let paper_weighted = weighted_paper_correlation_coef(
+                                    samples
+                                );
+                                let w_paper_buf = country_weighted_paper_matrix_buf.as_mut().unwrap();
+                                write!(w_paper_buf, "{paper_weighted:e} ").unwrap();
+                            }
                             if pearson.is_nan(){
                                 println!("NaN for: THIS {this} other {other}:");
                                 nan_counter += 1;
@@ -903,6 +965,8 @@ pub fn correlations(opt: CorrelationOpts)
                     );
                     writeln!(buf_pearson).unwrap();
                     writeln!(buf_spear).unwrap();
+                    try_writeln(&mut country_weighted_pearson_buf);
+                    try_writeln(&mut country_weighted_paper_matrix_buf);
             }
         );
     let percentage = in_common as f64 / counter as f64;
@@ -932,10 +996,11 @@ pub fn correlations(opt: CorrelationOpts)
         .y_label("Country ID");
 
     let buf = create_buf_with_command_and_version(gp_name);
+    let c_len = all_countries.len();
     settings.write_heatmap_external_matrix(
         buf, 
-        all_countries.len(), 
-        all_countries.len(), 
+        c_len, 
+        c_len, 
         country_matrix_name
     ).unwrap();
 
@@ -947,8 +1012,8 @@ pub fn correlations(opt: CorrelationOpts)
     let buf = create_buf_with_command_and_version(gp_name);
     settings.write_heatmap_external_matrix(
         buf, 
-        all_countries.len(), 
-        all_countries.len(), 
+        c_len, 
+        c_len, 
         country_spear_matrix_name
     ).unwrap();
     
@@ -967,6 +1032,37 @@ pub fn correlations(opt: CorrelationOpts)
                     }
                 }.unwrap();
             }
-        )
+        );
 
+    // now the weighted stuff
+    if let Some(name) = country_weighted_pearson_matrix_name{
+        let output_stub = format!("{}_{}_WeightedPearson_country", inputs.output_stub, opt.weight_fun.stub());
+        let mut gp_path = PathBuf::from(&output_stub);
+        gp_path.set_extension("gp");
+        let buf = create_buf_with_command_and_version(gp_path);
+        let terminal = GnuplotTerminal::PDF(output_stub);
+        settings.terminal(terminal)
+            .title(WEIGHTED_PEARSON_TITLE)
+            .write_heatmap_external_matrix(
+                buf, 
+                c_len, 
+                c_len, 
+                name
+            ).unwrap();
+    }
+    if let Some(name) = country_weighted_paper_matrix_name{
+        let output_stub = format!("{}_PaperWeighted_country", inputs.output_stub);
+        let mut gp_path = PathBuf::from(&output_stub);
+        gp_path.set_extension("gp");
+        let buf = create_buf_with_command_and_version(gp_path);
+        let terminal = GnuplotTerminal::PDF(output_stub);
+        settings.terminal(terminal)
+            .title(WEIGHTED_SAMPLE_TITLE)
+            .write_heatmap_external_matrix(
+                buf, 
+                c_len, 
+                c_len, 
+                name
+            ).unwrap();
+    }
 }
