@@ -892,8 +892,8 @@ pub fn correlations(opt: CorrelationOpts)
                                     |map|
                                     {
                                         map.get(this)
-                                            .zip(map.get(other))
-                                            .filter(|(t,o)| t.is_finite() && o.is_finite())
+                                            .filter(|t| t.is_finite())
+                                            .zip(map.get(other).filter(|o| o.is_finite()))
                                     }
                                 )
                                 .collect_vec();
