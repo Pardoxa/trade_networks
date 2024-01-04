@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, io::BufWriter};
 use clap::ValueEnum;
 use {
     crate::parser::{country_map, line_to_vec, LineIter},
@@ -14,12 +14,18 @@ use {
             stdout
         },
         borrow::Borrow,
-        path::Path
+        path::Path,
+        fs::File
     },
     serde::{Serialize, Deserialize},
     sampling::{GnuplotTerminal, GnuplotSettings, GnuplotAxis},
     itertools::Itertools
 };
+
+const SPEARMAN_TITLE: &str = "Spearman correlation coefficient";
+const PEARSON_TITLE: &str = "Pearson correlation coefficient";
+const WEIGHTED_PEARSON_TITLE: &str = "Weighted Pearson corr. coef.";
+const WEIGHTED_SAMPLE_TITLE: &str = "Weighted sample corr. coef.";
 
 pub fn worst_integral_sorting(opt: WorstIntegralCombineOpts)
 {
@@ -143,6 +149,55 @@ impl FromIterator<f64> for Stats{
         let variance = sum_sq * factor - average * average;
         Self { average, variance, min, max, median }
     }
+}
+
+fn weighted_paper_correlation_coef<'a, I, F>(
+    iterator: I
+) -> f64
+where I: IntoIterator<Item = (F, F)>,
+    F: Borrow<CorrelationItem<'a>>
+{
+    let all_samples = iterator.into_iter().collect_vec();
+    let mut weight_sum_a = 0.0;
+    let mut weight_sum_b = 0.0;
+    let mut sum_a = 0.0;
+    let mut sum_b = 0.0;
+
+    for (a, b) in all_samples.iter()
+    {
+        let a: &CorrelationItem<'a> = a.borrow();
+        let b = b.borrow();
+        let weight_a = a.production.sum();
+        let weight_b = b.production.sum();
+        weight_sum_a += weight_a;
+        weight_sum_b += weight_b;
+        sum_a = weight_a.mul_add(a.val, sum_a);
+        sum_b = weight_b.mul_add(b.val, sum_b);
+    }
+
+    let average_a = sum_a / weight_sum_a;
+    let average_b = sum_b / weight_sum_b;
+
+    let mut sum_above = 0.0;
+    let mut sum_below_a = 0.0;
+    let mut sum_below_b = 0.0;
+
+    for (a, b) in all_samples
+    {
+        let a = a.borrow();
+        let b = b.borrow();
+        let weight_a = a.production.sum();
+        let weight_b = b.production.sum();
+        let a_diff = a.val - average_a;
+        let b_diff = b.val - average_b;
+        sum_above += a_diff * b_diff * (weight_a * weight_b).sqrt();
+        sum_below_a += a_diff * a_diff * weight_a;
+        sum_below_b += b_diff * b_diff * weight_b;
+    }
+
+    let below = (sum_below_a * sum_below_b).sqrt();
+
+    sum_above / below
 }
 
 fn weighted_pearson_correlation_coefficient<'a, I, F, WF>(
@@ -587,6 +642,17 @@ pub fn correlations(opt: CorrelationOpts)
         }
     );
 
+    let mut paper_weighted_cor_name = None;
+    let mut buf_paper_weighted_cor = has_weights.then(
+        ||
+        {
+            let name = format!("{}_PaperWeighted.matrix", &inputs.output_stub);
+            let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
+            paper_weighted_cor_name = Some(name);
+            buf
+        }
+    );
+
     let average_variance_c_name = format!("{}.av_var", &inputs.output_stub);
     let mut buf_av_var_c = create_buf_with_command_and_version(average_variance_c_name);
 
@@ -681,6 +747,13 @@ pub fn correlations(opt: CorrelationOpts)
 
     let w_fun = opt.weight_fun.get_fun();
 
+    let try_writeln = |o: &mut Option<BufWriter<File>>|
+    {
+        if let Some(buf) = o{
+            writeln!(buf).unwrap();
+        }
+    };
+
     // writing matrix that contains the pearson correlation coefficients
     all_infos
         .iter()
@@ -705,8 +778,13 @@ pub fn correlations(opt: CorrelationOpts)
                                 let w_b = &w[index_b];
                                 let iter = weighted_goods_cor_iter(a, b, w_a, w_b);
                                 let w_pearson = weighted_pearson_correlation_coefficient(iter, w_fun);
-                                let buf = buf_weighted_cor.as_mut().unwrap();
+                                let buf: &mut std::io::BufWriter<std::fs::File> = buf_weighted_cor.as_mut().unwrap();
                                 write!(buf, "{:e} ", w_pearson).unwrap();
+
+                                let iter = weighted_goods_cor_iter(a, b, w_a, w_b);
+                                let paper_coef = weighted_paper_correlation_coef(iter);
+                                let paper_buf = buf_paper_weighted_cor.as_mut().unwrap();
+                                write!(paper_buf, "{:e} ", paper_coef).unwrap();
                             }
                             write!(
                                 buf_pearson, 
@@ -722,9 +800,8 @@ pub fn correlations(opt: CorrelationOpts)
                     );
                 writeln!(buf_pearson).unwrap();
                 writeln!(buf_spear).unwrap();
-                if let Some(buf) = buf_weighted_cor.as_mut(){
-                    writeln!(buf).unwrap();
-                }
+                try_writeln(&mut buf_weighted_cor);
+                try_writeln(&mut buf_paper_weighted_cor);
             }
         );
 
@@ -747,7 +824,7 @@ pub fn correlations(opt: CorrelationOpts)
     settings.x_axis(axis)
         .y_axis(y_axis)
         .terminal(terminal)
-        .title("Pearson Correlation Coefficients")
+        .title(PEARSON_TITLE)
         .size("5in,5in");
 
 
@@ -767,6 +844,7 @@ pub fn correlations(opt: CorrelationOpts)
     let spear_gp_writer = create_buf_with_command_and_version(spear_gp);
     let spear_terminal = GnuplotTerminal::PDF(spear_gp_stub);
     settings.terminal(spear_terminal)
+        .title(SPEARMAN_TITLE)
         .write_heatmap_external_matrix(
             spear_gp_writer, 
             good_len, 
@@ -774,13 +852,14 @@ pub fn correlations(opt: CorrelationOpts)
             matrix_name_spear
         ).unwrap();
 
-    // now wrte the weighted heatmap if applicable
+    // now write the weighted heatmap if applicable
     if let Some(weighted_matrix_name) = weight_cor_name{
         let gp_stub = format!("{}_{}Weighted", inputs.output_stub, opt.weight_fun.stub());
         let gp_name = format!("{gp_stub}.gp");
         let writer = create_buf_with_command_and_version(gp_name);
         let terminal = GnuplotTerminal::PDF(gp_stub);
         settings.terminal(terminal)
+            .title(WEIGHTED_PEARSON_TITLE)
             .write_heatmap_external_matrix(
                 writer, 
                 good_len, 
@@ -788,7 +867,22 @@ pub fn correlations(opt: CorrelationOpts)
                 weighted_matrix_name
             ).unwrap();
     }
-    
+    // and the other weighted heatmap if applicable
+    if let Some(paper_weighted_matrix_name) = paper_weighted_cor_name
+    {
+        let gp_stub = format!("{}_PaperWeighted", inputs.output_stub);
+        let gp_name = format!("{gp_stub}.gp");
+        let writer = create_buf_with_command_and_version(gp_name);
+        let terminal = GnuplotTerminal::PDF(gp_stub);
+        settings.terminal(terminal)
+            .title(WEIGHTED_SAMPLE_TITLE)
+            .write_heatmap_external_matrix(
+                writer, 
+                good_len, 
+                good_len, 
+                paper_weighted_matrix_name
+            ).unwrap();
+    }
 
     // Now I need to calculate the other correlations.
     let country_matrix_name = format!("{}_country.matrix", inputs.output_stub);
@@ -893,6 +987,7 @@ pub fn correlations(opt: CorrelationOpts)
     let terminal = GnuplotTerminal::PDF(output_stub);
 
     settings
+        .title(PEARSON_TITLE)
         .x_axis(x_axis)
         .y_axis(y_axis)
         .terminal(terminal)
@@ -912,7 +1007,8 @@ pub fn correlations(opt: CorrelationOpts)
     let output_stub = format!("{}_country_spear", inputs.output_stub);
     let gp_name = format!("{output_stub}_spear.gp");
     let terminal = GnuplotTerminal::PDF(output_stub);
-    settings.terminal(terminal);
+    settings.terminal(terminal)
+        .title(SPEARMAN_TITLE);
     let buf = create_buf_with_command_and_version(gp_name);
     settings.write_heatmap_external_matrix(
         buf, 
@@ -922,8 +1018,6 @@ pub fn correlations(opt: CorrelationOpts)
     ).unwrap();
     
     let mut writer = create_buf_with_command_and_version(label_name);
-
-
 
     all_countries.iter()
         .for_each(
