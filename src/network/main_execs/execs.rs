@@ -555,22 +555,17 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
         }.unwrap();
     }
 
-    match (unknown_population.is_empty(), opt.country_map_file)
-    {
-        (false, country_file) => {
-            println!("Unknown Population for {} countries", unknown_population.len());
-            dbg!(&unknown_population);
-            if let Some(c_file) = country_file{
-                let country_map = parser::country_map(c_file);
-                for c in unknown_population{
-                    println!("{}", country_map.get(c).unwrap())
-                }
+    if !unknown_population.is_empty(){
+        println!("Unknown Population for {} countries", unknown_population.len());
+        dbg!(&unknown_population);
+        if let Some(c_file) = opt.country_map_file{
+            let country_map = parser::country_map(c_file);
+            for c in unknown_population{
+                println!("{}", country_map.get(c).unwrap())
             }
-        },
-        (true, Some(_)) => {
-            println!("Country map is ignored since all relevant populations are known");
-        },
-        _ => (),
+        }
+    } else if opt.country_map_file.is_some(){
+        println!("Country map is ignored since all relevant populations are known");
     }
 
 }
