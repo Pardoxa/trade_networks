@@ -286,10 +286,9 @@ where I: IntoIterator<Item = (F, F)>,
     let covariance = average_product - average_x * average_y;
     let variance_x = x_sq_sum * factor - average_x * average_x;
     let variance_y = y_sq_sum * factor - average_y * average_y;
-    let std_x = variance_x.sqrt();
-    let std_y = variance_y.sqrt();
+    let std_product = (variance_x * variance_y).sqrt();
 
-    covariance / (std_x * std_y)
+    covariance / std_product
 }
 
 fn goods_cor_iter<'a>(a: &'a HashMap<u16, f64>, b: &'a HashMap<u16, f64>) -> impl Iterator<Item = (f64, f64)> + 'a
@@ -326,7 +325,7 @@ fn weighted_goods_cor_iter<'a>(
     b: &'a HashMap<u16, f64>,
     weights_a: &'a ProductionImportMap,
     weights_b: &'a ProductionImportMap
-)-> impl Iterator<Item = (CorrelationItem<'a>, CorrelationItem<'a>)> + 'a
+)-> impl Iterator<Item = (CorrelationItem<'a>, CorrelationItem<'a>)>
 {
     let (small, large) = if a.len() <= b.len() {
         ((a, weights_a), (b, weights_b))
