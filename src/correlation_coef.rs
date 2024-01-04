@@ -891,24 +891,15 @@ pub fn correlations(opt: CorrelationOpts)
                                 .filter_map(
                                     |map|
                                     {
-                                        match map.get(this)
-                                        {
-                                            Some(t) if t.is_finite() => 
-                                            {
-                                                match map.get(other){
-                                                    Some(o) if o.is_finite() => {
-                                                        Some((t, o))
-                                                    },
-                                                    _ => None
-                                                }
-                                            },
-                                            _ => None
-                                        }
+                                        map.get(this)
+                                            .zip(map.get(other))
+                                            .filter(|(t,o)| t.is_finite() && o.is_finite())
                                     }
-                                ).inspect(|_| in_common += 1)
+                                )
                                 .collect_vec();
+                            in_common += all.len();
                             counter += 1;
-                            let pearson = pearson_correlation_coefficient(all.clone());
+                            let pearson = pearson_correlation_coefficient(all.iter().copied());
                             let spear = spearman_correlation_coefficent(all);
                             if let Some(weight_slice) = weights.as_deref(){
                                 let samples = all_infos
@@ -917,6 +908,7 @@ pub fn correlations(opt: CorrelationOpts)
                                     .filter_map(
                                         |(all_info_map, weight_map)|
                                         {
+                                            // currently "zip_with" is nightly only, otherwise I could use that here
                                             match all_info_map.get(this){
                                                 Some(t) if t.is_finite() => {
                                                     match all_info_map.get(other)
