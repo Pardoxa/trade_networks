@@ -376,7 +376,7 @@ impl CorrelationInput{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CorrelationMeasurement{
     pub inputs: Vec<CorrelationInput>,
-    pub output_stub: String,
+    pub output_stub: String
 }
 
 impl Default for CorrelationMeasurement{
@@ -428,7 +428,7 @@ where P: AsRef<Path>
                     any_production_data = true;
                     production = p.parse().unwrap();
                 }
-                let val = ImportAndProduction{import, production};
+                let val: ImportAndProduction = ImportAndProduction{import, production};
                 (country_id, val)
             }
         ).collect();
@@ -514,7 +514,7 @@ impl WeightFun{
 
 pub fn correlations(opt: CorrelationOpts)
 {
-    let country_name_map = opt.country_name_file
+    let country_name_map: Option<BTreeMap<String, String>> = opt.country_name_file
         .map(crate::parser::country_map);
     let inputs: CorrelationMeasurement = read_or_create(opt.measurement);
     assert!(!inputs.inputs.is_empty());

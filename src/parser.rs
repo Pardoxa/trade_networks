@@ -327,7 +327,7 @@ where P: AsRef<Path>
     let target_item_code: &str = target_item_code
         .as_ref()
         .expect("Cannot parse as Json or Bincode -> item code required");
-    let map = crate::network::enriched_digraph::NodeInfoMap::new();
+    let map = crate::network::enriched_digraph::ExtraInfoMap::new();
 
     let buf = open_bufreader(path);
     let mut lines = buf.lines()

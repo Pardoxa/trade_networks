@@ -10,17 +10,20 @@ use {
 use lazy_static::lazy_static;
 
 lazy_static! {
-    pub static ref GLOBAL_NODE_INFO_MAP: NodeInfoMap<'static> = {
-        NodeInfoMap::new()
+    pub static ref GLOBAL_NODE_INFO_MAP: ExtraInfoMap<'static> = {
+        ExtraInfoMap::new()
     };
 }
 
-pub const PRODUCTION_ID: &str = "Production";
+pub const PRODUCTION: &str = "Production";
+pub const TOTAL_POPULATION: &str = "Total Population - Both sexes";
+pub const EXPORT_QUANTITY: &str = "Export Quantity";
+pub const IMPORT_QUANTITY: &str = "Import Quantity";
 
 const POSSIBLE_NODE_INFO: [&str; 29] = [
     "Area harvested",
     "Domestic supply quantity",
-    "Export Quantity",
+    EXPORT_QUANTITY,
     "Fat supply quantity (g/capita/day)",
     "Fat supply quantity (t)",
     "Feed",
@@ -28,13 +31,13 @@ const POSSIBLE_NODE_INFO: [&str; 29] = [
     "Food supply (kcal)",
     "Food supply (kcal/capita/day)",
     "Food supply quantity (kg/capita/yr)",
-    "Import Quantity",
+    IMPORT_QUANTITY,
     "Laying",
     "Losses",
     "Milk Animals",
     "Other uses (non-food)",
     "Processing",
-    PRODUCTION_ID,
+    PRODUCTION,
     "Prod Popultn",
     "Producing Animals/Slaughtered",
     "Protein supply quantity (g/capita/day)",
@@ -44,16 +47,16 @@ const POSSIBLE_NODE_INFO: [&str; 29] = [
     "Stocks",
     "Stock Variation",
     "Tourist consumption",
-    "Total Population - Both sexes",
+    TOTAL_POPULATION,
     "Yield",
     "Yield/Carcass Weight"
 ];
 
-pub struct NodeInfoMap<'a>{
+pub struct ExtraInfoMap<'a>{
     pub map: BTreeMap<&'a str, u8>
 }
 
-impl<'a> NodeInfoMap<'a>{
+impl<'a> ExtraInfoMap<'a>{
     pub fn new() -> Self
     {
         Self::from_slice(&POSSIBLE_NODE_INFO)
@@ -117,6 +120,18 @@ pub enum LazyEnrichmentInfos{
 }
 
 impl LazyEnrichmentInfos{
+    pub fn lazy_option(filename: Option<String>) -> Option<Self>
+    {
+        filename.map(
+            |f| 
+            {
+                let mut enrichment = LazyEnrichmentInfos::Filename(f, None);
+                enrichment.assure_availability();
+                enrichment
+            }
+        )
+    }
+
     #[inline]
     pub fn assure_availability(&mut self){
         if let Self::Filename(f, target_item_code) = self{
@@ -130,8 +145,7 @@ impl LazyEnrichmentInfos{
         }
     }
 
-    #[allow(dead_code)]
-    pub fn get_year_unckecked(&self, year: i32) -> &BTreeMap<String, ExtraInfo>
+    pub fn get_year_unchecked(&self, year: i32) -> &BTreeMap<String, ExtraInfo>
     {
         return self.enrichment_infos_unchecked().get_year(year)
     }
@@ -144,7 +158,7 @@ impl LazyEnrichmentInfos{
         panic!("{}", crate::misc::AVAILABILITY_ERR)
     }
 
-    pub fn node_map_unchecked(&self) -> NodeInfoMap
+    pub fn extra_info_idmap_unchecked(&self) -> ExtraInfoMap
     {
         self.enrichment_infos_unchecked().get_node_map()
     }
@@ -177,9 +191,9 @@ pub struct EnrichmentInfos{
 }
 
 impl EnrichmentInfos{
-    pub fn get_node_map(&self) -> NodeInfoMap
+    pub fn get_node_map(&self) -> ExtraInfoMap
     {
-        NodeInfoMap::from_slice(self.possible_node_info.as_slice())
+        ExtraInfoMap::from_slice(self.possible_node_info.as_slice())
     }
 
     pub fn fuse(&mut self, other: &Self)

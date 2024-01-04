@@ -95,7 +95,7 @@ pub fn flow_calc(
 {
     let info_map = crate::network::enriched_digraph::GLOBAL_NODE_INFO_MAP.deref();
     let unit_tester = crate::UNIT_TESTER.deref();
-    let info_idx = info_map.get(PRODUCTION_ID);
+    let info_idx = info_map.get(PRODUCTION);
     let mut percent = vec![0.0; net.node_count()];
     let mut new_percent = percent.clone();
 
@@ -436,7 +436,7 @@ pub fn calc_shock(
     let enrichment_infos = lazy_enrichment.enrichment_infos_unchecked();
     let enrich = enrichment_infos.get_year(year);
 
-    let node_info_map = lazy_enrichment.node_map_unchecked();
+    let node_info_map = lazy_enrichment.extra_info_idmap_unchecked();
 
     let avail_after_shock = calc_available(
         &export, 
@@ -615,7 +615,7 @@ where P: AsRef<Path>
                 let node = &import_without_unconnected.nodes[internal_idx];
                 serde_json::to_writer_pretty(&mut b, node).unwrap();
                 let extra_map = lazy_enrichments
-                    .get_year_unckecked(opt.year);
+                    .get_year_unchecked(opt.year);
                 
                 let extra = extra_map.get(id);
                 writeln!(b, "\nExtra:").unwrap();
@@ -923,11 +923,11 @@ where P: AsRef<Path>
     let mut misc_buf = create_buf_with_command_and_version(misc_name);
 
     let original_dists = export_without_unconnected.distance_from_index(foci[0]);
-    let extra = lazy_enrichments.get_year_unckecked(opt.year);
+    let extra = lazy_enrichments.get_year_unchecked(opt.year);
     let focus_id = &export_without_unconnected.nodes[foci[0]].identifier;
     let flow = flow_calc(&export_without_unconnected, focus_id, opt.iterations, extra);
 
-    let production_u8 = GLOBAL_NODE_INFO_MAP.deref().get(PRODUCTION_ID);
+    let production_u8 = GLOBAL_NODE_INFO_MAP.deref().get(PRODUCTION);
 
     let original_exports: Vec<f64> = export_without_unconnected
         .nodes.iter()
@@ -1452,7 +1452,7 @@ fn calc_available(
     network: &Network,
     enrich: &BTreeMap<String, ExtraInfo>,
     shock: &ShockRes,
-    node_map: &NodeInfoMap
+    node_map: &ExtraInfoMap
 ) -> Vec<f64>
 {
     let inverted = network.invert();
@@ -1465,7 +1465,7 @@ fn calc_available(
     let original_export = calc_acc_trade(export);
 
 
-    let production_id = node_map.get(PRODUCTION_ID);
+    let production_id = node_map.get(PRODUCTION);
     let mut at_least_some_production = false;
     let unit = &import.unit;
     let unit_tester = UNIT_TESTER.deref();

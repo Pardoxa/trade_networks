@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use itertools::Itertools;
 
-use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION_ID}};
+use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}};
 
 use {
     std::{
@@ -467,41 +467,47 @@ pub fn test_chooser(in_file: PathBuf, cmd: SubCommand){
 
 fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
 {
+    let population = LazyEnrichmentInfos::lazy_option(opt.population_file);
+    let population_year = population.as_ref()
+        .map(|population| population.get_year_unchecked(opt.year));
+    let population_id = match population.as_ref()
+    {
+        None => u8::MAX,
+        Some(population) => population.extra_info_idmap_unchecked().get(TOTAL_POPULATION)
+    };
+
     let mut networks = LazyNetworks::Filename(in_file);
     networks.assure_availability();
-    let import = networks.get_import_network_unchecked(opt.year);
-    let item = import.item_codes_as_string();
-    let out_name = format!("Item{item}Y{}Weights.dat", opt.year);
+    let raw_import = networks.get_import_network_unchecked(opt.year);
+    let trading_import = raw_import.without_unconnected_nodes();
 
-    let enrichment = opt.enrichment
-        .map(
-            |name| 
-            {
-                let mut e = LazyEnrichmentInfos::Filename(name, None);
-                e.assure_availability();
-                e
-            }
-        );
+    let enrichment = LazyEnrichmentInfos::lazy_option(opt.enrichment);
 
     let production_id = enrichment
         .as_ref()
-        .map(|e| e.node_map_unchecked().get(PRODUCTION_ID))
+        .map(|e| e.extra_info_idmap_unchecked().get(PRODUCTION))
         .unwrap_or_default();
     
     if let Some(enrichment) = enrichment.as_ref()
     {
         let items_e = enrichment.get_item_codes_unchecked();
-        let items_n = import.sorted_item_codes.as_slice();
+        let items_n = trading_import.sorted_item_codes.as_slice();
         assert_eq!(items_e, items_n);
     }
 
     let enriched_year = enrichment
         .as_ref()
-        .map(
-            |e|
-            e.get_year_unckecked(opt.year)
-        );
+        .map(|e| e.get_year_unchecked(opt.year));
 
+    let item = trading_import.item_codes_as_string();
+    let mut addition = match enriched_year{
+        None => "None",
+        Some(_) => "Enrich"
+    }.to_owned();
+    if population_year.is_some(){
+        addition.push_str("_Population");
+    }
+    let out_name = format!("Item{item}_{addition}_Y{}_Weights.dat", opt.year);
     let mut buf = create_buf_with_command_and_version(out_name);
 
     let mut header = vec![
@@ -509,23 +515,64 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
         "Import"
     ];
     if enriched_year.is_some(){
-        header.push(PRODUCTION_ID);
+        header.push(PRODUCTION);
     }
     write_slice_head(&mut buf, &header).unwrap();
 
-    for node in import.nodes.iter(){
-        let total_import = node.trade_amount();
-        write!(buf, "{} {}", node.identifier, total_import).unwrap();
-        let p = enriched_year
+    let mut unknown_population: Vec<&str> = Vec::new();
+
+    for node in trading_import.nodes.iter(){
+        let mut total_import = node.trade_amount();
+
+        let mut p = enriched_year
             .and_then(|e| 
                 e.get(&node.identifier)
-                    .and_then(|extra| extra.map.get(&production_id))
+                    .and_then(|extra| extra.map.get(&production_id).cloned())
             );
+
+        if let Some(p_map) = population_year{
+            match p_map.get(&node.identifier)
+            {
+                None => unknown_population.push(&node.identifier),
+                Some(extra) => {
+                    let p_amount = extra.map
+                        .get(&population_id)
+                        .unwrap()
+                        .amount;
+                    total_import /= p_amount;
+                    if let Some(extra) = p.as_mut()
+                    {
+                        extra.amount /= p_amount;
+                    }
+                }
+            }
+        }
+        
+        write!(buf, "{} {}", node.identifier, total_import).unwrap();
         match p {
             None => writeln!(buf),
             Some(extra) => writeln!(buf, " {}", extra.amount)
         }.unwrap();
     }
+
+    match (unknown_population.is_empty(), opt.country_map_file)
+    {
+        (false, country_file) => {
+            println!("Unknown Population for {} countries", unknown_population.len());
+            dbg!(&unknown_population);
+            if let Some(c_file) = country_file{
+                let country_map = parser::country_map(c_file);
+                for c in unknown_population{
+                    println!("{}", country_map.get(c).unwrap())
+                }
+            }
+        },
+        (true, Some(_)) => {
+            println!("Country map is ignored since all relevant populations are known");
+        },
+        _ => (),
+    }
+
 }
 
 fn order_trade_volume<P>(opt: OrderedTradeVolue, in_file: P)

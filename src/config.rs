@@ -7,7 +7,7 @@ use std::{
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
-    network::{Direction, main_execs::Relative, Network}, 
+    network::{Direction, main_execs::Relative, Network, enriched_digraph::*}, 
     misc::{create_buf, create_buf_with_command_and_version}, WeightFun
 };
 use serde::{Serialize, Deserialize};
@@ -369,6 +369,14 @@ pub struct CalcWeights{
     #[arg(long, short)]
     /// The year of interest
     pub year: i32,
+
+    /// If the weights should be "per person"
+    #[arg(long, short)]
+    pub population_file: Option<String>,
+
+    #[arg(long, short, requires("population_file"))]
+    /// If not all countries could be assined a population, then this can be used to print the countries in question
+    pub country_map_file: Option<String>
 }
 
 #[derive(Subcommand, Debug)]
@@ -821,8 +829,8 @@ impl ReadType{
     pub fn get_str(&self) -> &'static str
     {
         match self{
-            ReadType::ImportQuantity => "Import Quantity",
-            ReadType::ExportQuantity => "Export Quantity",
+            ReadType::ImportQuantity => IMPORT_QUANTITY,
+            ReadType::ExportQuantity => EXPORT_QUANTITY,
             ReadType::ExportValue => "Export Value",
             ReadType::ImportValue => "Import Value",
             ReadType::Beef => "Beef"
