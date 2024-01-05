@@ -826,18 +826,18 @@ pub fn correlations(opt: CorrelationOpts)
 
     let mut dendrogram_python_commands = Vec::new();
     let label_name = format!("{}_country.labels", inputs.output_stub);
-    let mut push_command = |stub: &str, matrix: &str, label: &str|
+    let mut push_command = |stub: String, matrix: &str, label: &str|
     {
-        dendrogram_python_commands.push([matrix.to_owned(), label.to_owned(), stub.to_owned()]);
+        dendrogram_python_commands.push([matrix.to_owned(), label.to_owned(), stub]);
     };
 
     let country_matrix_stub = format!("{}_country", inputs.output_stub);
     let country_matrix_name = format!("{country_matrix_stub}.matrix");
-    push_command(&country_matrix_stub, &country_matrix_name, &label_name);
+    push_command(country_matrix_stub, &country_matrix_name, &label_name);
     let mut buf_pearson = create_buf_with_command_and_version(&country_matrix_name);
     let country_spear_matrix_stub = format!("{}_country_spear", inputs.output_stub);
     let country_spear_matrix_name = format!("{country_spear_matrix_stub}.matrix");
-    push_command(&country_spear_matrix_stub, &country_spear_matrix_name, &label_name);
+    push_command(country_spear_matrix_stub, &country_spear_matrix_name, &label_name);
     let mut buf_spear = create_buf_with_command_and_version(&country_spear_matrix_name);
 
     let mut country_weighted_pearson_matrix_name = None;
@@ -848,7 +848,7 @@ pub fn correlations(opt: CorrelationOpts)
         {
             let stub = format!("{}_{}Weighted_country", &inputs.output_stub, opt.weight_fun.stub());
             let name = format!("{stub}.matrix");
-            push_command(&stub, &name, &label_name);
+            push_command(stub, &name, &label_name);
             let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
             country_weighted_pearson_matrix_name = Some(name);
             buf
@@ -860,7 +860,7 @@ pub fn correlations(opt: CorrelationOpts)
         {
             let stub = format!("{}_PaperWeighted_country", &inputs.output_stub);
             let name = format!("{stub}.matrix");
-            push_command(&stub, &name, &label_name);
+            push_command(stub, &name, &label_name);
             let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
             country_weighted_paper_matrix_name = Some(name);
             buf
