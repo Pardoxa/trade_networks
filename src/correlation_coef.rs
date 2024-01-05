@@ -1098,9 +1098,7 @@ pub fn correlations(opt: CorrelationOpts)
                 |command_args|
                 {
                     let python_output = Command::new("dendrogram.py")
-                        .arg(&command_args[0])
-                        .arg(&command_args[1])
-                        .arg(&command_args[2])
+                        .args(command_args)
                         .arg("average")
                         .output()
                         .expect("failed command");
