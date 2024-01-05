@@ -508,6 +508,7 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
         addition.push_str("_Population");
     }
     let out_name = format!("Item{item}_{addition}_Y{}_Weights.dat", opt.year);
+    println!("Creating: {out_name}");
     let mut buf = create_buf_with_command_and_version(out_name);
 
     let mut header = vec![

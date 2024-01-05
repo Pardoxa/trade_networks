@@ -1,10 +1,13 @@
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use {
     std::{
         collections::*,
         fs::File,
         borrow::*,
         io::{BufWriter, Write},
-        path::{Path, PathBuf}
+        path::{Path, PathBuf},
+        process::Command
     },
     clap::ValueEnum,
     serde::{Serialize, Deserialize},
@@ -820,9 +823,21 @@ pub fn correlations(opt: CorrelationOpts)
     }
 
     // Now I need to calculate the other correlations.
-    let country_matrix_name = format!("{}_country.matrix", inputs.output_stub);
+
+    let mut dendrogram_python_commands = Vec::new();
+    let label_name = format!("{}_country.labels", inputs.output_stub);
+    let mut push_command = |stub: &str, matrix: &str, label: &str|
+    {
+        dendrogram_python_commands.push([matrix.to_owned(), label.to_owned(), stub.to_owned()]);
+    };
+
+    let country_matrix_stub = format!("{}_country", inputs.output_stub);
+    let country_matrix_name = format!("{country_matrix_stub}.matrix");
+    push_command(&country_matrix_stub, &country_matrix_name, &label_name);
     let mut buf_pearson = create_buf_with_command_and_version(&country_matrix_name);
-    let country_spear_matrix_name = format!("{}_country_spear.matrix", inputs.output_stub);
+    let country_spear_matrix_stub = format!("{}_country_spear", inputs.output_stub);
+    let country_spear_matrix_name = format!("{country_spear_matrix_stub}.matrix");
+    push_command(&country_spear_matrix_stub, &country_spear_matrix_name, &label_name);
     let mut buf_spear = create_buf_with_command_and_version(&country_spear_matrix_name);
 
     let mut country_weighted_pearson_matrix_name = None;
@@ -831,7 +846,9 @@ pub fn correlations(opt: CorrelationOpts)
     let mut country_weighted_pearson_buf = has_weights.then(
         ||
         {
-            let name = format!("{}_{}Weighted_country.matrix", &inputs.output_stub, opt.weight_fun.stub());
+            let stub = format!("{}_{}Weighted_country", &inputs.output_stub, opt.weight_fun.stub());
+            let name = format!("{stub}.matrix");
+            push_command(&stub, &name, &label_name);
             let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
             country_weighted_pearson_matrix_name = Some(name);
             buf
@@ -841,7 +858,9 @@ pub fn correlations(opt: CorrelationOpts)
     let mut country_weighted_paper_matrix_buf = has_weights.then(
         ||
         {
-            let name = format!("{}_PaperWeighted_country.matrix", &inputs.output_stub);
+            let stub = format!("{}_PaperWeighted_country", &inputs.output_stub);
+            let name = format!("{stub}.matrix");
+            push_command(&stub, &name, &label_name);
             let buf = create_buf_with_command_and_version::<&Path>(name.as_ref());
             country_weighted_paper_matrix_name = Some(name);
             buf
@@ -974,7 +993,7 @@ pub fn correlations(opt: CorrelationOpts)
     x_axis.set_rotation(65.1);
     let output_stub = format!("{}_country", inputs.output_stub);
     let gp_name = format!("{output_stub}.gp");
-    let label_name = format!("{output_stub}.labels");
+    
     let terminal = GnuplotTerminal::PDF(output_stub);
 
     settings
@@ -1009,18 +1028,18 @@ pub fn correlations(opt: CorrelationOpts)
         country_spear_matrix_name
     ).unwrap();
     
-    let mut writer = create_buf_with_command_and_version(label_name);
+    let mut label_writer = create_buf_with_command_and_version(label_name);
 
     all_countries.iter()
         .for_each(
             |c|
             {
                 match &country_name_map{
-                    None => writeln!(writer, "{c}"),
+                    None => writeln!(label_writer, "{c}"),
                     Some(m) => {
                         let name = m.get(&c.to_string())
                             .unwrap();
-                        writeln!(writer, "{name}")
+                        writeln!(label_writer, "{name}")
                     }
                 }.unwrap();
             }
@@ -1056,5 +1075,39 @@ pub fn correlations(opt: CorrelationOpts)
                 c_len, 
                 name
             ).unwrap();
+    }
+    drop(buf_pearson);
+    drop(buf_spear);
+    drop(country_weighted_pearson_buf);
+    drop(country_weighted_paper_matrix_buf);
+    drop(label_writer);
+
+    if opt.execute_python{
+        println!("Executing the following commands");
+    } else {
+        println!("To create the dendrograms you can execute the following commands");
+    }
+
+    for c in dendrogram_python_commands.iter()
+    {
+        println!("dendrogram.py {} {} {} average", c[0], c[1], c[2]);
+    }
+    if opt.execute_python{
+        dendrogram_python_commands.into_par_iter()
+            .for_each(
+                |command_args|
+                {
+                    let python_output = Command::new("dendrogram.py")
+                        .arg(&command_args[0])
+                        .arg(&command_args[1])
+                        .arg(&command_args[2])
+                        .arg("average")
+                        .output()
+                        .expect("failed command");
+                    if opt.verbose_python{
+                        println!("{python_output:?}");
+                    }
+                }
+            );
     }
 }

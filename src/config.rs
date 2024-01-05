@@ -858,5 +858,13 @@ pub struct CorrelationOpts
 
     /// Weight function. Only applicable for weighted calculations
     #[arg(long, short, value_enum, default_value_t=WeightFun::NoWeight)]
-    pub weight_fun: WeightFun
+    pub weight_fun: WeightFun,
+
+    /// execute the python commands to create the dendrograms
+    #[arg(short, long)]
+    pub execute_python: bool,
+
+    /// To print the python output
+    #[arg(long, short, requires("execute_python"))]
+    pub verbose_python: bool
 }

@@ -313,6 +313,7 @@ where P: AsRef<Path>
                 check_item_code(&r.sorted_item_codes);
                 return r;
             }
+            println!("Failed to parse 'bincode' for enrichment. Trying to recover");
         }
         
         if path.extension().is_some_and(|ext| ext == "json") {
@@ -321,6 +322,7 @@ where P: AsRef<Path>
                 check_item_code(&r.sorted_item_codes);
                 return r;
             }
+            println!("Failed to parse 'json' for enrichment. Trying to recover");
         }
 
     }
