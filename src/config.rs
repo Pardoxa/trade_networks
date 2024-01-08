@@ -148,7 +148,22 @@ pub enum CmdChooser{
     Three(ThreeS),
     PrintNetworkInfos(OnlyNetworks),
     Correlations(CorrelationOpts),
-    Filter(FilterOpts)
+    Filter(FilterOpts),
+    CompareEntries(CompareEntriesOpt)
+}
+
+#[derive(Debug, Parser)]
+pub struct CompareEntriesOpt
+{
+    /// Ignore lines that start with this String
+    pub comment: Option<String>,
+
+    /// File 1
+    pub file1: String,
+
+    /// File 2
+    pub file2: String
+
 }
 
 #[derive(Clone, Copy, ValueEnum, Default, Debug)]

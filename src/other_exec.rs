@@ -304,3 +304,42 @@ where P: AsRef<Path>
         dbg!(unknown_importer);
     }
 }
+
+pub fn compare_entries(opt: CompareEntriesOpt)
+{
+    let file1 = open_as_unwrapped_lines(&opt.file1);
+    let file2 = open_as_unwrapped_lines(&opt.file2);
+
+    match opt.comment{
+        None => compare(file1, file2, &opt.file1, &opt.file2),
+        Some(comment) => {
+            let file1 = file1.filter(|line| !line.starts_with(&comment));
+            let file2 = file2.filter(|line| !line.starts_with(&comment));
+            compare(file1, file2, &opt.file1, &opt.file2)
+        }
+    }
+}
+
+fn compare<I1, I2>(file1: I1, file2:I2, filename1: &str, filename2: &str)
+where I1: Iterator<Item=String>,
+    I2: Iterator<Item=String>
+{
+    let set1: BTreeSet<_> = file1.collect();
+    let set2: BTreeSet<_> = file2.collect();
+
+    let x_or_minus = |item: &str, set: &BTreeSet<String>|
+    {
+        if set.contains(item)
+        {
+            "x"
+        } else {
+            "-"
+        }
+    };
+
+    println!("#{filename1} {filename2}");
+    for item in set1.union(&set2)
+    {
+        println!("{} {}", x_or_minus(item, &set1), x_or_minus(item, &set2));
+    }
+}
