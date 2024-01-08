@@ -329,17 +329,30 @@ where I1: Iterator<Item=String>,
 
     let x_or_minus = |item: &str, set: &BTreeSet<String>|
     {
-        if set.contains(item)
+        let is_contained = set.contains(item);
+        let c = if is_contained
         {
-            "x"
+            'x'
         } else {
-            "-"
-        }
+            '-'
+        };
+        (is_contained, c)
     };
 
     println!("#{filename1} {filename2}");
+    let mut counter_both = 0_u64;
+    let mut counter_total = 0_u64;
     for item in set1.union(&set2)
     {
-        println!("{} {}", x_or_minus(item, &set1), x_or_minus(item, &set2));
+        counter_total += 1;
+        let (first_b, first_c) = x_or_minus(item, &set1);
+        let (second_b, second_c) = x_or_minus(item, &set2);
+        if first_b && second_b{
+            counter_both += 1;
+        }
+        println!("{first_c} {second_c} {item}");
     }
+    let fraction = counter_both as f64 / counter_total as f64;
+    println!("#{counter_both} of {counter_total} are equal");
+    println!("#Fraction: {fraction}");
 }

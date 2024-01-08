@@ -156,6 +156,7 @@ pub enum CmdChooser{
 pub struct CompareEntriesOpt
 {
     /// Ignore lines that start with this String
+    #[arg(long, short)]
     pub comment: Option<String>,
 
     /// File 1
