@@ -327,17 +327,15 @@ where I1: Iterator<Item=String>,
     let set1: BTreeSet<_> = file1.collect();
     let set2: BTreeSet<_> = file2.collect();
 
-    let x_or_minus = |item: &str, set: &BTreeSet<String>|
+    fn x_or_minus(contained: bool) -> char
     {
-        let is_contained = set.contains(item);
-        let c = if is_contained
+        if contained
         {
             'x'
         } else {
             '-'
-        };
-        (is_contained, c)
-    };
+        }
+    }
 
     println!("#{filename1} {filename2}");
     let mut counter_both = 0_u64;
@@ -345,8 +343,10 @@ where I1: Iterator<Item=String>,
     for item in set1.union(&set2)
     {
         counter_total += 1;
-        let (first_b, first_c) = x_or_minus(item, &set1);
-        let (second_b, second_c) = x_or_minus(item, &set2);
+        let first_b = set1.contains(item);
+        let second_b = set2.contains(item);
+        let first_c = x_or_minus(first_b);
+        let second_c = x_or_minus(second_b);
         if first_b && second_b{
             counter_both += 1;
         }
