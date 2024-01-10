@@ -21,6 +21,8 @@ def plot_all(data, name: str, labels, fig_size, method, threshold):
     country_list=r["ivl"]
     for col in c_list:
         c_set.add(col)
+    c_set=[c for c in c_set]
+    c_set.sort()
     
     file=open(dat_name, "w")
     for color in c_set:
