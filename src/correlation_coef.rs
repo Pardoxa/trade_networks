@@ -1108,9 +1108,16 @@ pub fn correlations(opt: CorrelationOpts)
             .for_each(
                 |command_args|
                 {
-                    let python_output = Command::new("dendrogram.py")
+                    let mut python_command = Command::new("dendrogram.py");
+                    python_command
                         .args(command_args)
-                        .arg("average")
+                        .arg("average");
+                    
+                    if let Some(t) = opt.threshold_color{
+                        python_command.arg("-t")
+                            .arg(t.to_string());
+                    }
+                    let python_output= python_command
                         .output()
                         .expect("failed command");
                     if opt.verbose_python{

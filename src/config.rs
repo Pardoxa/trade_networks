@@ -887,7 +887,11 @@ pub struct CorrelationOpts
 
     #[arg(long, short)]
     /// execute the gnuplot heatmap scripts
-    pub gnuplot_exec: bool
+    pub gnuplot_exec: bool,
+
+    /// threshold for dendrogram
+    #[arg(long, short)]
+    pub threshold_color: Option<f64>,
 }
 
 
@@ -904,7 +908,23 @@ pub struct GroupCompOpts{
     /// stub of output
     pub output_stub: String,
 
+    /// Name of group a
+    #[arg(long, requires("name_b"))]
+    pub name_a: Option<String>,
+
+    /// Name of group b
+    #[arg(long, requires("name_a"))]
+    pub name_b: Option<String>,
+
     /// should gnuplot be executed?
     #[arg(long, short)]
-    pub exec_gnuplot: bool
+    pub exec_gnuplot: bool,
+
+    /// remove groups that are smaller than specified
+    #[arg(long, short)]
+    pub remove_smaller: Option<NonZeroUsize>,
+
+    #[arg(long, short)]
+    /// also output file that shows the group size
+    pub output_group_size: bool
 }

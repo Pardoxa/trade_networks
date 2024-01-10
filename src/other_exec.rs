@@ -405,8 +405,52 @@ impl SetComp{
 
 
 pub fn compare_groups(opt: GroupCompOpts){
-    let a_sets = read_sets(opt.group_a.as_ref());
-    let b_sets = read_sets(opt.group_b.as_ref());
+    let mut a_sets = read_sets(opt.group_a.as_ref());
+    let mut b_sets = read_sets(opt.group_b.as_ref());
+
+    let mut gp_names = Vec::new();
+    if let Some(threshold) = opt.remove_smaller{
+        a_sets.retain(|list| list.len() >= threshold.get());
+        b_sets.retain(|list| list.len() >= threshold.get());
+    }
+    a_sets.sort_by_key(|entry| entry.len());
+    b_sets.sort_by_key(|entry| entry.len());
+
+    let total_a = a_sets.iter().map(|entry| entry.len()).sum::<usize>();
+    let total_b = b_sets.iter().map(|entry| entry.len()).sum::<usize>();
+    println!("total a: {total_a}");
+    println!("total b: {total_b}");
+    let all_a: BTreeSet<_> = a_sets.iter().flat_map(|s| s.iter()).collect();
+    let all_b: BTreeSet<_> = b_sets.iter().flat_map(|s| s.iter()).collect();
+    let in_both = all_a.intersection(&all_b).count();
+    println!("in both: {in_both}");
+
+    if opt.output_group_size{
+        let mut data_names = Vec::new();
+        let mut out = |slice: &[BTreeSet<String>], name_addition: char|
+        {
+            let name = format!("{}_{}.group_size", opt.output_stub, name_addition);
+            let mut buf = create_buf_with_command_and_version(&name);
+            data_names.push(name);
+            for e in slice{
+                writeln!(buf, "{}", e.len()).unwrap();
+            }
+        };
+        out(&a_sets, 'a');
+        out(&b_sets, 'b');
+
+        let gp_name = format!("{}_group_size.gp", opt.output_stub);
+        let pdf_name = format!("{}_group_size.pdf", opt.output_stub);
+        let mut buf = create_gnuplot_buf(&gp_name);
+        gp_names.push(gp_name);
+        writeln!(buf, "set t pdf\nset output '{pdf_name}'").unwrap();
+        write!(buf, "p ").unwrap();
+        for name in data_names{
+            write!(buf, "'{}' u 0:1 w lp, ", name).unwrap();
+        }
+        writeln!(buf).unwrap();
+        writeln!(buf, "set output").unwrap();
+    }
 
     let relative_name_stub = format!("{}_relative", opt.output_stub);
     let relative_name = format!("{}.matrix", relative_name_stub);
@@ -442,9 +486,11 @@ pub fn compare_groups(opt: GroupCompOpts){
         .map(|num| num.to_string())
         .collect_vec();
     
+    let x_label = opt.name_b.unwrap_or(opt.group_b);
+    let y_label = opt.name_a.unwrap_or(opt.group_a);
     settings.terminal(terminal)
-        .x_label(opt.group_b)
-        .y_label(opt.group_a)
+        .x_label(x_label)
+        .y_label(y_label)
         .x_axis(GnuplotAxis::from_labels(b_labels))
         .y_axis(GnuplotAxis::from_labels(a_labels))
         .title("relative");
@@ -473,9 +519,13 @@ pub fn compare_groups(opt: GroupCompOpts){
         total_name
     ).unwrap();
 
+    drop(writer_relative);
+    drop(writer_total);
+
     if opt.exec_gnuplot{
-        let iter = [relative_gp_name, total_gp_name];
-        iter.into_par_iter()
+        gp_names.push(relative_gp_name);
+        gp_names.push(total_gp_name);
+        gp_names.into_par_iter()
             .for_each(
                 |gp_name|
                 {
