@@ -405,16 +405,34 @@ impl SetComp{
 
 
 pub fn compare_groups(opt: GroupCompOpts){
-    let mut a_sets = read_sets(opt.group_a.as_ref());
-    let mut b_sets = read_sets(opt.group_b.as_ref());
+    let mut a_sets = read_sets(opt.groups_a.as_ref());
+    let mut b_sets = read_sets(opt.groups_b.as_ref());
 
     let mut gp_names = Vec::new();
+    if opt.common_only{
+        let all_a: BTreeSet<_> = a_sets.iter().flat_map(|s| s.iter()).collect();
+        let all_b: BTreeSet<_> = b_sets.iter().flat_map(|s| s.iter()).collect();
+        let in_both: BTreeSet<_> = all_a.intersection(&all_b).map(|&e| e.to_owned()).collect();
+        println!("Original in both: {}", in_both.len());
+        let ret = |sets: &mut Vec<BTreeSet<String>>|
+        {
+            sets.iter_mut()
+                .for_each(
+                    |set|
+                    {
+                        set.retain(|e| in_both.contains(e));
+                    }
+                );
+            sets.retain(|s| !s.is_empty());
+        };
+        ret(&mut a_sets);
+        ret(&mut b_sets);
+    }
+
     if let Some(threshold) = opt.remove_smaller{
         a_sets.retain(|list| list.len() >= threshold.get());
         b_sets.retain(|list| list.len() >= threshold.get());
     }
-    a_sets.sort_by_key(|entry| entry.len());
-    b_sets.sort_by_key(|entry| entry.len());
 
     let total_a = a_sets.iter().map(|entry| entry.len()).sum::<usize>();
     let total_b = b_sets.iter().map(|entry| entry.len()).sum::<usize>();
@@ -423,7 +441,13 @@ pub fn compare_groups(opt: GroupCompOpts){
     let all_a: BTreeSet<_> = a_sets.iter().flat_map(|s| s.iter()).collect();
     let all_b: BTreeSet<_> = b_sets.iter().flat_map(|s| s.iter()).collect();
     let in_both = all_a.intersection(&all_b).count();
-    println!("in both: {in_both}");
+    let overall_total = all_a.union(&all_b).count();
+    println!("in both: {}", in_both);
+    println!("overall total: {overall_total}");
+
+
+    a_sets.sort_by_key(|entry| entry.len());
+    b_sets.sort_by_key(|entry| entry.len());
 
     if opt.output_group_size{
         let mut data_names = Vec::new();
@@ -486,8 +510,8 @@ pub fn compare_groups(opt: GroupCompOpts){
         .map(|num| num.to_string())
         .collect_vec();
     
-    let x_label = opt.name_b.unwrap_or(opt.group_b);
-    let y_label = opt.name_a.unwrap_or(opt.group_a);
+    let x_label = opt.name_b.unwrap_or(opt.groups_b);
+    let y_label = opt.name_a.unwrap_or(opt.groups_a);
     settings.terminal(terminal)
         .x_label(x_label)
         .y_label(y_label)

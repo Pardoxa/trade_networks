@@ -900,10 +900,10 @@ pub struct CorrelationOpts
 #[derive(Parser, Debug)]
 pub struct GroupCompOpts{
     /// Path to group 1
-    pub group_a: String,
+    pub groups_a: String,
 
     /// Path to group 2
-    pub group_b: String,
+    pub groups_b: String,
 
     /// stub of output
     pub output_stub: String,
@@ -926,5 +926,9 @@ pub struct GroupCompOpts{
 
     #[arg(long, short)]
     /// also output file that shows the group size
-    pub output_group_size: bool
+    pub output_group_size: bool,
+
+    #[arg(long, short)]
+    /// remove all countries that appear only in a or only in b
+    pub common_only: bool
 }
