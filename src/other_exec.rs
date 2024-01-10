@@ -404,12 +404,17 @@ impl SetComp{
 }
 
 
-pub fn compare_groups(opt: GroupCompOpts){
+pub fn compare_groups(mut opt: GroupCompOpts){
     let mut a_sets = read_sets(opt.groups_a.as_ref());
     let mut b_sets = read_sets(opt.groups_b.as_ref());
 
     let mut gp_names = Vec::new();
+    if let Some(threshold) = opt.remove_smaller{
+        let additon = format!("_th{threshold}");
+        opt.output_stub.push_str(&additon);
+    }
     if opt.common_only{
+        opt.output_stub.push_str("_common_only");
         let all_a: BTreeSet<_> = a_sets.iter().flat_map(|s| s.iter()).collect();
         let all_b: BTreeSet<_> = b_sets.iter().flat_map(|s| s.iter()).collect();
         let in_both: BTreeSet<_> = all_a.intersection(&all_b).map(|&e| e.to_owned()).collect();
