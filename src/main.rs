@@ -33,7 +33,8 @@ fn main() {
         CmdChooser::Correlations(opt) => correlations(opt),
         CmdChooser::Filter(filter_opts) => filter_files(filter_opts),
         CmdChooser::ParseBeef(beef_opt) => crate::network::main_execs::parse_beef_network(beef_opt),
-        CmdChooser::CompareEntries(opt) => compare_entries(opt)
+        CmdChooser::CompareEntries(opt) => compare_entries(opt),
+        CmdChooser::CompareGroups(opt) => compare_groups(opt)
     }
 }
 

@@ -149,7 +149,8 @@ pub enum CmdChooser{
     PrintNetworkInfos(OnlyNetworks),
     Correlations(CorrelationOpts),
     Filter(FilterOpts),
-    CompareEntries(CompareEntriesOpt)
+    CompareEntries(CompareEntriesOpt),
+    CompareGroups(GroupCompOpts)
 }
 
 #[derive(Debug, Parser)]
@@ -883,4 +884,23 @@ pub struct CorrelationOpts
     /// To print the python output
     #[arg(long, short, requires("execute_python"))]
     pub verbose_python: bool
+}
+
+
+/// Compare two groups of names. Files should contain only the names, groups seperated by
+/// empty lines and/or lines starting with #
+#[derive(Parser, Debug)]
+pub struct GroupCompOpts{
+    /// Path to group 1
+    pub group_a: String,
+
+    /// Path to group 2
+    pub group_b: String,
+
+    /// stub of output
+    pub output_stub: String,
+
+    /// should gnuplot be executed?
+    #[arg(long, short)]
+    pub exec_gnuplot: bool
 }

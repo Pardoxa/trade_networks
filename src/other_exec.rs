@@ -12,8 +12,11 @@ use {
             stdout
         },
         path::{Path, PathBuf},
+        process::Command
     },
-    itertools::Itertools
+    itertools::Itertools,
+    sampling::{GnuplotSettings, GnuplotTerminal, GnuplotAxis},
+    rayon::prelude::*
 };
 
 
@@ -311,16 +314,16 @@ pub fn compare_entries(opt: CompareEntriesOpt)
     let file2 = open_as_unwrapped_lines(&opt.file2);
 
     match opt.comment{
-        None => compare(file1, file2, &opt.file1, &opt.file2),
+        None => printing_compare(file1, file2, &opt.file1, &opt.file2),
         Some(comment) => {
             let file1 = file1.filter(|line| !line.starts_with(&comment));
             let file2 = file2.filter(|line| !line.starts_with(&comment));
-            compare(file1, file2, &opt.file1, &opt.file2)
+            printing_compare(file1, file2, &opt.file1, &opt.file2)
         }
     }
 }
 
-fn compare<I1, I2>(file1: I1, file2:I2, filename1: &str, filename2: &str)
+fn printing_compare<I1, I2>(file1: I1, file2:I2, filename1: &str, filename2: &str)
 where I1: Iterator<Item=String>,
     I2: Iterator<Item=String>
 {
@@ -329,11 +332,9 @@ where I1: Iterator<Item=String>,
 
     fn x_or_minus(contained: bool) -> char
     {
-        if contained
-        {
-            'x'
-        } else {
-            '-'
+        match contained{
+            true => 'x',
+            false => '-'
         }
     }
 
@@ -356,3 +357,138 @@ where I1: Iterator<Item=String>,
     println!("#{counter_both} of {counter_total} are equal");
     println!("#Fraction: {fraction}");
 }
+
+fn read_sets(file: &Path) -> Vec<BTreeSet<String>>
+{
+    let mut set_vec = vec![BTreeSet::new()];
+
+    open_as_unwrapped_lines(file)
+        .for_each(
+            |line|
+            {
+                if line.is_empty() || line.starts_with('#'){
+                    if !set_vec.last().unwrap().is_empty(){
+                        set_vec.push(BTreeSet::new());
+                    }
+                } else {
+                    set_vec.last_mut().unwrap().insert(line);
+                }
+
+            }
+        );
+    if set_vec.last().unwrap().is_empty(){
+        set_vec.pop();
+    }
+    set_vec
+}
+
+pub struct SetComp
+{
+    //min: usize,
+    total_elements: usize,
+    in_both: usize
+}
+
+impl SetComp{
+    fn compare_sets(a: &BTreeSet<String>, b: &BTreeSet<String>) -> Self
+    {
+        //let min = a.len().min(b.len());
+        let total_elements = a.union(b).count();
+        let in_both = a.intersection(b).count();
+        Self { 
+            //min, 
+            total_elements, 
+            in_both 
+        }
+    }
+}
+
+
+pub fn compare_groups(opt: GroupCompOpts){
+    let a_sets = read_sets(opt.group_a.as_ref());
+    let b_sets = read_sets(opt.group_b.as_ref());
+
+    let relative_name_stub = format!("{}_relative", opt.output_stub);
+    let relative_name = format!("{}.matrix", relative_name_stub);
+    let relative_gp_name = format!("{}.gp", relative_name_stub);
+    let total_name_stub = format!("{}_total", opt.output_stub);
+    let total_name = format!("{}.matrix", total_name_stub);
+    let total_gp_name = format!("{}.gp", total_name_stub);
+    println!("Creating {relative_name}");
+    println!("Creating {total_name}");
+
+    let mut writer_relative = create_buf_with_command_and_version::<&Path>(relative_name.as_ref());
+    let mut writer_total = create_buf_with_command_and_version::<&Path>(total_name.as_ref());
+
+    for a in a_sets.iter(){
+        for b in b_sets.iter(){
+            let c = SetComp::compare_sets(a, b);
+            write!(writer_total, "{} ", c.in_both).unwrap();
+            let relative = c.in_both as f64 / c.total_elements as f64;
+            write!(writer_relative, "{:e} ", relative).unwrap();
+        }
+        writeln!(writer_total).unwrap();
+        writeln!(writer_relative).unwrap();
+    }
+
+    let mut settings = GnuplotSettings::new();
+
+    let terminal = GnuplotTerminal::PDF(relative_name_stub);
+
+    let b_labels = (0..b_sets.len())
+        .map(|num| num.to_string())
+        .collect_vec();
+    let a_labels = (0..a_sets.len())
+        .map(|num| num.to_string())
+        .collect_vec();
+    
+    settings.terminal(terminal)
+        .x_label(opt.group_b)
+        .y_label(opt.group_a)
+        .x_axis(GnuplotAxis::from_labels(b_labels))
+        .y_axis(GnuplotAxis::from_labels(a_labels))
+        .title("relative");
+
+    let relative_gp_writer = create_gnuplot_buf::<&Path>(relative_gp_name.as_ref());
+
+    let matrix_width = b_sets.len();
+    let matrix_height = a_sets.len();
+
+    settings.write_heatmap_external_matrix(
+        relative_gp_writer, 
+        matrix_width, 
+        matrix_height, 
+        relative_name
+    ).unwrap();
+
+    let terminal = GnuplotTerminal::PDF(total_name_stub);
+    settings.terminal(terminal)
+        .title("absolut");
+    let total_writer = create_gnuplot_buf::<&Path>(total_gp_name.as_ref());
+
+    settings.write_heatmap_external_matrix(
+        total_writer, 
+        matrix_width, 
+        matrix_height, 
+        total_name
+    ).unwrap();
+
+    if opt.exec_gnuplot{
+        let iter = [relative_gp_name, total_gp_name];
+        iter.into_par_iter()
+            .for_each(
+                |gp_name|
+                {
+                    let output = Command::new("gnuplot")
+                        .arg(gp_name)
+                        .output()
+                        .expect("command_failed");
+                    if !output.status.success(){
+                        dbg!(output);
+                    }
+
+                }
+            )
+    }
+}
+

@@ -77,6 +77,14 @@ where P: AsRef<Path>
     buf
 }
 
+pub fn create_gnuplot_buf<P>(path: P) -> BufWriter<File>
+where P: AsRef<Path>
+{
+    let mut buf = create_buf_with_command_and_version(path);
+    writeln!(buf, "reset session").unwrap();
+    buf
+}
+
 pub fn write_slice_head<W, S, D>(mut w: W, slice: S) -> std::io::Result<()>
 where W: std::io::Write,
     S: IntoIterator<Item=D>,
