@@ -12,7 +12,7 @@ def plot_all(data, name: str, labels, fig_size, method, threshold):
     dis_name = "%s_all.pdf" % name
     res.savefig(dis_name)
     plt.clf()
-    r=hierarchy.dendrogram(res.dendrogram_row.linkage, orientation="left", labels = labels,distance_sort=False, color_threshold=threshold) 
+    r=hierarchy.dendrogram(res.dendrogram_row.linkage, orientation="left", labels = labels,distance_sort=False, color_threshold=threshold, above_threshold_color="black") 
     dis_den_name = "%s_dendro.pdf" % name
     plt.savefig(dis_den_name)
     c_set=set()
@@ -25,7 +25,9 @@ def plot_all(data, name: str, labels, fig_size, method, threshold):
     c_set.sort()
     
     file=open(dat_name, "w")
+    counter=0
     for color in c_set:
+        is_black=color=="black"
         file.write("#")
         file.write(color)
         file.write("\n")
@@ -36,6 +38,11 @@ def plot_all(data, name: str, labels, fig_size, method, threshold):
                 data=country_list[i]
                 file.write(data)
                 file.write("\n")
+                if is_black:
+                    file.write("#Counter ")
+                    file.write(str(counter))
+                    file.write("\n")
+                    counter += 1
     file.close()
 
 argv=sys.argv
