@@ -883,7 +883,11 @@ pub struct CorrelationOpts
 
     /// To print the python output
     #[arg(long, short, requires("execute_python"))]
-    pub verbose_python: bool
+    pub verbose_python: bool,
+
+    #[arg(long, short)]
+    /// execute the gnuplot heatmap scripts
+    pub gnuplot_exec: bool
 }
 
 

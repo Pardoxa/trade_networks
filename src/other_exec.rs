@@ -486,7 +486,6 @@ pub fn compare_groups(opt: GroupCompOpts){
                     if !output.status.success(){
                         dbg!(output);
                     }
-
                 }
             )
     }

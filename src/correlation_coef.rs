@@ -510,6 +510,7 @@ pub fn correlations(opt: CorrelationOpts)
     let country_name_map: Option<BTreeMap<String, String>> = opt.country_name_file
         .map(crate::parser::country_map);
     let inputs: CorrelationMeasurement = read_or_create(opt.measurement);
+    let mut gnuplot_filenames = Vec::new();
     assert!(!inputs.inputs.is_empty());
 
     let has_weights = inputs.inputs
@@ -767,7 +768,8 @@ pub fn correlations(opt: CorrelationOpts)
 
 
     let gp_name = format!("{}.gp", inputs.output_stub);
-    let writer = create_buf_with_command_and_version(gp_name);
+    let writer = create_buf_with_command_and_version(&gp_name);
+    gnuplot_filenames.push(gp_name);
     let good_len = inputs.inputs.len();
     settings.write_heatmap_external_matrix(
         writer, 
@@ -777,9 +779,9 @@ pub fn correlations(opt: CorrelationOpts)
     ).unwrap();
     // now spear
     let spear_gp_stub = format!("{}_spear", inputs.output_stub);
-    let mut spear_gp = PathBuf::from(&spear_gp_stub);
-    spear_gp.set_extension("gp");
-    let spear_gp_writer = create_buf_with_command_and_version(spear_gp);
+    let spear_gp = format!("{spear_gp_stub}.gp");
+    let spear_gp_writer = create_buf_with_command_and_version(&spear_gp);
+    gnuplot_filenames.push(spear_gp);
     let spear_terminal = GnuplotTerminal::PDF(spear_gp_stub);
     settings.terminal(spear_terminal)
         .title(SPEARMAN_TITLE)
@@ -794,7 +796,8 @@ pub fn correlations(opt: CorrelationOpts)
     if let Some(weighted_matrix_name) = weight_cor_name{
         let gp_stub = format!("{}_{}Weighted", inputs.output_stub, opt.weight_fun.stub());
         let gp_name = format!("{gp_stub}.gp");
-        let writer = create_buf_with_command_and_version(gp_name);
+        let writer = create_buf_with_command_and_version(&gp_name);
+        gnuplot_filenames.push(gp_name);
         let terminal = GnuplotTerminal::PDF(gp_stub);
         settings.terminal(terminal)
             .title(WEIGHTED_PEARSON_TITLE)
@@ -810,7 +813,8 @@ pub fn correlations(opt: CorrelationOpts)
     {
         let gp_stub = format!("{}_PaperWeighted", inputs.output_stub);
         let gp_name = format!("{gp_stub}.gp");
-        let writer = create_buf_with_command_and_version(gp_name);
+        let writer = create_buf_with_command_and_version(&gp_name);
+        gnuplot_filenames.push(gp_name);
         let terminal = GnuplotTerminal::PDF(gp_stub);
         settings.terminal(terminal)
             .title(WEIGHTED_SAMPLE_TITLE)
@@ -834,10 +838,12 @@ pub fn correlations(opt: CorrelationOpts)
     let country_matrix_stub = format!("{}_country", inputs.output_stub);
     let country_matrix_name = format!("{country_matrix_stub}.matrix");
     push_command(country_matrix_stub, &country_matrix_name, &label_name);
+    drop(buf_pearson);
     let mut buf_pearson = create_buf_with_command_and_version(&country_matrix_name);
     let country_spear_matrix_stub = format!("{}_country_spear", inputs.output_stub);
     let country_spear_matrix_name = format!("{country_spear_matrix_stub}.matrix");
     push_command(country_spear_matrix_stub, &country_spear_matrix_name, &label_name);
+    drop(buf_spear);
     let mut buf_spear = create_buf_with_command_and_version(&country_spear_matrix_name);
 
     let mut country_weighted_pearson_matrix_name = None;
@@ -1006,7 +1012,7 @@ pub fn correlations(opt: CorrelationOpts)
         .x_label("Country ID")
         .y_label("Country ID");
 
-    let buf = create_buf_with_command_and_version(gp_name);
+    let buf = create_gnuplot_buf(gp_name);
     let c_len = all_countries.len();
     settings.write_heatmap_external_matrix(
         buf, 
@@ -1020,7 +1026,7 @@ pub fn correlations(opt: CorrelationOpts)
     let terminal = GnuplotTerminal::PDF(output_stub);
     settings.terminal(terminal)
         .title(SPEARMAN_TITLE);
-    let buf = create_buf_with_command_and_version(gp_name);
+    let buf = create_gnuplot_buf(gp_name);
     settings.write_heatmap_external_matrix(
         buf, 
         c_len, 
@@ -1050,7 +1056,7 @@ pub fn correlations(opt: CorrelationOpts)
         let output_stub = format!("{}_{}_WeightedPearson_country", inputs.output_stub, opt.weight_fun.stub());
         let mut gp_path = PathBuf::from(&output_stub);
         gp_path.set_extension("gp");
-        let buf = create_buf_with_command_and_version(gp_path);
+        let buf = create_gnuplot_buf(gp_path);
         let terminal = GnuplotTerminal::PDF(output_stub);
         settings.terminal(terminal)
             .title(WEIGHTED_PEARSON_TITLE)
@@ -1065,7 +1071,7 @@ pub fn correlations(opt: CorrelationOpts)
         let output_stub = format!("{}_PaperWeighted_country", inputs.output_stub);
         let mut gp_path = PathBuf::from(&output_stub);
         gp_path.set_extension("gp");
-        let buf = create_buf_with_command_and_version(gp_path);
+        let buf = create_gnuplot_buf(gp_path);
         let terminal = GnuplotTerminal::PDF(output_stub);
         settings.terminal(terminal)
             .title(WEIGHTED_SAMPLE_TITLE)
@@ -1081,6 +1087,10 @@ pub fn correlations(opt: CorrelationOpts)
     drop(country_weighted_pearson_buf);
     drop(country_weighted_paper_matrix_buf);
     drop(label_writer);
+    drop(buf_weighted_cor);
+    drop(buf_paper_weighted_cor);
+    drop(buf_av_var);
+    drop(buf_av_var_c);
 
     if opt.execute_python{
         println!("Executing the following commands");
@@ -1093,7 +1103,8 @@ pub fn correlations(opt: CorrelationOpts)
         println!("dendrogram.py {} {} {} average", c[0], c[1], c[2]);
     }
     if opt.execute_python{
-        dendrogram_python_commands.into_par_iter()
+        dendrogram_python_commands
+            .into_par_iter()
             .for_each(
                 |command_args|
                 {
@@ -1107,5 +1118,22 @@ pub fn correlations(opt: CorrelationOpts)
                     }
                 }
             );
+    }
+
+    if opt.gnuplot_exec{
+        gnuplot_filenames
+            .into_par_iter()
+            .for_each(
+                |gp_name|
+                {
+                    let output = Command::new("gnuplot")
+                        .arg(gp_name)
+                        .output()
+                        .expect("failed gnuplot");
+                    if !output.status.success(){
+                        dbg!(output);
+                    }
+                }
+            )
     }
 }
