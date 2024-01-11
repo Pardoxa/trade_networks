@@ -12,6 +12,7 @@ pub const YEAR_ERR: &str = "Year not found";
 pub fn write_commands_and_version<W: Write>(mut w: W) -> std::io::Result<()>
 {
     writeln!(w, "# {VERSION}")?;
+    writeln!(w, "# Git Hash: {} Time: {}", env!("GIT_HASH"), env!("BUILD_TIME_CHRONO"))?;
     write!(w, "#")?;
     for arg in std::env::args()
     {
