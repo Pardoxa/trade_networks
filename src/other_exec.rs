@@ -501,7 +501,9 @@ pub fn compare_groups(mut opt: GroupCompOpts){
         writeln!(writer_total).unwrap();
         writeln!(writer_relative).unwrap();
     }
-
+    let size_x = 7.4 * opt.scaling;
+    let size_y = 5.0 * opt.scaling;
+    let heatmap_size = format!("{size_x}cm, {size_y}cm");
     let mut settings = GnuplotSettings::new();
 
     let terminal = GnuplotTerminal::PDF(relative_name_stub);
@@ -520,7 +522,8 @@ pub fn compare_groups(mut opt: GroupCompOpts){
         .y_label(y_label)
         .x_axis(GnuplotAxis::from_labels(b_labels))
         .y_axis(GnuplotAxis::from_labels(a_labels))
-        .title("relative");
+        .title("relative")
+        .size(heatmap_size);
 
     let relative_gp_writer = create_gnuplot_buf::<&Path>(relative_gp_name.as_ref());
 

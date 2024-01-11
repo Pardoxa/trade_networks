@@ -930,5 +930,9 @@ pub struct GroupCompOpts{
 
     #[arg(long, short)]
     /// remove all countries that appear only in a or only in b
-    pub common_only: bool
+    pub common_only: bool,
+
+    /// scaling factor for gnuplot heatmaps
+    #[arg(short, long, default_value_t=1.0)]
+    pub scaling: f64
 }

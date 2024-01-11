@@ -83,7 +83,8 @@ fig_size=(30 * scale, 30.0 * scale)
 plot_all(dissimilarity, dis_name, labels, fig_size, method, threshold)
 other= 1 - data
 other_name = "%s_other" % output_stub
-plot_all(other, other_name, labels, fig_size, method, threshold)
+# do not plot other for now
+#plot_all(other, other_name, labels, fig_size, method, threshold)
 cor_name = "%s_correlation" % output_stub
 plot_all(data, cor_name, labels, fig_size, method, threshold)
 
