@@ -1,4 +1,5 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use sampling::{GnuplotPalette, PaletteRGB, ColorRGB};
 
 use {
     std::{
@@ -758,14 +759,19 @@ pub fn correlations(opt: CorrelationOpts)
     let y_axis = axis.clone();
     axis.set_rotation(45.0);
     let terminal = GnuplotTerminal::PDF(inputs.output_stub.clone());
+
+    let colors = vec![ColorRGB::new(0, 0, 255), ColorRGB::new(0,0,0), ColorRGB::new(255,0,0)];
+    let rgb_palette = PaletteRGB::new(colors).unwrap();
+    let palette = GnuplotPalette::RGB(rgb_palette);
     
     let mut settings = GnuplotSettings::default();
     settings.x_axis(axis)
+        .palette(palette)
+        .cb_range(-1.0, 1.0)
         .y_axis(y_axis)
         .terminal(terminal)
         .title(PEARSON_TITLE)
         .size("5in,5in");
-
 
     let gp_name = format!("{}.gp", inputs.output_stub);
     let writer = create_buf_with_command_and_version(&gp_name);
@@ -1012,7 +1018,8 @@ pub fn correlations(opt: CorrelationOpts)
         .x_label("Country ID")
         .y_label("Country ID");
 
-    let buf = create_gnuplot_buf(gp_name);
+    let buf = create_gnuplot_buf(&gp_name);
+    gnuplot_filenames.push(gp_name);
     let c_len = all_countries.len();
     settings.write_heatmap_external_matrix(
         buf, 
@@ -1026,7 +1033,8 @@ pub fn correlations(opt: CorrelationOpts)
     let terminal = GnuplotTerminal::PDF(output_stub);
     settings.terminal(terminal)
         .title(SPEARMAN_TITLE);
-    let buf = create_gnuplot_buf(gp_name);
+    let buf = create_gnuplot_buf(&gp_name);
+    gnuplot_filenames.push(gp_name);
     settings.write_heatmap_external_matrix(
         buf, 
         c_len, 

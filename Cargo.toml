@@ -16,7 +16,7 @@ indicatif="^0.17.7"
 anyhow = "^1.0.79"
 strum = { version = "0.25", features = ["derive"] }
 lazy_static = "^1.4.0"
-sampling = { git = "https://github.com/Pardoxa/sampling.git", rev = "1f271e3ff97e52efcaeac9e807e6dffa05722cd9" }
+sampling = { git = "https://github.com/Pardoxa/sampling.git", rev = "35af57324c6b33e4bfbbc3907db7ea3b6f40d386" }
 itertools = "0.12.0"
 glob = "0.3.1"
 

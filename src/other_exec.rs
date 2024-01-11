@@ -390,7 +390,8 @@ pub struct SetComp
 }
 
 impl SetComp{
-    fn compare_sets(a: &BTreeSet<String>, b: &BTreeSet<String>) -> Self
+    fn compare_sets<A>(a: &BTreeSet<A>, b: &BTreeSet<A>) -> Self
+    where A: Ord
     {
         //let min = a.len().min(b.len());
         let total_elements = a.union(b).count();
@@ -402,7 +403,6 @@ impl SetComp{
         }
     }
 }
-
 
 pub fn compare_groups(mut opt: GroupCompOpts){
     let mut a_sets = read_sets(opt.groups_a.as_ref());
@@ -445,11 +445,9 @@ pub fn compare_groups(mut opt: GroupCompOpts){
     println!("total b: {total_b}");
     let all_a: BTreeSet<_> = a_sets.iter().flat_map(|s| s.iter()).collect();
     let all_b: BTreeSet<_> = b_sets.iter().flat_map(|s| s.iter()).collect();
-    let in_both = all_a.intersection(&all_b).count();
-    let overall_total = all_a.union(&all_b).count();
-    println!("in both: {}", in_both);
-    println!("overall total: {overall_total}");
-
+    let comp = SetComp::compare_sets(&all_a, &all_b);
+    println!("in both: {}", comp.in_both);
+    println!("overall total: {}", comp.total_elements);
 
     a_sets.sort_by_key(|entry| entry.len());
     b_sets.sort_by_key(|entry| entry.len());
