@@ -384,7 +384,7 @@ fn read_sets(file: &Path) -> Vec<BTreeSet<String>>
 
 pub struct SetComp
 {
-    //min: usize,
+    min: usize,
     total_elements: usize,
     in_both: usize
 }
@@ -393,11 +393,11 @@ impl SetComp{
     fn compare_sets<A>(a: &BTreeSet<A>, b: &BTreeSet<A>) -> Self
     where A: Ord
     {
-        //let min = a.len().min(b.len());
+        let min = a.len().min(b.len());
         let total_elements = a.union(b).count();
         let in_both = a.intersection(b).count();
         Self { 
-            //min, 
+            min, 
             total_elements, 
             in_both 
         }
@@ -482,14 +482,21 @@ pub fn compare_groups(mut opt: GroupCompOpts){
     let relative_name_stub = format!("{}_relative", opt.output_stub);
     let relative_name = format!("{}.matrix", relative_name_stub);
     let relative_gp_name = format!("{}.gp", relative_name_stub);
+
+    let min_name_stub = format!("{}_min", opt.output_stub);
+    let min_name = format!("{}.matrix", min_name_stub);
+    let min_gp_name = format!("{}.gp", min_name_stub);
+
     let total_name_stub = format!("{}_total", opt.output_stub);
     let total_name = format!("{}.matrix", total_name_stub);
     let total_gp_name = format!("{}.gp", total_name_stub);
     println!("Creating {relative_name}");
     println!("Creating {total_name}");
+    println!("Creating {min_name}");
 
     let mut writer_relative = create_buf_with_command_and_version::<&Path>(relative_name.as_ref());
     let mut writer_total = create_buf_with_command_and_version::<&Path>(total_name.as_ref());
+    let mut writer_min = create_buf_with_command_and_version(&min_name);
 
     for a in a_sets.iter(){
         for b in b_sets.iter(){
@@ -497,9 +504,13 @@ pub fn compare_groups(mut opt: GroupCompOpts){
             write!(writer_total, "{} ", c.in_both).unwrap();
             let relative = c.in_both as f64 / c.total_elements as f64;
             write!(writer_relative, "{:e} ", relative).unwrap();
+
+            let min_normed = c.in_both as f64 / c.min as f64;
+            write!(writer_min, "{} ", min_normed).unwrap();
         }
         writeln!(writer_total).unwrap();
         writeln!(writer_relative).unwrap();
+        writeln!(writer_min).unwrap();
     }
     let size_x = 7.4 * opt.scaling;
     let size_y = 5.0 * opt.scaling;
@@ -538,6 +549,19 @@ pub fn compare_groups(mut opt: GroupCompOpts){
         relative_name
     ).unwrap();
 
+    let terminal = GnuplotTerminal::PDF(min_name_stub);
+    settings.terminal(terminal)
+        .title("min relative");
+    let min_gp_writer = create_gnuplot_buf(&min_gp_name);
+    gp_names.push(min_gp_name);
+    settings.write_heatmap_external_matrix(
+        min_gp_writer, 
+        matrix_width, 
+        matrix_height, 
+        min_name
+    ).unwrap();
+
+
     let terminal = GnuplotTerminal::PDF(total_name_stub);
     settings.terminal(terminal)
         .title("absolut")
@@ -553,6 +577,7 @@ pub fn compare_groups(mut opt: GroupCompOpts){
 
     drop(writer_relative);
     drop(writer_total);
+    drop(writer_min);
 
     if opt.exec_gnuplot{
         gp_names.push(relative_gp_name);
