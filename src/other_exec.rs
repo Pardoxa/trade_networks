@@ -522,6 +522,7 @@ pub fn compare_groups(mut opt: GroupCompOpts){
         .y_label(y_label)
         .x_axis(GnuplotAxis::from_labels(b_labels))
         .y_axis(GnuplotAxis::from_labels(a_labels))
+        .cb_range(0.0, 1.0)
         .title("relative")
         .size(heatmap_size);
 
@@ -539,7 +540,8 @@ pub fn compare_groups(mut opt: GroupCompOpts){
 
     let terminal = GnuplotTerminal::PDF(total_name_stub);
     settings.terminal(terminal)
-        .title("absolut");
+        .title("absolut")
+        .remove_cb_range();
     let total_writer = create_gnuplot_buf::<&Path>(total_gp_name.as_ref());
 
     settings.write_heatmap_external_matrix(
