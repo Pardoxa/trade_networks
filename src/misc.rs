@@ -1,6 +1,6 @@
 use std::fmt::Display;
 use std::io::{Write, BufWriter, BufReader, BufRead, stdin};
-use std::fs::File;
+use fs_err::File;
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Serialize, de::DeserializeOwned};
@@ -36,7 +36,7 @@ pub fn indication_bar(len: u64) -> ProgressBar
 pub fn create_buf<P>(path: P) -> BufWriter<File>
 where P: AsRef<Path>
 {
-    let file = File::create(path)
+    let file = File::create(path.as_ref())
         .expect("Unable to create file");
     BufWriter::new(file)
 }

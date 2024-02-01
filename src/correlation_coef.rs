@@ -1,10 +1,9 @@
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use sampling::{GnuplotPalette, PaletteRGB, ColorRGB};
-
+use fs_err::File;
 use {
     std::{
         collections::*,
-        fs::File,
         borrow::*,
         io::{BufWriter, Write},
         path::{Path, PathBuf},
@@ -718,7 +717,7 @@ pub fn correlations(opt: CorrelationOpts)
                                 let w_b = &w[index_b];
                                 let iter = weighted_goods_cor_iter(a, b, w_a, w_b);
                                 let w_pearson = weighted_pearson_correlation_coefficient(iter, w_fun);
-                                let buf: &mut std::io::BufWriter<std::fs::File> = buf_weighted_cor.as_mut().unwrap();
+                                let buf = buf_weighted_cor.as_mut().unwrap();
                                 write!(buf, "{:e} ", w_pearson).unwrap();
 
                                 let iter = weighted_goods_cor_iter(a, b, w_a, w_b);

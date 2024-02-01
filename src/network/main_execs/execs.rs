@@ -3,10 +3,9 @@ use std::path::PathBuf;
 use itertools::Itertools;
 
 use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}};
-
+use fs_err::File;
 use {
     std::{
-        fs::File,
         io::{BufWriter, Write, BufRead},
         collections::{BTreeSet, BTreeMap}, 
         fmt::Display,

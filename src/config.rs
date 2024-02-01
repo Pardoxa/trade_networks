@@ -2,9 +2,9 @@ use std::{
     num::NonZeroUsize, 
     path::{PathBuf, Path}, 
     io::BufWriter,
-    fs::File, 
     cmp::Ordering
 };
+use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
     network::{Direction, main_execs::Relative, Network, enriched_digraph::*}, 

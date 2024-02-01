@@ -7,7 +7,6 @@ use{
             Deref, 
             RangeInclusive
         },
-        fs::File,
         io::{
             BufWriter, 
             Write
@@ -24,7 +23,8 @@ use{
     net_ensembles::sampling::{
         HistF64, 
         Histogram
-    }
+    },
+    fs_err::File
 };
 
 const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
