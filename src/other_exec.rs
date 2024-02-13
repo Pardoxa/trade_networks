@@ -2,7 +2,7 @@ use {
     super::{
         config::*,
         misc::*
-    }, crate::parser::{country_map, line_to_vec, LineIter}, camino::Utf8PathBuf, itertools::Itertools, rayon::prelude::*, sampling::{GnuplotAxis, GnuplotSettings, GnuplotTerminal}, std::{
+    }, crate::parser::{country_map, line_to_vec, LineIter}, camino::*, itertools::Itertools, rayon::prelude::*, sampling::{GnuplotAxis, GnuplotSettings, GnuplotTerminal}, std::{
         collections::*,
         io::{
             stdout, BufRead, Write
@@ -660,18 +660,36 @@ pub fn command_creator(opt: CompGroupComCreOpt)
         );
     if opt.execute{
 
+        if let Some(dir) = &opt.dir{
+            std::fs::create_dir_all(dir).expect("unable to create dir");
+            std::env::set_current_dir(dir).expect("unable to set dir");
+        }
+
         let group_sizes: Vec<_> = all_files
             .par_windows(2)
             .map(
                 |slice|
                 {
-
                     let old = &slice[0];
                     let new = &slice[1];
+                    let (new_path, old_path) = if let Some(dir) = &opt.dir{
+                        let num = dir.components().count();
+                        let up: Utf8PathBuf = "..".into();
+                        let mut all_up = up.clone();
+                        for _ in 1..num {
+                            all_up.push(&up);
+                        }
+                        let mut old_path = all_up.clone();
+                        old_path.push(&old.path);
+                        all_up.push(&new.path);
+                        (all_up, old_path)
+                    } else {
+                        (new.path.to_owned(), old.path.to_owned())
+                    };
                     let out_name = format!("{}_vs_{}", old.year, new.year);
                     let g_opt = GroupCompOpts{
-                        groups_a: old.path.as_str().to_owned(),
-                        groups_b: new.path.as_str().to_owned(),
+                        groups_a: old_path.as_str().to_owned(),
+                        groups_b: new_path.as_str().to_owned(),
                         output_stub: out_name,
                         name_a: Some(old.year.to_string()),
                         name_b: Some(new.year.to_string()),

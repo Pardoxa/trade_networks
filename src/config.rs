@@ -167,7 +167,11 @@ pub struct CompGroupComCreOpt{
 
     /// Also restrict the groups to groups that have at least X entries
     #[arg(long, short)]
-    pub restrict: Option<NonZeroUsize>
+    pub restrict: Option<NonZeroUsize>,
+
+    /// Write files to specfic directory
+    #[arg(long, short)]
+    pub dir: Option<Utf8PathBuf>
 }
 
 #[derive(Debug, Parser)]
