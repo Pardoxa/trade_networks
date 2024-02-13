@@ -7,10 +7,14 @@ use std::{
 use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
-    network::{Direction, main_execs::Relative, Network, enriched_digraph::*}, 
-    misc::{create_buf, create_buf_with_command_and_version}, WeightFun
+    misc::{create_buf, create_buf_with_command_and_version}, 
+    network::{enriched_digraph::*, main_execs::Relative, Direction, Network}, 
+    CorrelationMeasurement, 
+    CorrelationInput,
+    WeightFun
 };
 use serde::{Serialize, Deserialize};
+use camino::Utf8PathBuf;
 
 #[derive(Parser, Debug)]
 pub struct ParseEnrichOpts{
@@ -864,13 +868,100 @@ impl ReadType{
     }
 }
 
+#[derive(Debug, clap::Args)]
+#[group(required = true)]
+pub struct JsonOrGlob{
+    /// Json file (of job)
+    #[arg(short, long, conflicts_with="glob")]
+    json: Option<Utf8PathBuf>,
+
+    /// Globbing
+    #[arg(long, requires="out")]
+    glob: Option<String>,
+
+    #[arg(long, short, conflicts_with="json", requires="glob")]
+    out: Option<String>
+}
+
+impl JsonOrGlob{
+    pub fn into_either_json_or_glob(self) -> EitherJsonOrGlob
+    {
+        match (self.json, self.glob, self.out)
+        {
+            (Some(json), None, None) => {
+                EitherJsonOrGlob::Json(json)
+            },
+            (None, Some(glob), Some(out)) => {
+                EitherJsonOrGlob::Glob(
+                    GlobStruct{glob, out}
+                )
+            },
+            _ => unreachable!()
+        }
+    }
+
+    pub fn into_correlation_measurement(self) -> CorrelationMeasurement
+    {
+        match self.into_either_json_or_glob()
+        {
+            EitherJsonOrGlob::Json(json) => {
+                crate::misc::read_or_create(json)
+            },
+            EitherJsonOrGlob::Glob(glob) => {
+                let mut inputs: Vec<_> = glob::glob(&glob.glob)
+                    .unwrap()
+                    .map(|p| Utf8PathBuf::from_path_buf(p.unwrap()).unwrap())
+                    .map(
+                        |path|
+                        {
+                            let r = r"\d*.dat";
+                            let re = regex::Regex::new(r).unwrap();
+                            let last_number = match re.find(path.as_str())
+                            {
+                                Some(m) => {
+                                    let str = &path.as_str()[m.start()..m.end()];
+                                    str.trim_end_matches(".dat")
+                                },
+                                None => unimplemented!()
+                            };
+                            CorrelationInput{
+                                weight_path: None,
+                                plot_name: last_number.to_owned(),
+                                path: path.into_string(),
+                            }
+                        }
+                    )
+                    .collect();
+
+                inputs.sort_by_cached_key(|input| input.plot_name.clone());
+                
+                CorrelationMeasurement{
+                    inputs,
+                    output_stub: glob.out
+                }
+            }
+        }
+    }
+}
+
+pub struct GlobStruct{
+    pub glob: String,
+    pub out: String
+}
+
+pub enum EitherJsonOrGlob{
+    Json(Utf8PathBuf),
+    Glob(GlobStruct)
+}
+
 #[derive(Parser, Debug)]
 pub struct CorrelationOpts
 {
-    /// The files to correlate
-    pub measurement: PathBuf,
+    #[clap(flatten)]
+    pub group: JsonOrGlob,
 
     /// If the label file should contain the country names instead of the Ids
+    #[arg(long, short)]
     pub country_name_file: Option<PathBuf>,
 
     /// Weight function. Only applicable for weighted calculations

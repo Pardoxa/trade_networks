@@ -509,7 +509,8 @@ pub fn correlations(opt: CorrelationOpts)
 {
     let country_name_map: Option<BTreeMap<String, String>> = opt.country_name_file
         .map(crate::parser::country_map);
-    let inputs: CorrelationMeasurement = read_or_create(opt.measurement);
+    let inputs: CorrelationMeasurement = opt.group.into_correlation_measurement();
+    
     let mut gnuplot_filenames = Vec::new();
     assert!(!inputs.inputs.is_empty());
 
