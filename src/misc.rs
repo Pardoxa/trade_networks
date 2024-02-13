@@ -4,6 +4,7 @@ use fs_err::File;
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Serialize, de::DeserializeOwned};
+use std::process::Command;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const AVAILABILITY_ERR: &str = "You forgot to call self.assure_availabiliy()";
@@ -145,5 +146,16 @@ where P: AsRef<Path>,
             serde_json::from_reader(buf)
                 .expect("unable to deserialize")
         }
+    }
+}
+
+pub fn exec_gnuplot<S>(gp_name: S)
+where S: AsRef<std::ffi::OsStr>{
+    let output = Command::new("gnuplot")
+        .arg(gp_name)
+        .output()
+        .expect("failed gnuplot");
+    if !output.status.success(){
+        dbg!(output);
     }
 }

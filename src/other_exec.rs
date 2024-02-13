@@ -396,8 +396,14 @@ impl SetComp{
         }
     }
 }
+pub struct GnuplotGroupSizeTuple{
+    pub file1: String,
+    pub file2: String
+}
 
-pub fn compare_groups(mut opt: GroupCompOpts){
+pub fn compare_groups(mut opt: GroupCompOpts) -> Option<GnuplotGroupSizeTuple>
+{
+    let mut gp_gs_tuple = None;
     let mut a_sets = read_sets(opt.groups_a.as_ref());
     let mut b_sets = read_sets(opt.groups_b.as_ref());
 
@@ -465,9 +471,17 @@ pub fn compare_groups(mut opt: GroupCompOpts){
         gp_names.push(gp_name);
         writeln!(buf, "set t pdf\nset output '{pdf_name}'").unwrap();
         write!(buf, "p ").unwrap();
-        for name in data_names{
+        for name in data_names.iter(){
             write!(buf, "'{}' u 0:1 w lp, ", name).unwrap();
         }
+        let file2 = data_names.pop().unwrap();
+        let file1 = data_names.pop().unwrap();
+        gp_gs_tuple = Some(
+            GnuplotGroupSizeTuple{
+                file1,
+                file2
+            }
+        );
         writeln!(buf).unwrap();
         writeln!(buf, "set output").unwrap();
     }
@@ -587,8 +601,9 @@ pub fn compare_groups(mut opt: GroupCompOpts){
                         dbg!(output);
                     }
                 }
-            )
+            );
     }
+    gp_gs_tuple
 }
 
 
@@ -645,9 +660,9 @@ pub fn command_creator(opt: CompGroupComCreOpt)
         );
     if opt.execute{
 
-        all_files
+        let group_sizes: Vec<_> = all_files
             .par_windows(2)
-            .for_each(
+            .map(
                 |slice|
                 {
 
@@ -666,10 +681,67 @@ pub fn command_creator(opt: CompGroupComCreOpt)
                         common_only: true,
                         scaling: 1.0
                     };
-                    compare_groups(g_opt);
+                    let gs_tuple = compare_groups(g_opt).unwrap();
+                    GnuplotGroupSizeTupleExtra{
+                        file1: gs_tuple.file1,
+                        file2: gs_tuple.file2,
+                        year1: old.year,
+                        year2: new.year
+                    }
                 }
-            );
+            ).collect();
+        let group_gp_name = "all_group_sizes.gp";
+        let mut writer = create_gnuplot_buf(group_gp_name);
+        let mut lines = vec![
+            "set t pdfcairo",
+            r#"set output "all_group_sizes.pdf""#,
+            "set key left",
+        ];
+        let max = format!("set key maxrows {}", group_sizes.len());
+        lines.push(&max);
+        for line in lines {
+            writeln!(
+                writer,
+                "{line}"
+            ).unwrap();
+        }
+        write!(
+            writer,
+            "p "
+        ).unwrap();
+        for (index, tuple) in group_sizes.iter().enumerate()
+        {
+            let pt = index + 1;
+            writeln!(
+                writer,
+                "'{}' w lp lc {index} pt {pt} lw 2 t '{} (vs {})',\\",
+                tuple.file1,
+                tuple.year1,
+                tuple.year2
+            ).unwrap();
+        }
+        for (index, tuple) in group_sizes.iter().enumerate()
+        {
+            let pt = index + 1;
+            writeln!(
+                writer,
+                "'{}' w lp lc {index} pt {pt} dt (5,5) lw 2 t '{} (vs {})',\\",
+                tuple.file2,
+                tuple.year2,
+                tuple.year1
+            ).unwrap();
+        }
+       
+        writeln!(writer).unwrap();
+        writeln!(writer, "set output").unwrap();
+        drop(writer);
+        exec_gnuplot(group_gp_name);
     }
+}
 
-
+struct GnuplotGroupSizeTupleExtra{
+    file1: String,
+    year1: u16,
+    file2: String,
+    year2: u16
 }

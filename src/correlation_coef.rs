@@ -1145,17 +1145,6 @@ pub fn correlations(opt: CorrelationOpts)
     if opt.gnuplot_exec{
         gnuplot_filenames
             .into_par_iter()
-            .for_each(
-                |gp_name|
-                {
-                    let output = Command::new("gnuplot")
-                        .arg(gp_name)
-                        .output()
-                        .expect("failed gnuplot");
-                    if !output.status.success(){
-                        dbg!(output);
-                    }
-                }
-            )
+            .for_each(exec_gnuplot)
     }
 }
