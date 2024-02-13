@@ -996,6 +996,16 @@ pub struct CorrelationOpts
     /// threshold for dendrogram
     #[arg(long, short)]
     pub threshold_color: Option<f64>,
+
+    /// threshold for dendrogram of spearman
+    #[arg(long, conflicts_with = "threshold_color")]
+    #[clap(visible_alias="st")]
+    pub spearman_threshold_color: Option<f64>,
+
+    /// threshold for dendrogram of pearson
+    #[arg(long, conflicts_with = "threshold_color")]
+    #[clap(visible_alias="pt")]
+    pub pearspn_threshold_color: Option<f64>,
 }
 
 
