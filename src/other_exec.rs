@@ -644,48 +644,29 @@ pub fn command_creator(opt: CompGroupComCreOpt)
             }
         );
     if opt.execute{
-        let restrict = opt.restrict.map(
-            |r|
-            {
-                [
-                    "-r".to_string(),
-                    r.to_string()
-                ]
-            }
-        );
 
         all_files
             .par_windows(2)
             .for_each(
                 |slice|
                 {
+
                     let old = &slice[0];
                     let new = &slice[1];
-                    let mut cmd = Command::new("trade_networks");
-                    let old_year_str = old.year.to_string();
-                    let new_year_str = new.year.to_string();
                     let out_name = format!("{}_vs_{}", old.year, new.year);
-                    let args =  [
-                        "compare-groups",
-                        old.path.as_str(),
-                        new.path.as_str(),
-                        "-c",
-                        "-e",
-                        "--name-a",
-                        &old_year_str,
-                        "--name-b",
-                        &new_year_str,
-                        "-o",
-                        &out_name
-                    ];
-                    cmd.args(args);
-                    if let Some(restrict) = restrict.as_ref() {
-                        cmd.args(restrict);
-                    }
-                    let out = cmd.output().unwrap();
-                    if !out.status.success(){
-                        dbg!(out, old, new);
-                    }
+                    let g_opt = GroupCompOpts{
+                        groups_a: old.path.as_str().to_owned(),
+                        groups_b: new.path.as_str().to_owned(),
+                        output_stub: out_name,
+                        name_a: Some(old.year.to_string()),
+                        name_b: Some(new.year.to_string()),
+                        exec_gnuplot: true,
+                        remove_smaller: opt.restrict,
+                        output_group_size: true,
+                        common_only: true,
+                        scaling: 1.0
+                    };
+                    compare_groups(g_opt);
                 }
             );
     }

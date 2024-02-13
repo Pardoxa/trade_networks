@@ -1,5 +1,5 @@
 use std::{
-    cmp::Ordering, io::BufWriter, num::{NonZeroU8, NonZeroUsize}, path::{Path, PathBuf}
+    cmp::Ordering, io::BufWriter, num::*, path::{Path, PathBuf}
 };
 use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
@@ -166,7 +166,8 @@ pub struct CompGroupComCreOpt{
     pub execute: bool,
 
     /// Also restrict the groups to groups that have at least X entries
-    pub restrict: Option<NonZeroU8>
+    #[arg(long, short)]
+    pub restrict: Option<NonZeroUsize>
 }
 
 #[derive(Debug, Parser)]
