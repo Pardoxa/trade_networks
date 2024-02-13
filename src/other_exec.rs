@@ -396,9 +396,16 @@ impl SetComp{
         }
     }
 }
+
+pub struct Overlap{
+    pub max_in_both: usize,
+    pub size_self: usize
+}
+
 pub struct GnuplotGroupSizeTuple{
     pub file1: String,
-    pub file2: String
+    pub file2: String,
+    pub file1_overlap: Vec<Overlap>
 }
 
 pub fn compare_groups(mut opt: GroupCompOpts) -> Option<GnuplotGroupSizeTuple>
@@ -451,7 +458,27 @@ pub fn compare_groups(mut opt: GroupCompOpts) -> Option<GnuplotGroupSizeTuple>
     a_sets.sort_by_key(|entry| entry.len());
     b_sets.sort_by_key(|entry| entry.len());
 
+
+
     if opt.output_group_size{
+        let overlap_a = a_sets.iter()
+            .map(
+                |a|
+                {
+                    let mut max = 0;
+                    for b in b_sets.iter()
+                    {
+                        let count = a.intersection(b).count();
+                        if count > max {
+                            max = count;
+                        }
+                    }
+                    Overlap{
+                        max_in_both: max,
+                        size_self: a.len()
+                    }
+                }
+            ).collect_vec();
         let mut data_names = Vec::new();
         let mut out = |slice: &[BTreeSet<String>], name_addition: char|
         {
@@ -479,7 +506,8 @@ pub fn compare_groups(mut opt: GroupCompOpts) -> Option<GnuplotGroupSizeTuple>
         gp_gs_tuple = Some(
             GnuplotGroupSizeTuple{
                 file1,
-                file2
+                file2,
+                file1_overlap: overlap_a
             }
         );
         writeln!(buf).unwrap();
@@ -504,6 +532,8 @@ pub fn compare_groups(mut opt: GroupCompOpts) -> Option<GnuplotGroupSizeTuple>
     let mut writer_relative = create_buf_with_command_and_version::<&Path>(relative_name.as_ref());
     let mut writer_total = create_buf_with_command_and_version::<&Path>(total_name.as_ref());
     let mut writer_min = create_buf_with_command_and_version(&min_name);
+
+    
 
     for a in a_sets.iter(){
         for b in b_sets.iter(){
@@ -704,11 +734,31 @@ pub fn command_creator(opt: CompGroupComCreOpt)
                         file1: gs_tuple.file1,
                         file2: gs_tuple.file2,
                         year1: old.year,
-                        year2: new.year
+                        year2: new.year,
+                        overlap: gs_tuple.file1_overlap
                     }
                 }
             ).collect();
         let group_gp_name = "all_group_sizes.gp";
+        let max_len_overlap = group_sizes.iter().map(|tup| tup.overlap.len()).max().unwrap();
+        let mut overlap_writers = (0..max_len_overlap)
+            .map(
+                |i|
+                { 
+                    let name = format!("largest_overlap_{i}.dat");
+                    let mut overlap_writer = create_buf_with_command_and_version(name);
+                    let header = [
+                        "year",
+                        "TotalOverlap",
+                        "SizeOfCorrespondingGroup",
+                        "RelativeOverlap"
+                    ];
+                    write_slice_head(&mut overlap_writer, header).unwrap();
+                    overlap_writer
+                }
+            ).collect_vec();
+        
+        
         let mut writer = create_gnuplot_buf(group_gp_name);
         let mut lines = vec![
             "set t pdfcairo",
@@ -737,6 +787,23 @@ pub fn command_creator(opt: CompGroupComCreOpt)
                 tuple.year1,
                 tuple.year2
             ).unwrap();
+
+            let mut write_iter = overlap_writers.iter_mut();
+            for (overlap, overlap_writer) in tuple.overlap.iter().rev().zip(&mut write_iter){
+                
+                let frac = overlap.max_in_both as f64 / overlap.size_self as f64;
+                writeln!(
+                    overlap_writer,
+                    "{} {} {} {frac}",
+                    tuple.year1,
+                    overlap.max_in_both,
+                    overlap.size_self
+                ).unwrap();
+            }
+            for writer in write_iter{
+                writeln!(writer, "{} NaN NaN NaN", tuple.year1).unwrap();
+            }
+            
         }
         for (index, tuple) in group_sizes.iter().enumerate()
         {
@@ -761,5 +828,6 @@ struct GnuplotGroupSizeTupleExtra{
     file1: String,
     year1: u16,
     file2: String,
-    year2: u16
+    year2: u16,
+    overlap: Vec<Overlap>
 }
