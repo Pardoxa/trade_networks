@@ -1108,7 +1108,14 @@ pub fn correlations(opt: CorrelationOpts)
 
     for c in dendrogram_python_commands.iter()
     {
-        println!("dendrogram.py {} {} {} average", c[0], c[1], c[2]);
+        match opt.threshold_color{
+            Some(t) => {
+                println!("dendrogram.py {} {} {} average -t {t}", c[0], c[1], c[2]);
+            },
+            None => {
+                println!("dendrogram.py {} {} {} average", c[0], c[1], c[2]);
+            }
+        }
     }
     if opt.execute_python{
         dendrogram_python_commands

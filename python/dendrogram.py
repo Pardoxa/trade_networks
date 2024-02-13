@@ -3,9 +3,20 @@
 import numpy as np
 import sys
 import argparse
+import scipy
 from seaborn import clustermap
 from matplotlib import pyplot as plt
 from scipy.cluster import hierarchy
+
+required_version = (1, 10)  # Minimum required version
+actual_version = tuple(map(int, scipy.__version__.split('.')[:2]))
+
+if actual_version >= required_version:
+    print("Scipy version is at least 1.10.x")
+else:
+    print("Scipy version is below 1.10.x")
+    print("This might not create the desired files! Aboort!")
+    exit(0)
 
 def plot_all(data, name: str, labels, fig_size, method, threshold):
     res=clustermap(data, yticklabels=labels, xticklabels=labels, figsize=fig_size, method=method)
@@ -17,6 +28,7 @@ def plot_all(data, name: str, labels, fig_size, method, threshold):
     plt.savefig(dis_den_name)
     c_set=set()
     dat_name="%s_dendro.dat" % name
+    print(r)
     c_list=r["leaves_color_list"]
     country_list=r["ivl"]
     for col in c_list:

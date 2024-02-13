@@ -1,8 +1,5 @@
 use std::{
-    num::NonZeroUsize, 
-    path::{PathBuf, Path}, 
-    io::BufWriter,
-    cmp::Ordering
+    cmp::Ordering, io::BufWriter, num::{NonZeroU8, NonZeroUsize}, path::{Path, PathBuf}
 };
 use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
@@ -154,7 +151,22 @@ pub enum CmdChooser{
     Correlations(CorrelationOpts),
     Filter(FilterOpts),
     CompareEntries(CompareEntriesOpt),
-    CompareGroups(GroupCompOpts)
+    CompareGroups(GroupCompOpts),
+    /// Create commands to use with compare groups, used to automate stuff
+    CompareGroupsCommandCreator(CompGroupComCreOpt)
+}
+
+#[derive(Debug, Parser)]
+pub struct CompGroupComCreOpt{
+    /// Glob to the files. They must be in year/file (year is a number)
+    pub glob: String,
+
+    #[arg(long, short)]
+    /// also execute the commands
+    pub execute: bool,
+
+    /// Also restrict the groups to groups that have at least X entries
+    pub restrict: Option<NonZeroU8>
 }
 
 #[derive(Debug, Parser)]
@@ -922,7 +934,7 @@ impl JsonOrGlob{
                                     let str = &path.as_str()[m.start()..m.end()];
                                     str.trim_end_matches(".dat")
                                 },
-                                None => unimplemented!()
+                                None => panic!("No number at end of input file!")
                             };
                             CorrelationInput{
                                 weight_path: None,

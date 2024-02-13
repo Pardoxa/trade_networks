@@ -1,22 +1,15 @@
 use {
-    crate::parser::{country_map, line_to_vec, LineIter},
     super::{
         config::*,
         misc::*
-    },
-    std::{
+    }, crate::parser::{country_map, line_to_vec, LineIter}, camino::Utf8PathBuf, itertools::Itertools, rayon::prelude::*, sampling::{GnuplotAxis, GnuplotSettings, GnuplotTerminal}, std::{
         collections::*,
         io::{
-            BufRead,
-            Write,
-            stdout
+            stdout, BufRead, Write
         },
         path::{Path, PathBuf},
         process::Command
-    },
-    itertools::Itertools,
-    sampling::{GnuplotSettings, GnuplotTerminal, GnuplotAxis},
-    rayon::prelude::*
+    }
 };
 
 
@@ -598,3 +591,104 @@ pub fn compare_groups(mut opt: GroupCompOpts){
     }
 }
 
+
+#[derive(Debug)]
+struct CommandHelper{
+    path: Utf8PathBuf,
+    year: u16
+}
+
+pub fn command_creator(opt: CompGroupComCreOpt)
+{
+    let mut all_files: Vec<_> = glob::glob(&opt.glob)
+        .unwrap()
+        .map(Result::unwrap)
+        .map(
+            |path| 
+            {
+                let path = Utf8PathBuf::from_path_buf(path).unwrap();
+                let parent = path.parent().unwrap();
+                let year = parent.as_str().parse().unwrap();
+                CommandHelper{
+                    year,
+                    path
+                }
+            }
+        )
+        .collect();
+    
+    all_files.sort_unstable_by_key(|item| item.year);
+
+    let r = match opt.restrict{
+        Some(r) => {
+            format!("-r {r}")
+        },
+        None =>  String::new()
+    };
+
+    all_files.windows(2)
+        .for_each(
+            |slice|
+            {
+                let old = &slice[0];
+                let new = &slice[1];
+                println!(
+                    "trade_networks compare-groups {} {} -c -e --name-a {} --name-b {} -o {}_vs_{} {r}",
+                    old.path.as_str(),
+                    new.path.as_str(),
+                    old.year,
+                    new.year,
+                    old.year,
+                    new.year
+                )
+            }
+        );
+    if opt.execute{
+        let restrict = opt.restrict.map(
+            |r|
+            {
+                [
+                    "-r".to_string(),
+                    r.to_string()
+                ]
+            }
+        );
+
+        all_files
+            .par_windows(2)
+            .for_each(
+                |slice|
+                {
+                    let old = &slice[0];
+                    let new = &slice[1];
+                    let mut cmd = Command::new("trade_networks");
+                    let old_year_str = old.year.to_string();
+                    let new_year_str = new.year.to_string();
+                    let out_name = format!("{}_vs_{}", old.year, new.year);
+                    let args =  [
+                        "compare-groups",
+                        old.path.as_str(),
+                        new.path.as_str(),
+                        "-c",
+                        "-e",
+                        "--name-a",
+                        &old_year_str,
+                        "--name-b",
+                        &new_year_str,
+                        "-o",
+                        &out_name
+                    ];
+                    cmd.args(args);
+                    if let Some(restrict) = restrict.as_ref() {
+                        cmd.args(restrict);
+                    }
+                    let out = cmd.output().unwrap();
+                    if !out.status.success(){
+                        dbg!(out, old, new);
+                    }
+                }
+            );
+    }
+
+
+}
