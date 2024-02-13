@@ -757,7 +757,15 @@ pub fn command_creator(opt: CompGroupComCreOpt)
                     overlap_writer
                 }
             ).collect_vec();
+
+        let group_size_matrix_name = "overlap_groupsize_matrix.dat";
+        let mut group_size_matrix_writer = create_buf_with_command_and_version(group_size_matrix_name);
+
+        let relative_overlap_matrix_name = "relative_overlap_matrix.dat";
+        let mut relative_overlap_matrix_writer = create_buf_with_command_and_version(relative_overlap_matrix_name); 
         
+        let overlap_matrix_name = "overlap_matrix.dat";
+        let mut overlap_matrix_writer = create_buf_with_command_and_version(overlap_matrix_name); 
         
         let mut writer = create_gnuplot_buf(group_gp_name);
         let mut lines = vec![
@@ -799,11 +807,31 @@ pub fn command_creator(opt: CompGroupComCreOpt)
                     overlap.max_in_both,
                     overlap.size_self
                 ).unwrap();
+                write!(
+                    overlap_matrix_writer,
+                    "{} ",
+                    overlap.max_in_both
+                ).unwrap();
+                write!(
+                    relative_overlap_matrix_writer,
+                    "{} ",
+                    frac
+                ).unwrap();
+                write!(
+                    group_size_matrix_writer,
+                    "{} ",
+                    overlap.size_self
+                ).unwrap();
             }
             for writer in write_iter{
                 writeln!(writer, "{} NaN NaN NaN", tuple.year1).unwrap();
+                write!(overlap_matrix_writer, "-1 ").unwrap();
+                write!(relative_overlap_matrix_writer, "-1 ").unwrap();
+                write!(group_size_matrix_writer, "0 ").unwrap();
             }
-            
+            writeln!(overlap_matrix_writer).unwrap();
+            writeln!(relative_overlap_matrix_writer).unwrap();
+            writeln!(group_size_matrix_writer).unwrap();
         }
         for (index, tuple) in group_sizes.iter().enumerate()
         {
@@ -821,6 +849,78 @@ pub fn command_creator(opt: CompGroupComCreOpt)
         writeln!(writer, "set output").unwrap();
         drop(writer);
         exec_gnuplot(group_gp_name);
+        drop(overlap_matrix_writer);
+        drop(relative_overlap_matrix_writer);
+        drop(group_size_matrix_writer);
+
+        let mut settings = GnuplotSettings::new();
+
+        let terminal = GnuplotTerminal::PDF("overlap".to_owned());
+
+        let y_labels = group_sizes.iter()
+            .map(|tup| tup.year1.to_string())
+            .collect_vec();
+        let x_labels = (0..overlap_writers.len())
+            .map(|i| i.to_string())
+            .collect_vec();
+
+        let matrix_width = x_labels.len();
+        let matrix_height = y_labels.len();
+
+        let max = group_sizes.iter()
+            .flat_map(|tup| tup.overlap.iter().map(|o| o.max_in_both))
+            .max()
+            .unwrap();
+        
+        settings.x_label("group rank")
+            .y_label("year")
+            .x_axis(GnuplotAxis::from_labels(x_labels))
+            .y_axis(GnuplotAxis::from_labels(y_labels))
+            .terminal(terminal)
+            .cb_range(-1.0, max as f64)
+            .title("Absolute Overlap");
+
+        let overlap_gp_writer = create_gnuplot_buf("overlap.gp");
+
+        settings.write_heatmap_external_matrix(
+            overlap_gp_writer, 
+            matrix_width, 
+            matrix_height, 
+            overlap_matrix_name
+        ).unwrap();
+        exec_gnuplot("overlap.gp");
+        let terminal = GnuplotTerminal::PDF("relative_overlap".to_owned());
+
+        settings.terminal(terminal)
+            .cb_range(0.0, 1.0)
+            .title("Relative Overlap");
+        let overlap_gp_writer = create_gnuplot_buf("relative_overlap.gp");
+        settings.write_heatmap_external_matrix(
+            overlap_gp_writer, 
+            matrix_width, 
+            matrix_height, 
+            relative_overlap_matrix_name
+        ).unwrap();
+        exec_gnuplot("relative_overlap.gp");
+
+        let group_size_gp_name = "group_size_heatmap.gp";
+        let gp_writer = create_gnuplot_buf(group_size_gp_name);
+        let terminal = GnuplotTerminal::PDF("group_size_heatmap".to_owned());
+        let max = group_sizes.iter()
+            .flat_map(|tup| tup.overlap.iter().map(|item| item.size_self))
+            .max()
+            .unwrap();
+        settings.terminal(terminal)
+            .cb_range(-1.0, max as f64)
+            .title("Group Size");
+
+        settings.write_heatmap_external_matrix(
+            gp_writer, 
+            matrix_width, 
+            matrix_height, 
+            group_size_matrix_name
+        ).unwrap();
+        exec_gnuplot(group_size_gp_name);
     }
 }
 
