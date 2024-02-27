@@ -581,9 +581,9 @@ where P: AsRef<Path>
                 );
             sum += slice_b[0];
         }
-        sum += sum_without.clone();
-        let av = sum.sum() * recip;
         let av_without = sum_without.sum() * recip;
+        sum += sum_without;
+        let av = sum.sum() * recip;
         writeln!(buf, "{e} {av} {av_without}").unwrap();
     }
     println!("created {file_name}");
