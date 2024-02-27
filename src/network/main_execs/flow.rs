@@ -1,30 +1,20 @@
 use{
-    std::{
-        collections::*,
-        path::Path,
-        fmt::Display,
-        ops::{
-            Deref, 
-            RangeInclusive
-        },
-        io::{
-            BufWriter, 
-            Write
-        }
-    },
     crate::{
-        parser::country_map,
-        network::*, 
-        UNIT_TESTER,
-        network::enriched_digraph::*,
-        config::*,
-        misc::*
-    },
+        config::*, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
+    }, 
+    fs_err::File,
     net_ensembles::sampling::{
         HistF64, 
         Histogram
-    },
-    fs_err::File
+    }, std::{
+        collections::*, fmt::Display, io::{
+            BufWriter, 
+            Write
+        }, ops::{
+            Deref, 
+            RangeInclusive
+        }, path::Path
+    }
 };
 
 const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
@@ -534,6 +524,79 @@ where I: IntoIterator<Item = A>,
     writeln!(buf).unwrap();
 }
 
+pub fn reduce_x_test<P>(opt: XOpts, in_file: P)
+where P: AsRef<Path>
+{
+    let mut lazy_networks = LazyNetworks::Filename(in_file.as_ref().to_owned());
+    lazy_networks.assure_availability();
+    let mut lazy_enrichments = LazyEnrichmentInfos::Filename(
+        opt.enrich_file, 
+        opt.item_code
+    );
+    lazy_enrichments.assure_availability();
+
+    let file_name = format!(
+        "{}_{}_test.dat", 
+        opt.top.get_string(),
+        lazy_enrichments.item_codes_as_string_unchecked()
+    );
+    let header = [
+        "Export_fraction",
+        "sum",
+        "sum_without_focus"
+    ];
+    let mut buf = create_buf_with_command_and_version_and_header(&file_name, header);
+
+    let export_diff = opt.export_end - opt.export_start;
+    let export_delta = export_diff / (opt.export_samples - 1) as f64;
+
+
+    let export_vals = (0..opt.export_samples-1)
+        .map(|i| opt.export_start + export_delta * i as f64)
+        .chain(std::iter::once(opt.export_end));
+
+    let specifiers = opt.top.get_specifiers();
+
+    let recip = (specifiers.len() as f64).recip();
+    for e in export_vals
+    {
+        let mut sum = 0.0;
+        let mut sum_without = 0.0;
+        for s in specifiers.iter(){
+            let res = calc_shock(
+                &mut lazy_networks, 
+                opt.year, 
+                s.clone(), 
+                e, 
+                opt.iterations, 
+                &mut lazy_enrichments
+            );
+
+            let focus = res.focus_index;
+            res.available_after_shock
+                .iter()
+                .inspect(|val| sum += *val)
+                .enumerate()
+                .filter(|(idx, _)| *idx != focus)
+                .for_each(|(_, val)| sum_without += val);
+        }
+        sum *= recip;
+        sum_without *= recip;
+        writeln!(buf, "{e} {sum} {sum_without}").unwrap();
+    }
+    println!("created {file_name}");
+}
+
+#[inline]
+fn c_map<'a>(id: &str, country_map: &'a Option<BTreeMap<String, String>>) -> &'a str
+{
+    if let Some(map) = country_map{
+        map.get(id).unwrap()
+    } else {
+        ""
+    }
+}
+
 
 pub fn reduce_x<P>(opt: XOpts, in_file: P)
 where P: AsRef<Path>
@@ -559,18 +622,10 @@ where P: AsRef<Path>
         lazy_enrichments.item_codes_as_string_unchecked()
     );
 
-    let country_map = opt.country_map
+    let country_map = opt
+        .country_map
         .as_deref()
         .map(country_map);
-
-    fn c_map<'a>(id: &str, country_map: &'a Option<BTreeMap<String, String>>) -> &'a str
-    {
-        if let Some(map) = country_map{
-            map.get(id).unwrap()
-        } else {
-            ""
-        }
-    }
 
     opt.investigate
         .iter()
@@ -1006,9 +1061,6 @@ where P: AsRef<Path>
         ).collect();
 
     let worst_integral_name = format!("{stub}worst_integrals.dat");
-    let mut buf_worst_integral = create_buf_with_command_and_version(worst_integral_name);
-
-
     let mut header_of_worst_integral = vec![
         "This_country_ID", 
         "WorstIntegral", 
@@ -1018,8 +1070,7 @@ where P: AsRef<Path>
         header_of_worst_integral.push("ResponsibleCountryName");
         header_of_worst_integral.push("ThisCountryName");
     }
-    write_slice_head(&mut buf_worst_integral, &header_of_worst_integral)
-        .unwrap();
+    let mut buf_worst_integral = create_buf_with_command_and_version_and_header(worst_integral_name, header_of_worst_integral);
 
     for (i, responsible) in foci.iter().enumerate(){
         let integral_name = format!("{stub}_integral_{i}.dat");
@@ -1260,8 +1311,7 @@ where P: AsRef<Path>
                 hist.increment(delta).unwrap();
             }
         
-            let mut buf = create_buf_with_command_and_version(name);
-            write_slice_head(&mut buf, HIST_HEADER).unwrap();
+            let mut buf = create_buf_with_command_and_version_and_header(name, HIST_HEADER);
             let total: usize = hist.hist().iter().sum();
         
             for (bin, hits) in hist.bin_hits_iter(){
@@ -1321,8 +1371,7 @@ where P: AsRef<Path>
             let total: usize = hist.iter().sum();
 
             let name = format!("{}.combined", &gp_names[i]);
-            let mut buf = create_buf_with_command_and_version(&name);
-            write_slice_head(&mut buf, HIST_HEADER).unwrap();
+            let mut buf = create_buf_with_command_and_version_and_header(&name, HIST_HEADER);
 
             for (bin, &hits) in bins.iter().zip(hist)
             {

@@ -432,6 +432,8 @@ pub enum SubCommand{
     ShockDist(ShockDistOpts),
     CountryCount(CountryCountOpt),
     ReduceX(XOpts),
+    /// For checking if everything works as intended
+    ReduceXTest(XOpts),
     CombineWorstIntegrals(WorstIntegralCombineOpts),
     /// Order by trade volume
     VolumeOrder(OrderedTradeVolue),

@@ -79,6 +79,17 @@ where P: AsRef<Path>
     buf
 }
 
+pub fn create_buf_with_command_and_version_and_header<P, S, D>(path: P, header: S) -> BufWriter<File>
+where P: AsRef<Path>,
+    S: IntoIterator<Item=D>,
+    D: Display
+{
+    let mut buf = create_buf_with_command_and_version(path);
+    write_slice_head(&mut buf, header)
+        .expect("unable to write header");
+    buf
+}
+
 pub fn create_gnuplot_buf<P>(path: P) -> BufWriter<File>
 where P: AsRef<Path>
 {

@@ -456,6 +456,7 @@ pub fn test_chooser(in_file: PathBuf, cmd: SubCommand){
         SubCommand::ShockAvail(s) => shock_avail(s, in_file),
         SubCommand::ShockDist(d) => shock_dist(d, in_file),
         SubCommand::ReduceX(o) => reduce_x(o, in_file),
+        SubCommand::ReduceXTest(o) => reduce_x_test(o, in_file),
         SubCommand::CombineWorstIntegrals(opts) => crate::other_exec::worst_integral_sorting(opts),
         SubCommand::VolumeOrder(order_opt) => order_trade_volume(order_opt, in_file),
         SubCommand::Partition(opt) => partition(opt, in_file),
