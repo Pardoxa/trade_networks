@@ -1,9 +1,7 @@
 use{
     crate::{
         config::*, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
-    }, 
-    fs_err::File,
-    net_ensembles::sampling::{
+    }, fs_err::File, kahan::KahanSum, net_ensembles::sampling::{
         HistF64, 
         Histogram
     }, std::{
@@ -11,8 +9,7 @@ use{
             BufWriter, 
             Write
         }, ops::{
-            Deref, 
-            RangeInclusive
+            AddAssign, Deref, RangeInclusive
         }, path::Path
     }
 };
@@ -560,8 +557,8 @@ where P: AsRef<Path>
     let recip = (specifiers.len() as f64).recip();
     for e in export_vals
     {
-        let mut sum = 0.0;
-        let mut sum_without = 0.0;
+        let mut sum = KahanSum::new();
+        let mut sum_without = KahanSum::new();
         for s in specifiers.iter(){
             let res = calc_shock(
                 &mut lazy_networks, 
@@ -573,16 +570,21 @@ where P: AsRef<Path>
             );
 
             let focus = res.focus_index;
-            res.available_after_shock
-                .iter()
-                .inspect(|val| sum += *val)
-                .enumerate()
-                .filter(|(idx, _)| *idx != focus)
-                .for_each(|(_, val)| sum_without += val);
+            let (slice_a, slice_b) = res.available_after_shock
+                .split_at(focus);
+            slice_a.iter()
+                .for_each(|val| sum_without.add_assign(*val));
+            slice_b.iter()
+                .skip(1)
+                .for_each(
+                    |val| sum_without.add_assign(*val)
+                );
+            sum += slice_b[0];
         }
-        sum *= recip;
-        sum_without *= recip;
-        writeln!(buf, "{e} {sum} {sum_without}").unwrap();
+        sum += sum_without.clone();
+        let av = sum.sum() * recip;
+        let av_without = sum_without.sum() * recip;
+        writeln!(buf, "{e} {av} {av_without}").unwrap();
     }
     println!("created {file_name}");
 }
