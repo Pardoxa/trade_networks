@@ -1,7 +1,7 @@
 use{
     crate::{
         config::*, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
-    }, fs_err::File, kahan::KahanSum, net_ensembles::sampling::{
+    }, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
         HistF64, 
         Histogram
     }, std::{
@@ -10,8 +10,10 @@ use{
             Write
         }, ops::{
             AddAssign, Deref, RangeInclusive
-        }, path::Path
-    }
+        }, path::Path,
+        cmp::Reverse
+    },
+    ordered_float::OrderedFloat
 };
 
 const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
@@ -293,15 +295,8 @@ fn calc_acc_trade(network: &Network) -> Vec<f64>
     network
         .nodes
         .iter()
-        .map(
-            |n| 
-            {
-                n.adj
-                    .iter()
-                    .map(|e| e.amount)
-                    .sum()
-            }
-        ).collect()
+        .map(Node::trade_amount)
+        .collect()
 }
 
 #[derive(Debug)]
@@ -374,17 +369,191 @@ pub fn calc_shock(
         .get_export_network_unchecked(year)
         .without_unconnected_nodes();
 
-    let get_sorting = ||
-    {
-        let all = calc_acc_trade(&export);
-        let mut for_sorting: Vec<_> = all.into_iter()
-            .enumerate()
-            .collect();
-        for_sorting
-            .sort_unstable_by(|a,b| b.1.total_cmp(&a.1));
-        assert!(for_sorting.windows(2).all(|s| s[0].1 >= s[1].1));
-        for_sorting
+    let (focus, export_frac) = match top_id{
+        TopSpecifier::Id(id) => {
+            let focus = export.get_index(&id).unwrap();
+            (focus, export_frac)
+        },
+        TopSpecifier::Rank(r) => {
+            let sorted =  get_top_ordered(&export);
+
+            let focus = sorted[r].0;
+            (focus, export_frac)
+            
+        },
+        TopSpecifier::RankRef(r) => {
+            let sorted = get_top_ordered(&export);
+
+            let r_ref_trade_amount = sorted[r.reference].1.trade_amount();
+            let wanted_ref_export = export_frac * r_ref_trade_amount;
+            let wanted_export_reduction = r_ref_trade_amount - wanted_ref_export;
+            let possible_export = sorted[r.focus].1.trade_amount();
+            let reduced_export = possible_export - wanted_export_reduction;
+            let frac = reduced_export / possible_export;
+            dbg!(frac);
+
+            (sorted[r.focus].0, frac)
+        }
     };
+
+    let fracts = shock_distribution(
+        &export, 
+        focus, 
+        export_frac, 
+        iterations
+    );
+
+    lazy_enrichment.assure_availability();
+    let enrichment_infos = lazy_enrichment.enrichment_infos_unchecked();
+    let enrich = enrichment_infos.get_year(year);
+
+    let node_info_map = lazy_enrichment.extra_info_idmap_unchecked();
+
+    let avail_after_shock = calc_available(
+        &export, 
+        enrich, 
+        &fracts, 
+        &node_info_map
+    );
+
+    let no_shock = ShockRes{
+        import_fracs: vec![1.0; fracts.import_fracs.len()],
+        export_fracs: vec![1.0; fracts.import_fracs.len()]
+    };
+
+    let available_before_shock = calc_available(
+        &export, 
+        enrich, 
+        &no_shock, 
+        &node_info_map
+    );
+
+    let shock_amount = avail_after_shock[focus] - available_before_shock[focus];
+    println!("SHOCK AMOUNT: {shock_amount}");
+    let actual_export: f64 = export
+        .nodes[focus]
+        .adj
+        .iter()
+        .map(|a| a.amount * fracts.export_fracs[focus])
+        .sum();
+    println!("Export: {actual_export} fraction {}", fracts.export_fracs[focus]);
+
+    CalculatedShocks { 
+        available_after_shock: avail_after_shock,
+        available_before_shock,
+        focus_index: focus,
+        network: export,
+        after_export_fract: fracts.export_fracs
+    }
+}
+
+
+pub struct ExportShockItem{
+    export_id: usize,
+    export_frac: f64
+}
+
+pub struct CalcShockMultiJob{
+    exporter: Vec<ExportShockItem>,
+    free_ids: Vec<usize>,
+    iterations: usize
+}
+
+pub fn get_top_ordered(
+    export_network: &Network
+) -> Vec<(usize, &Node)>
+{
+    export_network
+        .nodes
+        .iter()
+        .enumerate()
+        .sorted_by_cached_key(
+            |(_id, node)| 
+                Reverse(OrderedFloat(node.trade_amount()))
+        ).collect_vec()
+}
+
+
+pub fn get_top_k_ids(
+    export_network: &Network,
+    k: usize
+) -> Vec<usize>
+{
+    get_top_ordered(export_network)
+        .into_iter()
+        .map(|(id, _)| id)
+        .take(k)
+        .collect_vec()
+}
+
+impl CalcShockMultiJob{
+
+    /// Len is length of network
+    /// ids need to be sorted
+    pub fn new_const_export(
+        len: usize,
+        ids: &[usize],
+        export_frac: f64,
+        iterations: usize
+    ) -> Self
+    {
+        let sorted = ids.windows(2)
+            .all(|slice| slice[0] < slice[1]);
+        assert!(sorted);
+
+        let (mut first, mut slice) = ids
+            .split_first()
+            .map(|(f, s)| (*f, s))
+            .unwrap();
+        
+        let free_ids = (0..len)
+            .filter(
+                |&id|
+                {
+                    if id == first{
+                        if !slice.is_empty(){
+                            (first, slice) = slice.split_first()
+                                .map(|(f,s)| (*f, s))
+                                .unwrap();
+                        }
+                        false
+                    } else {
+                        true
+                    }
+                }
+            ).collect_vec();
+        let exporter = ids.iter()
+            .copied()
+            .map(|id| ExportShockItem{export_id: id, export_frac})
+            .collect_vec();
+        Self { exporter, free_ids, iterations }
+    }
+
+    pub fn change_export_frac(&mut self, export_frac: f64)
+    {
+        self.exporter
+            .iter_mut()
+            .for_each(|e| e.export_frac = export_frac);
+    }
+
+    pub fn add_exporter(&mut self, exporter: ExportShockItem)
+    {
+        let pos = self.free_ids
+            .iter()
+            .position(|&id| id == exporter.export_id)
+            .unwrap();
+        self.free_ids.remove(pos);
+        self.exporter.push(exporter);
+    }
+}
+
+/*pub fn calc_shock_multiple(
+    export: &Network,
+    job: &CalcShockMultiJob,
+    lazy_enrichment: &mut LazyEnrichmentInfos,
+) -> CalculatedShocks
+{
+    
 
     let (focus, export_frac) = match top_id{
         TopSpecifier::Id(id) => {
@@ -461,7 +630,7 @@ pub fn calc_shock(
         network: export,
         after_export_fract: fracts.export_fracs
     }
-}
+}*/
 
 pub fn shock_avail<P>(opt: ShockAvailOpts, in_file: P)
 where P: AsRef<Path>
