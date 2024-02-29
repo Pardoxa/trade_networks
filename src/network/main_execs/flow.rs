@@ -4,18 +4,11 @@ use{
         network::{enriched_digraph::*, *}, 
         parser::country_map, 
         UNIT_TESTER
-    }, 
-    clap::ValueEnum, 
-    fs_err::File, 
-    itertools::Itertools, 
-    kahan::KahanSum, 
-    net_ensembles::sampling::{
+    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
         HistF64, 
         Histogram
-    }, 
-    ordered_float::OrderedFloat, 
-    serde::{Deserialize, Serialize}, 
-    std::{
+    }, ordered_float::OrderedFloat, 
+    rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
         cmp::Reverse, 
         collections::*, 
         fmt::Display, 
@@ -430,7 +423,8 @@ pub fn calc_shock(
         &export, 
         enrich, 
         &fracts, 
-        &node_info_map
+        &node_info_map,
+        false
     );
 
     let no_shock = ShockRes{
@@ -442,7 +436,8 @@ pub fn calc_shock(
         &export, 
         enrich, 
         &no_shock, 
-        &node_info_map
+        &node_info_map,
+        false
     );
 
     let shock_amount = avail_after_shock[focus] - available_before_shock[focus];
@@ -628,29 +623,32 @@ pub enum ExportRestrictionType{
     WholeCountries
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Derivative)]
+#[derivative(Default)]
 pub struct InCommon{
     /// File with enrich infos
     pub enrich_file: String,
 
+    /// File with the network data
     pub network_file: PathBuf,
 
     /// Which year to check
-    pub year: i32,
+    #[derivative(Default(value = "2000..=2019"))]
+    pub years: RangeInclusive<i32>,
 
     /// Iterations
+    #[derivative(Default(value="10000"))]
     pub iterations: usize,    
 
     /// Item code, e.g. 27 for Rice
     pub item_code: Option<String>,
 
-    /// file that maps ids to countries
-    pub country_map: Option<String>,
-
     /// how many countrys should restrict their exports?
+    #[derivative(Default(value="5"))]
     pub top: usize,
 
     /// the fraction at which countries are counted as unstable
+    #[derivative(Default(value="0.7"))]
     pub unstable_country_threshold: f64
 }
 
@@ -678,7 +676,8 @@ impl Default for Percentages{
 pub fn measure_multi_shock<P>(
     json: Option<P>, 
     which: ExportRestrictionType,
-    mut out_stub: String
+    out_stub: &str,
+    quiet: bool
 )
 where P: AsRef<Path>
 {
@@ -700,144 +699,149 @@ where P: AsRef<Path>
     let mut lazy_networks = LazyNetworks::Filename(common_opt.network_file.clone());
     lazy_networks.assure_availability();
 
-    let export_without_unconnected = lazy_networks
-        .get_export_network_unchecked(common_opt.year)
-        .without_unconnected_nodes();
-    let import_without_unconnected = export_without_unconnected.invert();
-
     let mut lazy_enrichments = LazyEnrichmentInfos::Filename(
         common_opt.enrich_file.clone(), 
         common_opt.item_code.clone()
     );
     lazy_enrichments.assure_availability();
-
     let enrichment_infos = lazy_enrichments.enrichment_infos_unchecked();
-    let enrich = enrichment_infos.get_year(common_opt.year);
-
-    let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
-
-    let top = get_top_k_ids(&export_without_unconnected, common_opt.top);
-
-    out_stub.push('_');
-
-
-    #[allow(clippy::type_complexity)]
-    let (mut iterate, mut job, mut x): (Box<dyn FnMut(&mut CalcShockMultiJob) -> Option<u16>>, _, u16) = match opt.as_ref()
-    {
-        either::Either::Left(percent) => {
-            let per = "percent";
-            out_stub.push_str(per);
-            let p = &percent.extra;
-            let delta = (p.end - p.start) / (p.amount.get() - 1) as f64;
-            let mut iter = (0..p.amount.get() - 1)
-                .map(move |i| p.start + delta * i as f64)
-                .chain(std::iter::once(p.end));
-            let first = iter.next().unwrap();
-            let country_count = top.len() as u16;
-            let fun = move |job: &mut CalcShockMultiJob| -> Option<u16>
+    common_opt.years
+        .clone()
+        .into_par_iter()
+        .for_each(
+            |year|
             {
-                match iter.next(){
-                    None =>  None,
-                    Some(val) => {
-                        job.change_export_frac(val);
-                        Some(country_count)
+                let mut out_stub = format!("{out_stub}_{year}_");
+                let export_without_unconnected = lazy_networks
+                    .get_export_network_unchecked(year)
+                    .without_unconnected_nodes();
+                let import_without_unconnected = export_without_unconnected.invert();
+            
+                let enrich = enrichment_infos.get_year(year);
+            
+                let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
+            
+                let top = get_top_k_ids(&export_without_unconnected, common_opt.top);
+            
+                #[allow(clippy::type_complexity)]
+                let (mut iterate, mut job, mut x): (Box<dyn FnMut(&mut CalcShockMultiJob) -> Option<u16>>, _, u16) = match opt.as_ref()
+                {
+                    either::Either::Left(percent) => {
+                        let per = "percent";
+                        out_stub.push_str(per);
+                        let p = &percent.extra;
+                        let delta = (p.end - p.start) / (p.amount.get() - 1) as f64;
+                        let mut iter = (0..p.amount.get() - 1)
+                            .map(move |i| p.start + delta * i as f64)
+                            .chain(std::iter::once(p.end));
+                        let first = iter.next().unwrap();
+                        let country_count = top.len() as u16;
+                        let fun = move |job: &mut CalcShockMultiJob| -> Option<u16>
+                        {
+                            match iter.next(){
+                                None =>  None,
+                                Some(val) => {
+                                    job.change_export_frac(val);
+                                    Some(country_count)
+                                }
+                            }
+                        };
+                        let job = CalcShockMultiJob::new_const_export(
+                            &top, 
+                            first, 
+                            common_opt.iterations, 
+                            &export_without_unconnected, 
+                            &import_without_unconnected
+                        );
+                        (Box::new(fun), job, country_count)
+                    },
+                    either::Either::Right(_) => {
+                        out_stub.push_str(&format!("Top{}", common_opt.top));
+                        let (first, mut slice) = top.split_at(1);
+                        let mut count = 1;
+                        let fun = move |job: &mut CalcShockMultiJob| -> Option<u16>
+                        {
+                            if slice.is_empty() {
+                                None
+                            } else {
+                                let to_add;
+                                (to_add, slice) = slice.split_first().unwrap();
+                                job.add_exporter(ExportShockItem{export_id: *to_add, export_frac: 0.0});
+                                count += 1;
+                                Some(count)
+                            }
+                        };
+                        let job = CalcShockMultiJob::new_const_export(
+                            first, 
+                            0.0, 
+                            common_opt.iterations, 
+                            &export_without_unconnected, 
+                            &import_without_unconnected
+                        );
+                        (Box::new(fun), job, 1)
+                    }
+                };
+                let header = [
+                    "disrupting_countries",
+                    "disruption_percent",
+                    "num_countries"
+                ];
+                out_stub.push_str(".dat");
+            
+                let mut buf = create_buf_with_command_and_version_and_header(out_stub, header);
+                let no_shock = {
+                    let one = vec![1.0; import_without_unconnected.node_count()];
+                    let no_shock = ShockRes{
+                        import_fracs: one.clone(),
+                        export_fracs: one
+                    };
+                    calc_available(
+                        &export_without_unconnected, 
+                        enrich, 
+                        &no_shock, 
+                        &node_info_map,
+                        quiet
+                    )
+                };
+            
+                let total_export = top.iter()
+                    .map(|&idx| job.original_exports[idx])
+                    .sum::<f64>();
+            
+                loop{
+                    let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
+            
+                    let remaining_export = top.iter()
+                        .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
+                        .sum::<f64>();
+            
+                    let percent = remaining_export / total_export;
+            
+                    let avail_after_shock = calc_available(
+                        &export_without_unconnected, 
+                        enrich, 
+                        &shock_result, 
+                        &node_info_map,
+                        quiet
+                    );
+                    let mut country_counter = 0;
+                    for (&original, shocked) in no_shock.iter().zip(avail_after_shock)
+                    {
+                        let frac = shocked / original;
+                        if frac < common_opt.unstable_country_threshold{
+                            country_counter += 1;
+                        }
+                    }
+                    writeln!(buf, "{} {percent} {country_counter}", x).unwrap();
+                    match iterate(&mut job) {
+                        None => break,
+                        Some(d) => {
+                            x = d;
+                        }
                     }
                 }
-            };
-            let job = CalcShockMultiJob::new_const_export(
-                &top, 
-                first, 
-                common_opt.iterations, 
-                &export_without_unconnected, 
-                &import_without_unconnected
-            );
-            (Box::new(fun), job, country_count)
-        },
-        either::Either::Right(_) => {
-            out_stub.push_str(&format!("Top{}", common_opt.top));
-            let (first, mut slice) = top.split_at(1);
-            let mut count = 1;
-            let fun = move |job: &mut CalcShockMultiJob| -> Option<u16>
-            {
-                if slice.is_empty() {
-                    None
-                } else {
-                    let to_add;
-                    (to_add, slice) = slice.split_first().unwrap();
-                    job.add_exporter(ExportShockItem{export_id: *to_add, export_frac: 0.0});
-                    count += 1;
-                    Some(count)
-                }
-            };
-            let job = CalcShockMultiJob::new_const_export(
-                first, 
-                0.0, 
-                common_opt.iterations, 
-                &export_without_unconnected, 
-                &import_without_unconnected
-            );
-            (Box::new(fun), job, 1)
-        }
-    };
-    let header = [
-        "disrupting_countries",
-        "disruption_percent",
-        "num_countries"
-    ];
-    out_stub.push_str(".dat");
-
-    let mut buf = create_buf_with_command_and_version_and_header(out_stub, header);
-    let no_shock = {
-        let one = vec![1.0; import_without_unconnected.node_count()];
-        let no_shock = ShockRes{
-            import_fracs: one.clone(),
-            export_fracs: one
-        };
-        calc_available(
-            &export_without_unconnected, 
-            enrich, 
-            &no_shock, 
-            &node_info_map
-        )
-    };
-
-    let total_export = top.iter()
-        .map(|&idx| job.original_exports[idx])
-        .sum::<f64>();
-
-    loop{
-        let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
-
-        let remaining_export = top.iter()
-            .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
-            .sum::<f64>();
-
-        let percent = remaining_export / total_export;
-
-        let avail_after_shock = calc_available(
-            &export_without_unconnected, 
-            enrich, 
-            &shock_result, 
-            &node_info_map
+            }
         );
-        let mut country_counter = 0;
-        for (&original, shocked) in no_shock.iter().zip(avail_after_shock)
-        {
-            let frac = shocked / original;
-            if frac < common_opt.unstable_country_threshold{
-                country_counter += 1;
-            }
-        }
-        writeln!(buf, "{} {percent} {country_counter}", x).unwrap();
-        match iterate(&mut job) {
-            None => break,
-            Some(d) => {
-                x = d;
-            }
-        }
-    }
-
-
 }
 
 pub fn shock_avail<P>(opt: ShockAvailOpts, in_file: P)
@@ -1880,7 +1884,8 @@ fn calc_available(
     network: &Network,
     enrich: &BTreeMap<String, ExtraInfo>,
     shock: &ShockRes,
-    node_map: &ExtraInfoMap
+    node_map: &ExtraInfoMap,
+    quiet: bool
 ) -> Vec<f64>
 {
     let inverted = network.invert();
@@ -1928,7 +1933,7 @@ fn calc_available(
                     // TODO Stock variation
                 }
                 // think about what to do if total is negative
-                if total < 0.0 {
+                if !quiet && total < 0.0 {
                     eprintln!("small total! {total}");
                 }
 
@@ -1940,7 +1945,9 @@ fn calc_available(
     //if !at_least_some_stock{
     //    eprintln!("WARNING: NO STOCK DATA")
     //}
-    eprintln!("Stock Variation data is unimplemented! STOCK data unimplemented!");
+    if !quiet{
+        eprintln!("Stock Variation data is unimplemented! STOCK data unimplemented!");
+    }
     
     res
 

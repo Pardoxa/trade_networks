@@ -144,7 +144,11 @@ pub struct MultiShockOpt{
 
     #[arg(long, short)]
     /// Part of filename of output
-    pub out_stub: Option<String>
+    pub out_stub: Option<String>,
+
+    #[arg(long, short)]
+    /// Surpress warnings
+    pub quiet: bool
 }
 
 /// Created by Yannick Feld

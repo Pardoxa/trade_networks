@@ -43,7 +43,8 @@ fn main() {
             measure_multi_shock(
                 opt.json,
                 opt.which, 
-                stub
+                &stub,
+                opt.quiet
             )
         }
     }
