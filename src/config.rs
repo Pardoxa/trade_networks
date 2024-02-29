@@ -134,7 +134,7 @@ pub struct EnrichOpt{
 /// Shock multiple countries at once and count how many countries 
 /// still have enough product, i.e., above a certain threshold
 pub struct MultiShockOpt{
-    #[arg(long, short, requires("out_stub"))]
+    #[arg(long, short)]
     /// Path to json file, if not given default config will be printed
     pub json: Option<PathBuf>,
 
@@ -142,9 +142,9 @@ pub struct MultiShockOpt{
     #[arg(long, short, value_enum)]
     pub which: ExportRestrictionType,
 
-    #[arg(long, short)]
+    #[arg(long, short, default_value_t)]
     /// Part of filename of output
-    pub out_stub: Option<String>,
+    pub out_stub: String,
 
     #[arg(long, short)]
     /// Surpress warnings

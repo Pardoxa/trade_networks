@@ -719,10 +719,11 @@ where P: AsRef<Path>
         .for_each(
             |year|
             {
-                let mut out_stub = format!("{out_stub}_{year}_");
+                let mut out_stub = format!("{out_stub}_Y{year}_Th{}_", common_opt.unstable_country_threshold);
                 let export_without_unconnected = lazy_networks
                     .get_export_network_unchecked(year)
                     .without_unconnected_nodes();
+                
                 let import_without_unconnected = export_without_unconnected.invert();
             
                 let enrich = enrichment_infos.get_year(year);

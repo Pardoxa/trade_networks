@@ -39,11 +39,10 @@ fn main() {
         },
         CmdChooser::CompareGroupsCommandCreator(opt) => command_creator(opt),
         CmdChooser::MultiShocks(opt) => {
-            let stub = opt.out_stub.unwrap_or_default();
             measure_multi_shock(
                 opt.json,
                 opt.which, 
-                &stub,
+                &opt.out_stub,
                 opt.quiet
             )
         }
