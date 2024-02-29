@@ -5,10 +5,10 @@ use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
     misc::{create_buf, create_buf_with_command_and_version}, 
-    network::{enriched_digraph::*, main_execs::Relative, Direction, Network}, 
+    network::{enriched_digraph::*, main_execs::{Relative, ExportRestrictionType}, Direction, Network}, 
     CorrelationMeasurement, 
     CorrelationInput,
-    WeightFun
+    WeightFun,
 };
 use serde::{Serialize, Deserialize};
 use camino::Utf8PathBuf;
@@ -130,6 +130,23 @@ pub struct EnrichOpt{
     pub json: bool
 }
 
+#[derive(Parser)]
+/// Shock multiple countries at once and count how many countries 
+/// still have enough product, i.e., above a certain threshold
+pub struct MultiShockOpt{
+    #[arg(long, short, requires("out_stub"))]
+    /// Path to json file, if not given default config will be printed
+    pub json: Option<PathBuf>,
+
+    /// Use top or percent?
+    #[arg(long, short, value_enum)]
+    pub which: ExportRestrictionType,
+
+    #[arg(long, short)]
+    /// Part of filename of output
+    pub out_stub: Option<String>
+}
+
 /// Created by Yannick Feld
 /// Program to read in Trade networks and do some data processing
 #[derive(Parser)]
@@ -153,7 +170,8 @@ pub enum CmdChooser{
     CompareEntries(CompareEntriesOpt),
     CompareGroups(GroupCompOpts),
     /// Create commands to use with compare groups, used to automate stuff
-    CompareGroupsCommandCreator(CompGroupComCreOpt)
+    CompareGroupsCommandCreator(CompGroupComCreOpt),
+    MultiShocks(MultiShockOpt)
 }
 
 #[derive(Debug, Parser)]

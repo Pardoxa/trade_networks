@@ -25,6 +25,7 @@ camino = "^1.1.6"
 regex = "1.10.3"
 kahan = "0.1.4"
 ordered-float = { version = "4.0", default-features = false }
+either = "1.10.0"
 
 [build-dependencies]
 chrono = "0.4.31"

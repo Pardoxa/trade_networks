@@ -4,16 +4,24 @@ use fs_err::File;
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Serialize, de::DeserializeOwned};
-use std::process::Command;
+use std::process::{Command, exit};
+use serde_json::Value;
+use std::sync::RwLock;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const AVAILABILITY_ERR: &str = "You forgot to call self.assure_availabiliy()";
 pub const YEAR_ERR: &str = "Year not found";
+pub static GLOBAL_ADDITIONS: RwLock<Option<String>> = RwLock::new(None);
 
 pub fn write_commands_and_version<W: Write>(mut w: W) -> std::io::Result<()>
 {
     writeln!(w, "# {VERSION}")?;
     writeln!(w, "# Git Hash: {} Compile-time: {}", env!("GIT_HASH"), env!("BUILD_TIME_CHRONO"))?;
+    let l = GLOBAL_ADDITIONS.read().unwrap();
+    if let Some(add) = l.as_deref(){
+        writeln!(w, "# {add}")?;
+    }
+    drop(l);
     write!(w, "#")?;
     for arg in std::env::args()
     {
@@ -168,5 +176,53 @@ where S: AsRef<std::ffi::OsStr>{
         .expect("failed gnuplot");
     if !output.status.success(){
         dbg!(output);
+    }
+}
+
+pub fn parse_and_add_to_global<P, T>(file: Option<P>) -> T
+where P: AsRef<Path>,
+    T: Default + Serialize + DeserializeOwned
+{
+    match file
+    {
+        None => {
+            let example = T::default();
+            serde_json::to_writer_pretty(
+                std::io::stdout(),
+                &example
+            ).expect("Unable to reach stdout");
+            exit(0)
+        }, 
+        Some(file) => {
+            let f = File::open(file.as_ref())
+                .expect("Unable to open file");
+            let buf = BufReader::new(f);
+
+            let json_val: Value = match serde_json::from_reader(buf)
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("json parsing error!");
+                    dbg!(e);
+                    exit(1);
+                }
+            };
+
+            let opt: T = match serde_json::from_value(json_val.clone())
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!("json parsing error!");
+                    dbg!(e);
+                    exit(1);
+                }
+            };
+            let s = serde_json::to_string(&opt).unwrap();
+            let mut w = GLOBAL_ADDITIONS.write().unwrap();
+            *w = Some(s);
+            drop(w);
+
+            opt  
+        }
     }
 }

@@ -1,19 +1,36 @@
 use{
     crate::{
-        config::*, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
-    }, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
+        config::*, misc::*, 
+        network::{enriched_digraph::*, *}, 
+        parser::country_map, 
+        UNIT_TESTER
+    }, 
+    clap::ValueEnum, 
+    fs_err::File, 
+    itertools::Itertools, 
+    kahan::KahanSum, 
+    net_ensembles::sampling::{
         HistF64, 
         Histogram
-    }, std::{
-        collections::*, fmt::Display, io::{
+    }, 
+    ordered_float::OrderedFloat, 
+    serde::{Deserialize, Serialize}, 
+    std::{
+        cmp::Reverse, 
+        collections::*, 
+        fmt::Display, 
+        io::{
             BufWriter, 
             Write
-        }, ops::{
-            AddAssign, Deref, RangeInclusive
-        }, path::Path,
-        cmp::Reverse
-    },
-    ordered_float::OrderedFloat
+        }, 
+        num::NonZeroUsize, 
+        ops::{
+            AddAssign, 
+            Deref, 
+            RangeInclusive
+        }, 
+        path::{Path, PathBuf}
+    }
 };
 
 const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
@@ -455,7 +472,9 @@ pub struct ExportShockItem{
 
 pub struct CalcShockMultiJob{
     exporter: Vec<ExportShockItem>,
-    free_ids: Vec<usize>,
+    unrestricted_node_idxs: Vec<usize>,
+    original_imports: Vec<f64>,
+    original_exports: Vec<f64>,
     iterations: usize
 }
 
@@ -491,22 +510,24 @@ impl CalcShockMultiJob{
     /// Len is length of network
     /// ids need to be sorted
     pub fn new_const_export(
-        len: usize,
         ids: &[usize],
         export_frac: f64,
-        iterations: usize
+        iterations: usize,
+        export_network: &Network,
+        import_network: &Network
     ) -> Self
     {
-        let sorted = ids.windows(2)
-            .all(|slice| slice[0] < slice[1]);
-        assert!(sorted);
+        let sorted_ids = ids.iter()
+            .copied()
+            .sorted_unstable()
+            .collect_vec();
 
-        let (mut first, mut slice) = ids
+        let (mut first, mut slice) = sorted_ids
             .split_first()
             .map(|(f, s)| (*f, s))
             .unwrap();
         
-        let free_ids = (0..len)
+        let free_ids = (0..export_network.nodes.len())
             .filter(
                 |&id|
                 {
@@ -522,11 +543,14 @@ impl CalcShockMultiJob{
                     }
                 }
             ).collect_vec();
-        let exporter = ids.iter()
+        let exporter = sorted_ids.iter()
             .copied()
             .map(|id| ExportShockItem{export_id: id, export_frac})
             .collect_vec();
-        Self { exporter, free_ids, iterations }
+
+        let original_exports = calc_acc_trade(export_network);
+        let original_imports = calc_acc_trade(import_network);
+        Self { exporter, unrestricted_node_idxs: free_ids, iterations, original_exports, original_imports }
     }
 
     pub fn change_export_frac(&mut self, export_frac: f64)
@@ -538,99 +562,270 @@ impl CalcShockMultiJob{
 
     pub fn add_exporter(&mut self, exporter: ExportShockItem)
     {
-        let pos = self.free_ids
+        let pos = self.unrestricted_node_idxs
             .iter()
             .position(|&id| id == exporter.export_id)
             .unwrap();
-        self.free_ids.remove(pos);
+        self.unrestricted_node_idxs.remove(pos);
         self.exporter.push(exporter);
+        self.exporter.sort_unstable_by_key(|e| e.export_id);
     }
 }
 
-/*pub fn calc_shock_multiple(
-    export: &Network,
-    job: &CalcShockMultiJob,
-    lazy_enrichment: &mut LazyEnrichmentInfos,
-) -> CalculatedShocks
+pub fn multi_shock_distribution(
+    import_network: &Network,
+    job: &CalcShockMultiJob
+) -> ShockRes
 {
+    let interval = 0.0..=1.0;
+    assert!(
+        job.exporter.iter().all(|e| interval.contains(&e.export_frac)),
+        "At least one Invalid export fraction - they have to be in range 0.0..=1.0"
+    );
+    assert!(import_network.direction.is_import());
+
     
+    let mut current_export_frac = vec![1.0; job.original_exports.len()];
+    for e in job.exporter.iter(){
+        current_export_frac[e.export_id] = e.export_frac;
+    }
+    let mut reduced_import_frac = vec![1.0; current_export_frac.len()];
 
-    let (focus, export_frac) = match top_id{
-        TopSpecifier::Id(id) => {
-            let focus = export.get_index(&id).unwrap();
-            (focus, export_frac)
+    for _ in 0..job.iterations{
+        for (index, n) in import_network.nodes.iter().enumerate(){
+            reduced_import_frac[index] = 0.0;
+            if job.original_imports[index] == 0.0{
+                assert_eq!(n.adj.len(), 0);
+                continue;
+            }
+            for e in n.adj.iter(){
+                reduced_import_frac[index] += e.amount * current_export_frac[e.index];
+            }
+            reduced_import_frac[index] /= job.original_imports[index];
+        }
+
+        for &index in job.unrestricted_node_idxs.iter()
+        {
+            let missing_imports = (1.0 - reduced_import_frac[index]) * job.original_imports[index];
+            let available_for_export = job.original_exports[index] - missing_imports;
+            current_export_frac[index] = if available_for_export <= 0.0 {
+                0.0
+            } else {
+                available_for_export / job.original_exports[index]
+            };
+        }
+    }
+
+    ShockRes { 
+        import_fracs: reduced_import_frac, 
+        export_fracs: current_export_frac
+    }
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy)]
+pub enum ExportRestrictionType{
+    Percentages,
+    WholeCountries
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct InCommon{
+    /// File with enrich infos
+    pub enrich_file: String,
+
+    pub network_file: PathBuf,
+
+    /// Which year to check
+    pub year: i32,
+
+    /// Iterations
+    pub iterations: usize,    
+
+    /// Item code, e.g. 27 for Rice
+    pub item_code: Option<String>,
+
+    /// file that maps ids to countries
+    pub country_map: Option<String>,
+
+    /// how many countrys should restrict their exports?
+    pub top: usize,
+
+    /// the fraction at which countries are counted as unstable
+    pub unstable_country_threshold: f64
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct MeasureMultiShockOpts<Extra>
+{
+    pub common: InCommon,
+
+    pub extra: Extra
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Percentages{
+    pub start: f64,
+    pub end: f64,
+    pub amount: NonZeroUsize
+}
+
+impl Default for Percentages{
+    fn default() -> Self {
+        Self { start: 0.0, end: 1.0, amount: NonZeroUsize::new(100).unwrap() }
+    }
+}
+ 
+pub fn measure_multi_shock<P>(
+    json: Option<P>, 
+    which: ExportRestrictionType,
+    mut out_stub: String
+)
+where P: AsRef<Path>
+{
+    let opt = match which{
+        ExportRestrictionType::Percentages => {
+            let opt: MeasureMultiShockOpts<Percentages> = crate::misc::parse_and_add_to_global(json);
+            either::Either::Left(opt)
         },
-        TopSpecifier::Rank(r) => {
-            let sorted = get_sorting();
-
-            let focus = sorted[r].0;
-            (focus, export_frac)
-            
-        },
-        TopSpecifier::RankRef(r) => {
-            let sorted = get_sorting();
-
-            let wanted_ref_export = export_frac * sorted[r.reference].1;
-            let wanted_export_reduction = sorted[r.reference].1 - wanted_ref_export;
-            let possible_export = sorted[r.focus].1;
-            let reduced_export = possible_export - wanted_export_reduction;
-            let frac = reduced_export / possible_export;
-            dbg!(frac);
-
-            (sorted[r.focus].0, frac)
+        ExportRestrictionType::WholeCountries => {
+            let opt: MeasureMultiShockOpts<()> = crate::misc::parse_and_add_to_global(json);
+            either::Either::Right(opt)
         }
     };
+    let common_opt = opt.as_ref()
+        .either(
+            |o| &o.common,
+            |o| &o.common
+        );
+    let mut lazy_networks = LazyNetworks::Filename(common_opt.network_file.clone());
+    lazy_networks.assure_availability();
 
-    let fracts = shock_distribution(
-        &export, 
-        focus, 
-        export_frac, 
-        iterations
+    let export_without_unconnected = lazy_networks
+        .get_export_network_unchecked(common_opt.year)
+        .without_unconnected_nodes();
+    let import_without_unconnected = export_without_unconnected.invert();
+
+    let mut lazy_enrichments = LazyEnrichmentInfos::Filename(
+        common_opt.enrich_file.clone(), 
+        common_opt.item_code.clone()
     );
+    lazy_enrichments.assure_availability();
 
-    lazy_enrichment.assure_availability();
-    let enrichment_infos = lazy_enrichment.enrichment_infos_unchecked();
-    let enrich = enrichment_infos.get_year(year);
+    let enrichment_infos = lazy_enrichments.enrichment_infos_unchecked();
+    let enrich = enrichment_infos.get_year(common_opt.year);
 
-    let node_info_map = lazy_enrichment.extra_info_idmap_unchecked();
+    let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
 
-    let avail_after_shock = calc_available(
-        &export, 
-        enrich, 
-        &fracts, 
-        &node_info_map
-    );
+    let top = get_top_k_ids(&export_without_unconnected, common_opt.top);
 
-    let no_shock = ShockRes{
-        import_fracs: vec![1.0; fracts.import_fracs.len()],
-        export_fracs: vec![1.0; fracts.import_fracs.len()]
+    out_stub.push('_');
+
+    let mut header = Vec::new();
+
+    #[allow(clippy::type_complexity)]
+    let (mut iterate, mut job, mut x): (Box<dyn FnMut(&mut CalcShockMultiJob) -> Option<Box<dyn Display>>>, _, Box<dyn Display>) = match opt.as_ref()
+    {
+        either::Either::Left(percent) => {
+            let per = "percent";
+            header.push(per);
+            out_stub.push_str(per);
+            let p = &percent.extra;
+            let delta = (p.end - p.start) / (p.amount.get() - 1) as f64;
+            let mut iter = (0..p.amount.get() - 1)
+                .map(move |i| p.start + delta * i as f64)
+                .chain(std::iter::once(p.end));
+            let first = iter.next().unwrap();
+            let fun = move |job: &mut CalcShockMultiJob| -> Option<Box<dyn Display>>
+            {
+                match iter.next(){
+                    None =>  None,
+                    Some(val) => {
+                        job.change_export_frac(val);
+                        Some(Box::new(val))
+                    }
+                }
+            };
+            let job = CalcShockMultiJob::new_const_export(
+                &top, 
+                first, 
+                common_opt.iterations, 
+                &export_without_unconnected, 
+                &import_without_unconnected
+            );
+            (Box::new(fun), job, Box::new(first))
+        },
+        either::Either::Right(_) => {
+            header.push("top");
+            out_stub.push_str(&format!("Top{}", common_opt.top));
+            let (first, mut slice) = top.split_at(1);
+            let mut count = 1;
+            let fun = move |job: &mut CalcShockMultiJob| -> Option<Box<dyn Display>>
+            {
+                if slice.is_empty() {
+                    None
+                } else {
+                    let to_add;
+                    (to_add, slice) = slice.split_first().unwrap();
+                    job.add_exporter(ExportShockItem{export_id: *to_add, export_frac: 0.0});
+                    count += 1;
+                    Some(Box::new(count))
+                }
+            };
+            let job = CalcShockMultiJob::new_const_export(
+                first, 
+                0.0, 
+                common_opt.iterations, 
+                &export_without_unconnected, 
+                &import_without_unconnected
+            );
+            (Box::new(fun), job, Box::new(1))
+        }
+    };
+    header.push("num_countries");
+    out_stub.push_str(".dat");
+
+    let mut buf = create_buf_with_command_and_version_and_header(out_stub, header);
+    let no_shock = {
+        let one = vec![1.0; import_without_unconnected.node_count()];
+        let no_shock = ShockRes{
+            import_fracs: one.clone(),
+            export_fracs: one
+        };
+        calc_available(
+            &export_without_unconnected, 
+            enrich, 
+            &no_shock, 
+            &node_info_map
+        )
     };
 
-    let available_before_shock = calc_available(
-        &export, 
-        enrich, 
-        &no_shock, 
-        &node_info_map
-    );
-
-    let shock_amount = avail_after_shock[focus] - available_before_shock[focus];
-    println!("SHOCK AMOUNT: {shock_amount}");
-    let actual_export: f64 = export
-        .nodes[focus]
-        .adj
-        .iter()
-        .map(|a| a.amount * fracts.export_fracs[focus])
-        .sum();
-    println!("Export: {actual_export} fraction {}", fracts.export_fracs[focus]);
-
-    CalculatedShocks { 
-        available_after_shock: avail_after_shock,
-        available_before_shock,
-        focus_index: focus,
-        network: export,
-        after_export_fract: fracts.export_fracs
+    loop{
+        let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
+        let avail_after_shock = calc_available(
+            &export_without_unconnected, 
+            enrich, 
+            &shock_result, 
+            &node_info_map
+        );
+        let mut country_counter = 0;
+        for (&original, shocked) in no_shock.iter().zip(avail_after_shock)
+        {
+            let frac = shocked / original;
+            if frac < common_opt.unstable_country_threshold{
+                country_counter += 1;
+            }
+        }
+        writeln!(buf, "{} {country_counter}", x).unwrap();
+        match iterate(&mut job) {
+            None => break,
+            Some(d) => {
+                x = d;
+            }
+        }
     }
-}*/
+
+
+}
 
 pub fn shock_avail<P>(opt: ShockAvailOpts, in_file: P)
 where P: AsRef<Path>
