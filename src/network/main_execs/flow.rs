@@ -705,6 +705,14 @@ where P: AsRef<Path>
     );
     lazy_enrichments.assure_availability();
     let enrichment_infos = lazy_enrichments.enrichment_infos_unchecked();
+    let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
+
+    let header = [
+        "disrupting_countries",
+        "disruption_percent",
+        "num_countries"
+    ];
+
     common_opt.years
         .clone()
         .into_par_iter()
@@ -718,9 +726,7 @@ where P: AsRef<Path>
                 let import_without_unconnected = export_without_unconnected.invert();
             
                 let enrich = enrichment_infos.get_year(year);
-            
-                let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
-            
+        
                 let top = get_top_k_ids(&export_without_unconnected, common_opt.top);
             
                 #[allow(clippy::type_complexity)]
@@ -781,11 +787,7 @@ where P: AsRef<Path>
                         (Box::new(fun), job, 1)
                     }
                 };
-                let header = [
-                    "disrupting_countries",
-                    "disruption_percent",
-                    "num_countries"
-                ];
+
                 out_stub.push_str(".dat");
             
                 let mut buf = create_buf_with_command_and_version_and_header(out_stub, header);
