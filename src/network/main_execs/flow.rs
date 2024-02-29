@@ -720,14 +720,12 @@ where P: AsRef<Path>
 
     out_stub.push('_');
 
-    let mut header = Vec::new();
 
     #[allow(clippy::type_complexity)]
-    let (mut iterate, mut job, mut x): (Box<dyn FnMut(&mut CalcShockMultiJob) -> Option<Box<dyn Display>>>, _, Box<dyn Display>) = match opt.as_ref()
+    let (mut iterate, mut job, mut x): (Box<dyn FnMut(&mut CalcShockMultiJob) -> Option<u16>>, _, u16) = match opt.as_ref()
     {
         either::Either::Left(percent) => {
             let per = "percent";
-            header.push(per);
             out_stub.push_str(per);
             let p = &percent.extra;
             let delta = (p.end - p.start) / (p.amount.get() - 1) as f64;
@@ -735,13 +733,14 @@ where P: AsRef<Path>
                 .map(move |i| p.start + delta * i as f64)
                 .chain(std::iter::once(p.end));
             let first = iter.next().unwrap();
-            let fun = move |job: &mut CalcShockMultiJob| -> Option<Box<dyn Display>>
+            let country_count = top.len() as u16;
+            let fun = move |job: &mut CalcShockMultiJob| -> Option<u16>
             {
                 match iter.next(){
                     None =>  None,
                     Some(val) => {
                         job.change_export_frac(val);
-                        Some(Box::new(val))
+                        Some(country_count)
                     }
                 }
             };
@@ -752,14 +751,13 @@ where P: AsRef<Path>
                 &export_without_unconnected, 
                 &import_without_unconnected
             );
-            (Box::new(fun), job, Box::new(first))
+            (Box::new(fun), job, country_count)
         },
         either::Either::Right(_) => {
-            header.push("top");
             out_stub.push_str(&format!("Top{}", common_opt.top));
             let (first, mut slice) = top.split_at(1);
             let mut count = 1;
-            let fun = move |job: &mut CalcShockMultiJob| -> Option<Box<dyn Display>>
+            let fun = move |job: &mut CalcShockMultiJob| -> Option<u16>
             {
                 if slice.is_empty() {
                     None
@@ -768,7 +766,7 @@ where P: AsRef<Path>
                     (to_add, slice) = slice.split_first().unwrap();
                     job.add_exporter(ExportShockItem{export_id: *to_add, export_frac: 0.0});
                     count += 1;
-                    Some(Box::new(count))
+                    Some(count)
                 }
             };
             let job = CalcShockMultiJob::new_const_export(
@@ -778,10 +776,14 @@ where P: AsRef<Path>
                 &export_without_unconnected, 
                 &import_without_unconnected
             );
-            (Box::new(fun), job, Box::new(1))
+            (Box::new(fun), job, 1)
         }
     };
-    header.push("num_countries");
+    let header = [
+        "disrupting_countries",
+        "disruption_percent",
+        "num_countries"
+    ];
     out_stub.push_str(".dat");
 
     let mut buf = create_buf_with_command_and_version_and_header(out_stub, header);
@@ -799,8 +801,19 @@ where P: AsRef<Path>
         )
     };
 
+    let total_export = top.iter()
+        .map(|&idx| job.original_exports[idx])
+        .sum::<f64>();
+
     loop{
         let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
+
+        let remaining_export = top.iter()
+            .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
+            .sum::<f64>();
+
+        let percent = remaining_export / total_export;
+
         let avail_after_shock = calc_available(
             &export_without_unconnected, 
             enrich, 
@@ -815,7 +828,7 @@ where P: AsRef<Path>
                 country_counter += 1;
             }
         }
-        writeln!(buf, "{} {country_counter}", x).unwrap();
+        writeln!(buf, "{} {percent} {country_counter}", x).unwrap();
         match iterate(&mut job) {
             None => break,
             Some(d) => {
