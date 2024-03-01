@@ -895,14 +895,11 @@ where P: AsRef<Path>
         ).collect();
     
     if compare_successive{
-        let x_name;
         let x = match which{
             ExportRestrictionType::Percentages => {
-                x_name = "percent".to_owned();
                 X::Percent
             },
             ExportRestrictionType::WholeCountries => {
-                x_name = "countries".to_owned();
                 X::Count
             }
         };
@@ -932,9 +929,10 @@ where P: AsRef<Path>
             .collect_vec();
         
         let name = format!(
-            "{out_stub}_Y{}-Y{}_{x_name}.dat",
+            "{out_stub}_Y{}-Y{}_{}.dat",
             common_opt.years.start(),
-            common_opt.years.end()
+            common_opt.years.end(),
+            x.str()
         );
         crate::group_cmp::compare_multiple(
             &paths,

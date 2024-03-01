@@ -11,6 +11,16 @@ pub enum X{
     Count
 }
 
+impl X{
+    pub fn str(self) -> &'static str
+    {
+        match self{
+            Self::Percent => "percent",
+            Self::Count => "country_count"
+        }
+    }
+}
+
 /// Compare two groups obtained with trade_networks multi-shocks --group-files
 #[derive(Parser, Debug)]
 pub struct GroupCompMultiOpts{
@@ -162,7 +172,14 @@ pub fn compare_multiple(
 
     let len = set_infos[0].len();
 
-    let mut writer = create_buf_with_command_and_version(name);
+    let mut header = vec![x.str().to_owned(), "1hit".to_owned()];
+    header.extend(
+        (2..=set_infos.len())
+            .map(|i| format!("{i}hits"))
+    );
+
+    let mut writer = create_buf_with_command_and_version_and_header(name, header);
+
 
     for i in 0..len
     {

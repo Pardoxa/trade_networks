@@ -113,7 +113,7 @@ where W: std::io::Write,
 {
     write!(w, "#")?;
     for (s, i) in slice.into_iter().zip(1_u16..){
-        write!(w, " {s}_{i}")?;
+        write!(w, " {s}:col{i}")?;
     }
     writeln!(w)
 }
