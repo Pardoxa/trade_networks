@@ -895,11 +895,14 @@ where P: AsRef<Path>
         ).collect();
     
     if compare_successive{
+        let x_name;
         let x = match which{
             ExportRestrictionType::Percentages => {
+                x_name = "percent".to_owned();
                 X::Percent
             },
             ExportRestrictionType::WholeCountries => {
+                x_name = "countries".to_owned();
                 X::Count
             }
         };
@@ -924,6 +927,21 @@ where P: AsRef<Path>
             crate::group_cmp::compare_th_exec(opt);
         }
         
+        let paths = files.iter()
+            .map(|(p, _)| p.as_ref())
+            .collect_vec();
+        
+        let name = format!(
+            "{out_stub}_Y{}-Y{}_{x_name}.dat",
+            common_opt.years.start(),
+            common_opt.years.end()
+        );
+        crate::group_cmp::compare_multiple(
+            &paths,
+            x,
+            name.as_ref()
+        );
+        println!("{name}");
     }
 }
 

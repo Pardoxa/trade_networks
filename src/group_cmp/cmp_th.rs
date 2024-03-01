@@ -1,7 +1,5 @@
 use {
-    crate::misc::*, 
-    clap::{Parser, ValueEnum}, 
-    std::{
+    crate::misc::*, clap::{Parser, ValueEnum}, itertools::Itertools, std::{
         collections::*,
         io::Write, path::Path
     }
@@ -141,5 +139,62 @@ pub fn compare_th_exec(opt: GroupCompMultiOpts)
         let overlap = a.set.intersection(&b.set).count();
         let total = a.set.union(&b.set).count();
         writeln!(buf, " {overlap} {total}").unwrap();
+    }
+}
+
+pub fn compare_multiple(
+    paths: &[&Path],
+    x: X,
+    name: &Path
+)
+{
+    let set_infos = paths
+        .iter()
+        .copied()
+        .map(read_set_infos)
+        .collect_vec();
+
+    let equal_len = set_infos.iter()
+        .tuple_windows()
+        .all(|(a,b)| a.len() == b.len());
+
+    assert!(equal_len);
+
+    let len = set_infos[0].len();
+
+    let mut writer = create_buf_with_command_and_version(name);
+
+    for i in 0..len
+    {
+        let mut map = BTreeMap::new();
+        for set_info in set_infos.iter()
+        { 
+            let set = &set_info[i].set;
+            for &val in set.iter(){
+                map.entry(val)
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1_u16);
+            }
+        }
+        match x {
+            X::Percent => {
+                let percent = set_infos[0][i].percent;
+                write!(writer, "{percent}").unwrap();
+            },
+            X::Count => {
+                let percent = set_infos[0][i].c_count;
+                write!(writer, "{percent}").unwrap();
+            }
+        }
+        
+        let mut counts = vec![0_u16; set_infos.len()];
+        for count in map.into_values()
+        {
+            counts[count as usize - 1] += 1;
+        }
+        for c in counts{
+            write!(writer, " {c}").unwrap();
+        }
+        writeln!(writer).unwrap();
     }
 }
