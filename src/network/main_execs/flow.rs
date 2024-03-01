@@ -26,6 +26,7 @@ use{
     }
 };
 
+const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
 const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
 
 fn derivative(data: &[f64]) -> Vec<f64>
@@ -649,7 +650,15 @@ pub struct InCommon{
 
     /// the fraction at which countries are counted as unstable
     #[derivative(Default(value="0.7"))]
-    pub unstable_country_threshold: f64
+    pub unstable_country_threshold: f64,
+
+    /// Countries that have less than this amount of 
+    /// Product without shock will not be counted as unstable ever
+    /// The idea being that they dont depend on the product so they should not be unstable
+    ///
+    /// NOTE: Countries with negative total will be automatically excluded!
+    /// Also, for numerical reasons, this value is not allowed to be lower than the default value
+    pub original_avail_filter: f64
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -696,6 +705,7 @@ where P: AsRef<Path>
             |o| &o.common,
             |o| &o.common
         );
+
     let mut lazy_networks = LazyNetworks::Filename(common_opt.network_file.clone());
     lazy_networks.assure_availability();
 
@@ -712,6 +722,16 @@ where P: AsRef<Path>
         "disruption_percent",
         "num_countries"
     ];
+
+
+    let mut original_avail_filter = common_opt.original_avail_filter;
+    if original_avail_filter < ORIGINAL_AVAIL_FILTER_MIN {
+        println!(
+            "FILTER for original avail will be set to {:e}, lower values are not allowed!", 
+            ORIGINAL_AVAIL_FILTER_MIN
+        );
+        original_avail_filter = ORIGINAL_AVAIL_FILTER_MIN;
+    }
 
     common_opt.years
         .clone()
@@ -806,6 +826,13 @@ where P: AsRef<Path>
                         quiet
                     )
                 };
+
+                // filter out countries that have a very small total of the item in question
+                let countries_where_country_count_is_applicable = job.unrestricted_node_idxs
+                    .iter()
+                    .copied()
+                    .filter(|idx| no_shock[*idx] >= original_avail_filter)
+                    .collect_vec();
             
                 let total_export = top.iter()
                     .map(|&idx| job.original_exports[idx])
@@ -828,8 +855,10 @@ where P: AsRef<Path>
                         quiet
                     );
                     let mut country_counter = 0;
-                    for (&original, shocked) in no_shock.iter().zip(avail_after_shock)
+                    for &idx in countries_where_country_count_is_applicable.iter()
                     {
+                        let original = no_shock[idx];
+                        let shocked = avail_after_shock[idx];
                         let frac = shocked / original;
                         if frac < common_opt.unstable_country_threshold{
                             country_counter += 1;
