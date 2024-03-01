@@ -1,14 +1,11 @@
 use{
     crate::{
-        config::*, misc::*, 
-        network::{enriched_digraph::*, *}, 
-        parser::country_map, 
-        UNIT_TESTER
-    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
+        config::*, group_cmp::{GroupCompMultiOpts, X}, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
+    },
+    clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
         HistF64, 
         Histogram
-    }, ordered_float::OrderedFloat, 
-    rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
+    }, ordered_float::OrderedFloat, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
         cmp::Reverse, 
         collections::*, 
         fmt::Display, 
@@ -687,7 +684,8 @@ pub fn measure_multi_shock<P>(
     which: ExportRestrictionType,
     out_stub: &str,
     quiet: bool,
-    group_files: bool
+    group_files: bool,
+    compare_successive: bool
 )
 where P: AsRef<Path>
 {
@@ -734,10 +732,10 @@ where P: AsRef<Path>
         original_avail_filter = ORIGINAL_AVAIL_FILTER_MIN;
     }
 
-    common_opt.years
+    let files: Vec<_> = common_opt.years
         .clone()
         .into_par_iter()
-        .for_each(
+        .map(
             |year|
             {
                 let mut out_stub = format!("{out_stub}_Y{year}_Th{}_", common_opt.unstable_country_threshold);
@@ -809,16 +807,17 @@ where P: AsRef<Path>
                         (Box::new(fun), job, 1)
                     }
                 };
+                let mut group_out_name = "".to_owned();
                 let mut group_buf = group_files.then(
                     ||
                     {
-                        let name = format!("{out_stub}.group");
-                        create_buf_with_command_and_version(name)
+                        group_out_name = format!("{out_stub}.group");
+                        create_buf_with_command_and_version(&group_out_name)
                     }
                 );
                 out_stub.push_str(".dat");
             
-                let mut buf = create_buf_with_command_and_version_and_header(out_stub, header);
+                let mut buf = create_buf_with_command_and_version_and_header(&out_stub, header);
                 let no_shock = {
                     let one = vec![1.0; import_without_unconnected.node_count()];
                     let no_shock = ShockRes{
@@ -891,8 +890,41 @@ where P: AsRef<Path>
                         }
                     }
                 }
+                (group_out_name, year)
             }
-        );
+        ).collect();
+    
+    if compare_successive{
+        let x = match which{
+            ExportRestrictionType::Percentages => {
+                X::Percent
+            },
+            ExportRestrictionType::WholeCountries => {
+                X::Count
+            }
+        };
+        for (a, b) in files.iter().tuple_windows()
+        {
+            let output = format!(
+                "{out_stub}_Y{}_vs_Y{}_Th{}.dat",
+                a.1,
+                b.1,
+                common_opt.unstable_country_threshold
+            );
+
+            println!("{output}");
+
+            let opt = GroupCompMultiOpts{
+                groups_a: a.0.clone(),
+                groups_b: b.0.clone(),
+                output,
+                x
+            };
+            
+            crate::group_cmp::compare_th_exec(opt);
+        }
+        
+    }
 }
 
 pub fn shock_avail<P>(opt: ShockAvailOpts, in_file: P)

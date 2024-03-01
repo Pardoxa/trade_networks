@@ -46,7 +46,8 @@ fn main() {
                 opt.which, 
                 &opt.out_stub,
                 opt.quiet,
-                opt.group_files
+                opt.group_files,
+                opt.compare_successive_years
             )
         },
         CmdChooser::CompareThGroups(opt) => group_cmp::compare_th_exec(opt)

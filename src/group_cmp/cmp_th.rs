@@ -1,10 +1,9 @@
 use {
-    crate::misc::{create_buf_with_command_and_version_and_header, open_as_unwrapped_lines_filter_comments}, 
-    camino::Utf8PathBuf, 
+    crate::misc::*, 
     clap::{Parser, ValueEnum}, 
     std::{
         collections::*,
-        io::Write
+        io::Write, path::Path
     }
 };
 
@@ -18,13 +17,13 @@ pub enum X{
 #[derive(Parser, Debug)]
 pub struct GroupCompMultiOpts{
     /// Path to group 1
-    pub groups_a: Utf8PathBuf,
+    pub groups_a: String,
 
     /// Path to group 2
-    pub groups_b: Utf8PathBuf,
+    pub groups_b: String,
 
     /// output
-    pub output: Utf8PathBuf,
+    pub output: String,
 
     /// What to put on x axis?
     #[arg(value_enum)]
@@ -40,7 +39,7 @@ pub struct SetInfo
     pub percent: f64
 }
 
-fn read_set_infos(path: &Utf8PathBuf) -> Vec<SetInfo>
+fn read_set_infos(path: &Path) -> Vec<SetInfo>
 {
     let reader = open_as_unwrapped_lines_filter_comments(path);
     let mut next_set = BTreeSet::new();
@@ -67,8 +66,17 @@ fn read_set_infos(path: &Utf8PathBuf) -> Vec<SetInfo>
             percent = iter.next().unwrap().parse().unwrap();
             valid = true;
         } else {
+            let parsed = match line.parse(){
+                Ok(v) => v,
+                Err(e) => {
+                    dbg!(line);
+                    dbg!(e);
+                    dbg!(path);
+                    panic!()
+                }
+            };
             next_set.insert(
-                line.parse().unwrap()
+                parsed
             );
         }
     }
@@ -86,8 +94,8 @@ fn read_set_infos(path: &Utf8PathBuf) -> Vec<SetInfo>
 
 pub fn compare_th_exec(opt: GroupCompMultiOpts)
 {
-    let set_info_a = read_set_infos(&opt.groups_a);
-    let set_info_b = read_set_infos(&opt.groups_b);
+    let set_info_a = read_set_infos(opt.groups_a.as_ref());
+    let set_info_b = read_set_infos(opt.groups_b.as_ref());
 
     assert_eq!(
         set_info_a.len(),

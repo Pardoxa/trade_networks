@@ -153,7 +153,11 @@ pub struct MultiShockOpt{
 
     #[arg(long, short)]
     /// Also output the group files
-    pub group_files: bool
+    pub group_files: bool,
+
+    /// Compare successive years and output file
+    #[arg(long, short, requires("group_files"))]
+    pub compare_successive_years: bool
 }
 
 /// Created by Yannick Feld
