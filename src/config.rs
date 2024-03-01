@@ -12,6 +12,7 @@ use crate::{
 };
 use serde::{Serialize, Deserialize};
 use camino::Utf8PathBuf;
+use crate::group_cmp::GroupCompMultiOpts;
 
 #[derive(Parser, Debug)]
 pub struct ParseEnrichOpts{
@@ -177,7 +178,7 @@ pub enum CmdChooser{
     Filter(FilterOpts),
     CompareEntries(CompareEntriesOpt),
     CompareGroups(GroupCompOpts),
-    CompareThGroups,
+    CompareThGroups(GroupCompMultiOpts),
     /// Create commands to use with compare groups, used to automate stuff
     CompareGroupsCommandCreator(CompGroupComCreOpt),
     MultiShocks(MultiShockOpt)

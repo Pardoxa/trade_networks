@@ -49,7 +49,7 @@ fn main() {
                 opt.group_files
             )
         },
-        CmdChooser::CompareThGroups => todo!()
+        CmdChooser::CompareThGroups(opt) => group_cmp::compare_th_exec(opt)
     }
 }
 
