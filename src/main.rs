@@ -14,6 +14,8 @@ pub use other_exec::*;
 mod correlation_coef;
 pub use correlation_coef::*;
 
+mod group_cmp;
+
 fn main() {
     let option = CmdChooser::parse();
 
@@ -35,17 +37,19 @@ fn main() {
         CmdChooser::ParseBeef(beef_opt) => crate::network::main_execs::parse_beef_network(beef_opt),
         CmdChooser::CompareEntries(opt) => compare_entries(opt),
         CmdChooser::CompareGroups(opt) => {
-            compare_groups(opt);
+            group_cmp::compare_groups(opt);
         },
-        CmdChooser::CompareGroupsCommandCreator(opt) => command_creator(opt),
+        CmdChooser::CompareGroupsCommandCreator(opt) => group_cmp::command_creator(opt),
         CmdChooser::MultiShocks(opt) => {
             measure_multi_shock(
                 opt.json,
                 opt.which, 
                 &opt.out_stub,
-                opt.quiet
+                opt.quiet,
+                opt.group_files
             )
-        }
+        },
+        CmdChooser::CompareThGroups => todo!()
     }
 }
 

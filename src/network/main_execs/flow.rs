@@ -686,7 +686,8 @@ pub fn measure_multi_shock<P>(
     json: Option<P>, 
     which: ExportRestrictionType,
     out_stub: &str,
-    quiet: bool
+    quiet: bool,
+    group_files: bool
 )
 where P: AsRef<Path>
 {
@@ -808,7 +809,13 @@ where P: AsRef<Path>
                         (Box::new(fun), job, 1)
                     }
                 };
-
+                let mut group_buf = group_files.then(
+                    ||
+                    {
+                        let name = format!("{out_stub}.group");
+                        create_buf_with_command_and_version(name)
+                    }
+                );
                 out_stub.push_str(".dat");
             
                 let mut buf = create_buf_with_command_and_version_and_header(out_stub, header);
@@ -855,6 +862,10 @@ where P: AsRef<Path>
                         quiet
                     );
                     let mut country_counter = 0;
+                    if let Some(b) = group_buf.as_mut()
+                    {
+                        writeln!(b, "§{x} {percent}").unwrap();
+                    }
                     for &idx in countries_where_country_count_is_applicable.iter()
                     {
                         let original = no_shock[idx];
@@ -862,6 +873,14 @@ where P: AsRef<Path>
                         let frac = shocked / original;
                         if frac < common_opt.unstable_country_threshold{
                             country_counter += 1;
+                            if let Some(b) = group_buf.as_mut()
+                            {
+                                writeln!(
+                                    b,
+                                    "{}",
+                                    export_without_unconnected.nodes[idx].identifier
+                                ).unwrap();
+                            }
                         }
                     }
                     writeln!(buf, "{} {percent} {country_counter}", x).unwrap();

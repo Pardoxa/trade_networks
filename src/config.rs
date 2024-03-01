@@ -148,7 +148,11 @@ pub struct MultiShockOpt{
 
     #[arg(long, short)]
     /// Surpress warnings
-    pub quiet: bool
+    pub quiet: bool,
+
+    #[arg(long, short)]
+    /// Also output the group files
+    pub group_files: bool
 }
 
 /// Created by Yannick Feld
@@ -173,6 +177,7 @@ pub enum CmdChooser{
     Filter(FilterOpts),
     CompareEntries(CompareEntriesOpt),
     CompareGroups(GroupCompOpts),
+    CompareThGroups,
     /// Create commands to use with compare groups, used to automate stuff
     CompareGroupsCommandCreator(CompGroupComCreOpt),
     MultiShocks(MultiShockOpt)
