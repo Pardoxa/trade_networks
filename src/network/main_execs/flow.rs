@@ -1,11 +1,10 @@
 use{
     crate::{
         config::*, group_cmp::{GroupCompMultiOpts, X}, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
-    },
-    clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
+    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
         HistF64, 
         Histogram
-    }, ordered_float::OrderedFloat, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
+    }, ordered_float::OrderedFloat, rand::{seq::SliceRandom, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
         cmp::Reverse, 
         collections::*, 
         fmt::Display, 
@@ -20,7 +19,8 @@ use{
             RangeInclusive
         }, 
         path::{Path, PathBuf}
-    }
+    },
+    super::flow_helper::*
 };
 
 const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
@@ -298,14 +298,7 @@ pub fn shock_distribution(
     }
 }
 
-fn calc_acc_trade(network: &Network) -> Vec<f64>
-{
-    network
-        .nodes
-        .iter()
-        .map(Node::trade_amount)
-        .collect()
-}
+
 
 #[derive(Debug)]
 pub struct ShockRes{
@@ -458,19 +451,6 @@ pub fn calc_shock(
 }
 
 
-pub struct ExportShockItem{
-    export_id: usize,
-    export_frac: f64
-}
-
-pub struct CalcShockMultiJob{
-    exporter: Vec<ExportShockItem>,
-    unrestricted_node_idxs: Vec<usize>,
-    original_imports: Vec<f64>,
-    original_exports: Vec<f64>,
-    iterations: usize
-}
-
 pub fn get_top_ordered(
     export_network: &Network
 ) -> Vec<(usize, &Node)>
@@ -496,73 +476,6 @@ pub fn get_top_k_ids(
         .map(|(id, _)| id)
         .take(k)
         .collect_vec()
-}
-
-impl CalcShockMultiJob{
-
-    /// Len is length of network
-    /// ids need to be sorted
-    pub fn new_const_export(
-        ids: &[usize],
-        export_frac: f64,
-        iterations: usize,
-        export_network: &Network,
-        import_network: &Network
-    ) -> Self
-    {
-        let sorted_ids = ids.iter()
-            .copied()
-            .sorted_unstable()
-            .collect_vec();
-
-        let (mut first, mut slice) = sorted_ids
-            .split_first()
-            .map(|(f, s)| (*f, s))
-            .unwrap();
-        
-        let free_ids = (0..export_network.nodes.len())
-            .filter(
-                |&id|
-                {
-                    if id == first{
-                        if !slice.is_empty(){
-                            (first, slice) = slice.split_first()
-                                .map(|(f,s)| (*f, s))
-                                .unwrap();
-                        }
-                        false
-                    } else {
-                        true
-                    }
-                }
-            ).collect_vec();
-        let exporter = sorted_ids.iter()
-            .copied()
-            .map(|id| ExportShockItem{export_id: id, export_frac})
-            .collect_vec();
-
-        let original_exports = calc_acc_trade(export_network);
-        let original_imports = calc_acc_trade(import_network);
-        Self { exporter, unrestricted_node_idxs: free_ids, iterations, original_exports, original_imports }
-    }
-
-    pub fn change_export_frac(&mut self, export_frac: f64)
-    {
-        self.exporter
-            .iter_mut()
-            .for_each(|e| e.export_frac = export_frac);
-    }
-
-    pub fn add_exporter(&mut self, exporter: ExportShockItem)
-    {
-        let pos = self.unrestricted_node_idxs
-            .iter()
-            .position(|&id| id == exporter.export_id)
-            .unwrap();
-        self.unrestricted_node_idxs.remove(pos);
-        self.exporter.push(exporter);
-        self.exporter.sort_unstable_by_key(|e| e.export_id);
-    }
 }
 
 pub fn multi_shock_distribution(
@@ -658,6 +571,7 @@ pub struct InCommon{
     pub original_avail_filter: f64
 }
 
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct MeasureMultiShockOpts<Extra>
 {
@@ -677,6 +591,150 @@ impl Default for Percentages{
     fn default() -> Self {
         Self { start: 0.0, end: 1.0, amount: NonZeroUsize::new(100).unwrap() }
     }
+}
+
+pub fn random_cloud_shock<P>(
+    json: Option<P>, 
+    out_stub: &str,
+    quiet: bool
+)
+where P: AsRef<Path>
+{
+    let opt: ShockCloud = crate::misc::parse_and_add_to_global(json);
+    let mut lazy_networks = LazyNetworks::Filename(opt.network_file.clone());
+    lazy_networks.assure_availability();
+
+    let mut lazy_enrichments = LazyEnrichmentInfos::Filename(
+        opt.enrich_file.clone(), 
+        opt.item_code.clone()
+    );
+    lazy_enrichments.assure_availability();
+    let enrichment_infos = lazy_enrichments.enrichment_infos_unchecked();
+    let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
+
+    let mut original_avail_filter = opt.original_avail_filter;
+    if original_avail_filter < ORIGINAL_AVAIL_FILTER_MIN {
+        println!(
+            "FILTER for original avail will be set to {:e}, lower values are not allowed!", 
+            ORIGINAL_AVAIL_FILTER_MIN
+        );
+        original_avail_filter = ORIGINAL_AVAIL_FILTER_MIN;
+    }
+
+    let header = [
+        "disruption",
+        "num_of_countries"
+    ];
+
+    let mut rng = Pcg64::seed_from_u64(opt.seed);
+
+    let years_and_rngs = opt.years
+        .map(|y| (y, Pcg64::from_rng(&mut rng).unwrap()))
+        .collect_vec();
+
+    years_and_rngs
+        .into_par_iter()
+        .for_each(
+            |(year, mut rng)|
+            {
+                let out_name = format!(
+                    "{out_stub}_Y{year}_Th{}_R{}.dat", 
+                    opt.unstable_country_threshold,
+                    opt.reducing_factor
+                );
+                let export_without_unconnected = lazy_networks
+                    .get_export_network_unchecked(year)
+                    .without_unconnected_nodes();
+                
+                let import_without_unconnected = export_without_unconnected.invert();
+            
+                let enrich = enrichment_infos.get_year(year);
+        
+                let top = get_top_k_ids(&export_without_unconnected, opt.top);
+            
+                let mut buf = create_buf_with_command_and_version_and_header(out_name, header);
+                let no_shock = {
+                    let one = vec![1.0; import_without_unconnected.node_count()];
+                    let no_shock = ShockRes{
+                        import_fracs: one.clone(),
+                        export_fracs: one
+                    };
+                    calc_available(
+                        &export_without_unconnected, 
+                        enrich, 
+                        &no_shock, 
+                        &node_info_map,
+                        quiet
+                    )
+                };
+
+                let len = export_without_unconnected.node_count();
+                let countries_where_country_count_is_applicable = 
+                    (0..len)
+                        .filter(
+                            |idx|
+                            !top.contains(idx)
+                            && no_shock[*idx] >= original_avail_filter
+                        ).collect_vec();
+               
+
+
+                for _ in 0..opt.cloud_sweeps.get(){
+                    let starting_country = *top.choose(&mut rng).unwrap();
+
+                    let mut job = CalcShockMultiJob::new_const_export(
+                        &[starting_country], 
+                        opt.reducing_factor, 
+                        opt.iterations, 
+                        &export_without_unconnected, 
+                        &import_without_unconnected
+                    );
+
+
+                    let total_export = top.iter()
+                        .map(|&idx| job.original_exports[idx])
+                        .sum::<f64>();
+
+                    for i in 1..=opt.cloud_steps.get()
+                    {
+                        let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
+                
+                        let remaining_export = top.iter()
+                            .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
+                            .sum::<f64>();
+                
+                        let percent = remaining_export / total_export;
+                
+                        let avail_after_shock = calc_available(
+                            &export_without_unconnected, 
+                            enrich, 
+                            &shock_result, 
+                            &node_info_map,
+                            quiet
+                        );
+                        let mut country_counter = 0;
+                        
+                        for &idx in countries_where_country_count_is_applicable.iter()
+                        {
+                            let original = no_shock[idx];
+                            let shocked = avail_after_shock[idx];
+                            let frac = shocked / original;
+                            if frac < opt.unstable_country_threshold{
+                                country_counter += 1;
+                            }
+                        }
+                        writeln!(buf, "{percent} {country_counter}").unwrap();
+                        if i != opt.cloud_steps.get(){
+                            let which = *top.choose(&mut rng).unwrap();
+                            job.reduce_or_add(
+                                which,
+                                opt.reducing_factor
+                            );
+                        }
+                    }
+                }
+            }
+        );
 }
  
 pub fn measure_multi_shock<P>(

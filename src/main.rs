@@ -5,7 +5,7 @@ mod config;
 use config::CmdChooser;
 mod network;
 mod misc;
-use network::main_execs::*;
+use network::main_execs::{self, *};
 mod units;
 use parser::parse_all_extras;
 pub use units::*;
@@ -50,7 +50,14 @@ fn main() {
                 opt.compare_successive_years
             )
         },
-        CmdChooser::CompareThGroups(opt) => group_cmp::compare_th_exec(opt)
+        CmdChooser::CompareThGroups(opt) => group_cmp::compare_th_exec(opt),
+        CmdChooser::ShockCloud(opt) => {
+            main_execs::random_cloud_shock(
+                opt.json,
+                &opt.out_stub,
+                opt.quiet
+            )
+        }
     }
 }
 

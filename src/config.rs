@@ -185,7 +185,21 @@ pub enum CmdChooser{
     CompareThGroups(GroupCompMultiOpts),
     /// Create commands to use with compare groups, used to automate stuff
     CompareGroupsCommandCreator(CompGroupComCreOpt),
-    MultiShocks(MultiShockOpt)
+    MultiShocks(MultiShockOpt),
+    ShockCloud(ShockCloudCmdOpt)
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct ShockCloudCmdOpt{
+    /// JSON FILE
+    #[arg(short, long)]
+    pub json: Option<Utf8PathBuf>,
+
+    #[arg(short, long)]
+    pub quiet: bool,
+
+    #[arg(long, short, default_value_t)]
+    pub out_stub: String
 }
 
 #[derive(Debug, Parser)]
