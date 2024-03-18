@@ -1,10 +1,10 @@
 use{
-    crate::{
+    super::flow_helper::*, crate::{
         config::*, group_cmp::{GroupCompMultiOpts, X}, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
     }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
         HistF64, 
         Histogram
-    }, ordered_float::OrderedFloat, rand::{seq::SliceRandom, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
+    }, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, seq::SliceRandom, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
         cmp::Reverse, 
         collections::*, 
         fmt::Display, 
@@ -19,8 +19,7 @@ use{
             RangeInclusive
         }, 
         path::{Path, PathBuf}
-    },
-    super::flow_helper::*
+    }
 };
 
 const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
@@ -507,7 +506,7 @@ pub fn multi_shock_distribution(
             for e in n.adj.iter(){
                 reduced_import_frac[index] += e.amount * current_export_frac[e.index];
             }
-            reduced_import_frac[index] /= job.original_imports[index];
+            reduced_import_frac[index] *= job.original_imports_recip[index];
         }
 
         for &index in job.unrestricted_node_idxs.iter()
@@ -517,7 +516,7 @@ pub fn multi_shock_distribution(
             current_export_frac[index] = if available_for_export <= 0.0 {
                 0.0
             } else {
-                available_for_export / job.original_exports[index]
+                available_for_export * job.original_exports_recip[index]
             };
         }
     }
@@ -632,6 +631,10 @@ where P: AsRef<Path>
         .map(|y| (y, Pcg64::from_rng(&mut rng).unwrap()))
         .collect_vec();
 
+    let uniform = Uniform::new_inclusive(0.0, 1.0);
+
+
+
     years_and_rngs
         .into_par_iter()
         .for_each(
@@ -676,18 +679,32 @@ where P: AsRef<Path>
                             !top.contains(idx)
                             && no_shock[*idx] >= original_avail_filter
                         ).collect_vec();
-               
+                let original_exports = calc_acc_trade(&export_without_unconnected);
+                let original_exports_recip = calc_recip(&original_exports);
+                let original_imports =  calc_acc_trade(&import_without_unconnected);
+                let original_imports_recip = calc_recip(&original_imports);
 
+                for _ in 0..opt.cloud_steps.get(){
+                    let exports = top.iter()
+                        .map(
+                            |&id|
+                            {
+                                let frac = uniform.sample(&mut rng);
+                                ExportShockItem{
+                                    export_frac: frac,
+                                    export_id: id
+                                }
+                            }
+                        ).collect_vec();
 
-                for _ in 0..opt.cloud_sweeps.get(){
-                    let starting_country = *top.choose(&mut rng).unwrap();
-
-                    let mut job = CalcShockMultiJob::new_const_export(
-                        &[starting_country], 
-                        opt.reducing_factor, 
+                    let mut job = CalcShockMultiJob::new_exporter(
+                        exports, 
                         opt.iterations, 
                         &export_without_unconnected, 
-                        &import_without_unconnected
+                        &original_imports,
+                        &original_imports_recip,
+                        &original_exports,
+                        &original_exports_recip
                     );
 
 
@@ -806,6 +823,12 @@ where P: AsRef<Path>
                 let enrich = enrichment_infos.get_year(year);
         
                 let top = get_top_k_ids(&export_without_unconnected, common_opt.top);
+
+
+                let original_exports = calc_acc_trade(&export_without_unconnected);
+                let original_exports_recip = calc_recip(&original_exports);
+                let original_imports =  calc_acc_trade(&import_without_unconnected);
+                let original_imports_recip = calc_recip(&original_imports);
             
                 #[allow(clippy::type_complexity)]
                 let (mut iterate, mut job, mut x): (Box<dyn FnMut(&mut CalcShockMultiJob) -> Option<u16>>, _, u16) = match opt.as_ref()
@@ -835,7 +858,10 @@ where P: AsRef<Path>
                             first, 
                             common_opt.iterations, 
                             &export_without_unconnected, 
-                            &import_without_unconnected
+                            &original_exports,
+                            &original_exports_recip,
+                            &original_imports,
+                            &original_imports_recip
                         );
                         (Box::new(fun), job, country_count)
                     },
@@ -860,7 +886,10 @@ where P: AsRef<Path>
                             0.0, 
                             common_opt.iterations, 
                             &export_without_unconnected, 
-                            &import_without_unconnected
+                            &original_exports,
+                            &original_exports_recip,
+                            &original_imports,
+                            &original_imports_recip
                         );
                         (Box::new(fun), job, 1)
                     }

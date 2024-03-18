@@ -17,30 +17,86 @@ pub fn calc_acc_trade(network: &Network) -> Vec<f64>
         .collect()
 }
 
+pub fn calc_recip(original: &[f64]) -> Vec<f64>
+{
+    original.iter()
+        .copied()
+        .map(f64::recip)
+        .collect()
+}
+
 pub struct ExportShockItem{
     pub export_id: usize,
     pub export_frac: f64
 }
 
-pub struct CalcShockMultiJob{
+pub struct CalcShockMultiJob<'a>{
     pub exporter: Vec<ExportShockItem>,
     pub unrestricted_node_idxs: Vec<usize>,
-    pub original_imports: Vec<f64>,
-    pub original_exports: Vec<f64>,
+    pub original_imports: &'a [f64],
+    pub original_imports_recip: &'a [f64],
+    pub original_exports: &'a [f64],
+    pub original_exports_recip: &'a [f64],
     pub iterations: usize
 }
 
 
-impl CalcShockMultiJob{
+impl<'a> CalcShockMultiJob<'a>{
+
+    pub fn new_exporter(
+        mut exporter: Vec<ExportShockItem>,
+        iterations: usize,
+        export_network: &Network,
+        original_imports: &'a[f64],
+        original_imports_recip: &'a[f64],
+        original_exports: &'a[f64],
+        original_exports_recip: &'a[f64],
+    ) -> Self
+    {
+        exporter.sort_unstable_by_key(|e| e.export_id);
+
+        let (mut first, mut slice) = exporter
+            .split_first()
+            .unwrap();
+        
+        let free_ids = (0..export_network.nodes.len())
+            .filter(
+                |&id|
+                {
+                    if id == first.export_id{
+                        if !slice.is_empty(){
+                            (first, slice) = slice.split_first()
+                                .unwrap();
+                        }
+                        false
+                    } else {
+                        true
+                    }
+                }
+            ).collect_vec();
+        Self { 
+            exporter, 
+            unrestricted_node_idxs: free_ids, 
+            iterations, 
+            original_exports, 
+            original_imports,
+            original_imports_recip,
+            original_exports_recip
+        }
+    }
 
     /// Len is length of network
     /// ids need to be sorted
+    #[allow(clippy::too_many_arguments)]
     pub fn new_const_export(
         ids: &[usize],
         export_frac: f64,
         iterations: usize,
         export_network: &Network,
-        import_network: &Network
+        original_exports: &'a [f64],
+        original_exports_recip: &'a [f64],
+        original_imports: &'a [f64],
+        original_imports_recip: &'a [f64]
     ) -> Self
     {
         let sorted_ids = ids.iter()
@@ -74,9 +130,15 @@ impl CalcShockMultiJob{
             .map(|id| ExportShockItem{export_id: id, export_frac})
             .collect_vec();
 
-        let original_exports = calc_acc_trade(export_network);
-        let original_imports = calc_acc_trade(import_network);
-        Self { exporter, unrestricted_node_idxs: free_ids, iterations, original_exports, original_imports }
+        Self { 
+            exporter, 
+            unrestricted_node_idxs: free_ids, 
+            iterations, 
+            original_exports, 
+            original_imports,
+            original_imports_recip,
+            original_exports_recip
+        }
     }
 
     pub fn change_export_frac(&mut self, export_frac: f64)
@@ -157,9 +219,6 @@ pub struct ShockCloud
 
     #[derivative(Default(value="NonZeroUsize::new(1000).unwrap()"))]
     pub cloud_steps: NonZeroUsize,
-
-    #[derivative(Default(value="NonZeroUsize::new(1000).unwrap()"))]
-    pub cloud_sweeps: NonZeroUsize,
 
     pub seed: u64,
 
