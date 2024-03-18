@@ -4,7 +4,7 @@ use{
     }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
         HistF64, 
         Histogram
-    }, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, seq::SliceRandom, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
+    }, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
         cmp::Reverse, 
         collections::*, 
         fmt::Display, 
@@ -683,6 +683,9 @@ where P: AsRef<Path>
                 let original_exports_recip = calc_recip(&original_exports);
                 let original_imports =  calc_acc_trade(&import_without_unconnected);
                 let original_imports_recip = calc_recip(&original_imports);
+                let total_export = top.iter()
+                    .map(|&idx| original_exports[idx])
+                    .sum::<f64>();
 
                 for _ in 0..opt.cloud_steps.get(){
                     let exports = top.iter()
@@ -697,7 +700,7 @@ where P: AsRef<Path>
                             }
                         ).collect_vec();
 
-                    let mut job = CalcShockMultiJob::new_exporter(
+                    let job = CalcShockMultiJob::new_exporter(
                         exports, 
                         opt.iterations, 
                         &export_without_unconnected, 
@@ -708,47 +711,36 @@ where P: AsRef<Path>
                     );
 
 
-                    let total_export = top.iter()
-                        .map(|&idx| job.original_exports[idx])
-                        .sum::<f64>();
+                    
 
-                    for i in 1..=opt.cloud_steps.get()
+                    let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
+            
+                    let remaining_export = top.iter()
+                        .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
+                        .sum::<f64>();
+            
+                    let percent = remaining_export / total_export;
+            
+                    let avail_after_shock = calc_available(
+                        &export_without_unconnected, 
+                        enrich, 
+                        &shock_result, 
+                        &node_info_map,
+                        quiet
+                    );
+                    let mut country_counter = 0;
+                    
+                    for &idx in countries_where_country_count_is_applicable.iter()
                     {
-                        let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
-                
-                        let remaining_export = top.iter()
-                            .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
-                            .sum::<f64>();
-                
-                        let percent = remaining_export / total_export;
-                
-                        let avail_after_shock = calc_available(
-                            &export_without_unconnected, 
-                            enrich, 
-                            &shock_result, 
-                            &node_info_map,
-                            quiet
-                        );
-                        let mut country_counter = 0;
-                        
-                        for &idx in countries_where_country_count_is_applicable.iter()
-                        {
-                            let original = no_shock[idx];
-                            let shocked = avail_after_shock[idx];
-                            let frac = shocked / original;
-                            if frac < opt.unstable_country_threshold{
-                                country_counter += 1;
-                            }
-                        }
-                        writeln!(buf, "{percent} {country_counter}").unwrap();
-                        if i != opt.cloud_steps.get(){
-                            let which = *top.choose(&mut rng).unwrap();
-                            job.reduce_or_add(
-                                which,
-                                opt.reducing_factor
-                            );
+                        let original = no_shock[idx];
+                        let shocked = avail_after_shock[idx];
+                        let frac = shocked / original;
+                        if frac < opt.unstable_country_threshold{
+                            country_counter += 1;
                         }
                     }
+                    writeln!(buf, "{percent:e} {country_counter}").unwrap();
+                    
                 }
             }
         );

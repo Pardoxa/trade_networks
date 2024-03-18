@@ -159,6 +159,7 @@ impl<'a> CalcShockMultiJob<'a>{
         self.exporter.sort_unstable_by_key(|e| e.export_id);
     }
 
+    #[allow(dead_code)]
     pub fn reduce_or_add(&mut self, exporter: usize, reducing_factor: f64)
     {
         let pos = self.exporter
