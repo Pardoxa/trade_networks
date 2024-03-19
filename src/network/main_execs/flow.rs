@@ -1,10 +1,10 @@
 use{
     super::flow_helper::*, crate::{
         config::*, group_cmp::{GroupCompMultiOpts, X}, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
-    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, sampling::{
+    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, Rng, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, sampling::{
         HistF64, 
         Histogram
-    }, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
+    }, serde::{Deserialize, Serialize}, std::{
         cmp::Reverse, 
         collections::*, 
         fmt::Display, 
@@ -20,7 +20,7 @@ use{
         }, 
         path::{Path, PathBuf}
     },
-    rand::prelude::SliceRandom
+    rand::seq::SliceRandom
 };
 
 const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
@@ -632,7 +632,6 @@ where P: AsRef<Path>
         .map(|y| (y, Pcg64::from_rng(&mut rng).unwrap()))
         .collect_vec();
 
-    let uniform = Uniform::new_inclusive(0.0, 1.0);
 
 
 
@@ -659,7 +658,7 @@ where P: AsRef<Path>
             
                 let enrich = enrichment_infos.get_year(year);
         
-                let mut top = get_top_k_ids(&export_without_unconnected, opt.top);
+                let top = get_top_k_ids(&export_without_unconnected, opt.top);
             
                 let mut buf = create_buf_with_command_and_version_and_header(out_name, header);
                 let no_shock = {
@@ -701,30 +700,30 @@ where P: AsRef<Path>
                 let delta = max as f64 / (opt.cloud_steps.get() - 1) as f64;
 
                 for i in 0..opt.cloud_steps.get(){
-                    top.shuffle(&mut rng);
-                    let target = i as f64 * delta;
-                    let mut random_numbers = (1..top.len())
+                    let target = (i as f64 * delta).min(0.999999999);
+                    let matrix = rand_fixed_sum(
+                        top.len(), 
+                        NonZeroUsize::new(2).unwrap(), 
+                        target, 
+                        0.0, 
+                        1.0, 
+                        &mut rng
+                    );
+                    dbg!(&matrix);
+                    let test_sum: f64 = matrix[0].iter().sum();
+                    dbg!(target);
+                    dbg!(test_sum);
+                    dbg!(test_sum - target);
+                    let exports = top.iter()
+                        .zip(matrix[0].iter())
                         .map(
-                            |_|
+                            |(id, frac)|
                             {
-                                OrderedFloat(uniform.sample(&mut rng))
-                            }
-                        ).collect_vec();
-                    random_numbers.push(OrderedFloat(1.0));
-                    random_numbers.push(OrderedFloat(0.0));
-                    random_numbers.sort_unstable();
-                    let exports = random_numbers
-                        .windows(2)
-                        .zip(top.iter())
-                        .map(
-                            |(interval, id)| 
-                            {
-                                let export_frac = (interval[1] - interval[0]) * target;
                                 ExportShockItem{
-                                    export_frac: (export_frac.into_inner().min(1.0)),
+                                    export_frac: *frac,
                                     export_id: *id
                                 }
-                            } 
+                            }
                         ).collect_vec();
 
                     let job = CalcShockMultiJob::new_exporter(
@@ -2181,3 +2180,186 @@ fn calc_available(
 
 }
 
+// uses: https://de.mathworks.com/matlabcentral/fileexchange/9700-random-vectors-with-fixed-sum
+// see also: https://www.cs.york.ac.uk/rts/static/papers/R:Emberson:2010a.pdf
+fn rand_fixed_sum<R>(
+    n: usize, 
+    m: NonZeroUsize, 
+    sum: f64, 
+    a: f64, 
+    b: f64,
+    mut rng: R
+) -> Vec<Vec<f64>> 
+where R: Rng
+{
+    let n_isize = n as isize;
+    if sum <= 0.0 {
+        return vec![vec![0.0;n]; m.get()];
+    }
+    let b_minus_a = b - a;
+    let dist = Uniform::new(0.0, 1.0);
+    let rescale = (sum-n as f64 * a)/(b_minus_a);
+    let k = (rescale.floor() as isize).min((n-1) as isize).max(0);
+    let s = rescale.min((k + 1) as f64).max(k as f64);
+    let s1 = (k -n_isize+1..=k).rev()
+        .map(|i| rescale - i as f64)
+        .collect_vec();
+    let s2 = (k+1..=k+n_isize)
+        .rev()
+        .map(|i| i as f64 - rescale)
+        .collect_vec();
+
+    let mut w = vec![vec![0.0;n+1]; n];
+    w[0][1] = f64::MAX;
+    let mut t = vec![vec![0.0; n]; n-1];
+    let tiny = f64::MIN_POSITIVE;
+
+
+    for i in 2..=n{
+        let a = &w[i-2][1..=i];
+        let b = &s1[..i];
+        debug_assert_eq!(a.len(), b.len());
+        let recip = (i as f64).recip();
+        let tmp1 = a.iter()
+            .zip(b)
+            .map(|(w_val, s1_val)| *w_val * *s1_val * recip)
+            .collect_vec();
+        let a = &w[i-2][..i];
+        let b = &s2[n-i..n];
+        let tmp2 = a.iter()
+            .zip(b)
+            .map(|(val_w, val_s2)| *val_w * *val_s2 * recip)
+            .collect_vec();
+        let to_change = &mut w[i-1][1..=i];
+        debug_assert_eq!(to_change.len(), tmp1.len());
+        debug_assert_eq!(tmp1.len(), tmp2.len());
+        to_change.iter_mut()
+            .zip(tmp1.iter())
+            .zip(tmp2.iter())
+            .for_each(
+                |((ch, t1), t2)|
+                {
+                    *ch = t1 + t2;
+                }
+            );
+        let tmp3 = w[i-1][1..=i]
+            .iter()
+            .map(|val| *val + tiny)
+            .collect_vec();
+        let a = &s2[n-i..n];
+        let b = &s1[..i];
+        let tmp4 = a.iter()
+            .zip(b)
+            .map(|(left, right)| left > right)
+            .collect_vec();
+        t[i-2][..i]
+            .iter_mut()
+            .enumerate()
+            .for_each(
+                |(idx, val)|
+                {
+                    *val = (tmp2[idx] / tmp3[idx]) * (tmp4[idx] as u8 as f64)
+                            + (1.0 - tmp1[idx] / tmp3[idx]) * ((!tmp4[idx]) as u8 as f64);   
+                }
+            )
+    }
+
+    let mut x = vec![vec![0.0; m.get()]; n];
+    let mut gen_rand = |len: usize|
+    {
+        (0..len)
+        .map(
+            |_|
+            {
+                dist.sample_iter(&mut rng)
+                    .take(m.get())
+                    .collect_vec()
+            }
+        ).collect_vec()
+    };
+    let rt = gen_rand(n-1);
+    let rs = gen_rand(n-1);
+    let mut s = vec![s; m.get()];
+    let mut j = vec![(k+1) as usize; m.get()];
+    let mut sm = vec![0.0; m.get()];
+    let mut pr = vec![1.0; m.get()];
+
+    for i in (1..n).rev()
+    {
+        // use rt to choose a transition
+        let e = rt[n-i-1]
+            .iter()
+            .zip(j.iter())
+            .map(
+                |(rt, j)|
+                {
+                    *rt <= t[i-1][*j-1]
+                }
+            ).collect_vec();
+        let i_recip = (i as f64).recip();
+        let ip1_recip = ((i+1) as f64).recip();
+        // use rs to compute next simplex coord
+        let sx = rs[n-i-1]
+            .iter()
+            .map(|val| val.powf(i_recip))
+            .collect_vec();
+        // update sum
+        sm.iter_mut()
+            .enumerate()
+            .for_each(
+                |(idx, val)|
+                {
+                    *val += (1.0 - sx[idx]) * pr[idx] * s[idx] * ip1_recip;
+                }
+            );
+        // update product
+        pr.iter_mut()
+            .zip(sx.iter())
+            .for_each(|(p,s)| *p *= *s);
+        // calc x using simplex coord
+        x[n-i-1].iter_mut()
+            .enumerate()
+            .for_each(
+                |(idx, x)|
+                {
+                    *x = pr[idx].mul_add(e[idx] as u64 as f64, sm[idx])
+                }
+            );
+        // transition adjustment
+        s.iter_mut()
+            .zip(e.iter())
+            .for_each(
+                |(s, e)| *s -= *e as u64 as f64
+            );
+        j.iter_mut()
+            .zip(e.iter())
+            .for_each(
+                |(j, e)|
+                *j -= *e as usize
+            );
+    }
+    // compute last x
+    x[n-1]
+        .iter_mut()
+        .enumerate()
+        .for_each(
+            |(idx, x)|
+            {
+                *x = pr[idx].mul_add(s[idx], sm[idx]);
+                *x = *x * b_minus_a + a;
+            }
+        );
+
+   let len = x[0].len();
+   (0..len)
+        .map(
+            |i|
+            {
+                let mut vec = x.iter()
+                    .map(|slice| slice[i])
+                    .collect_vec();
+                vec.shuffle(&mut rng);
+                vec
+            }
+        ).collect_vec()
+}
