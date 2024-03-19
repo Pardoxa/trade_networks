@@ -25,6 +25,7 @@ pub fn calc_recip(original: &[f64]) -> Vec<f64>
         .collect()
 }
 
+#[derive(Debug)]
 pub struct ExportShockItem{
     pub export_id: usize,
     pub export_frac: f64
@@ -223,5 +224,8 @@ pub struct ShockCloud
 
     pub seed: u64,
 
-    pub reducing_factor: f64
+    pub reducing_factor: f64,
+
+    #[derivative(Default(value="NonZeroUsize::new(100).unwrap()"))]
+    pub hist_bins: NonZeroUsize
 }

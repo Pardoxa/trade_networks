@@ -1,7 +1,7 @@
 use{
     super::flow_helper::*, crate::{
         config::*, group_cmp::{GroupCompMultiOpts, X}, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
-    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, net_ensembles::sampling::{
+    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, sampling::{
         HistF64, 
         Histogram
     }, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, serde::{Deserialize, Serialize}, std::{
@@ -19,7 +19,8 @@ use{
             RangeInclusive
         }, 
         path::{Path, PathBuf}
-    }
+    },
+    rand::prelude::SliceRandom
 };
 
 const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
@@ -645,6 +646,11 @@ where P: AsRef<Path>
                     opt.unstable_country_threshold,
                     opt.reducing_factor
                 );
+                let av_name = format!(
+                    "{out_stub}_Y{year}_Th{}_R{}.average", 
+                    opt.unstable_country_threshold,
+                    opt.reducing_factor
+                );
                 let export_without_unconnected = lazy_networks
                     .get_export_network_unchecked(year)
                     .without_unconnected_nodes();
@@ -653,7 +659,7 @@ where P: AsRef<Path>
             
                 let enrich = enrichment_infos.get_year(year);
         
-                let top = get_top_k_ids(&export_without_unconnected, opt.top);
+                let mut top = get_top_k_ids(&export_without_unconnected, opt.top);
             
                 let mut buf = create_buf_with_command_and_version_and_header(out_name, header);
                 let no_shock = {
@@ -686,18 +692,39 @@ where P: AsRef<Path>
                 let total_export = top.iter()
                     .map(|&idx| original_exports[idx])
                     .sum::<f64>();
+                let mut hist = HistF64::new(0.0, 1.0, opt.hist_bins.get())
+                        .unwrap();
+                let mut sum = vec![0_u64; hist.bin_count()];
+                let mut sum_sq = sum.clone();
 
-                for _ in 0..opt.cloud_steps.get(){
-                    let exports = top.iter()
+                let max = top.len();
+                let delta = max as f64 / (opt.cloud_steps.get() - 1) as f64;
+
+                for i in 0..opt.cloud_steps.get(){
+                    top.shuffle(&mut rng);
+                    let target = i as f64 * delta;
+                    let mut random_numbers = (1..top.len())
                         .map(
-                            |&id|
+                            |_|
                             {
-                                let frac = uniform.sample(&mut rng);
-                                ExportShockItem{
-                                    export_frac: frac,
-                                    export_id: id
-                                }
+                                OrderedFloat(uniform.sample(&mut rng))
                             }
+                        ).collect_vec();
+                    random_numbers.push(OrderedFloat(1.0));
+                    random_numbers.push(OrderedFloat(0.0));
+                    random_numbers.sort_unstable();
+                    let exports = random_numbers
+                        .windows(2)
+                        .zip(top.iter())
+                        .map(
+                            |(interval, id)| 
+                            {
+                                let export_frac = (interval[1] - interval[0]) * target;
+                                ExportShockItem{
+                                    export_frac: (export_frac.into_inner().min(1.0)),
+                                    export_id: *id
+                                }
+                            } 
                         ).collect_vec();
 
                     let job = CalcShockMultiJob::new_exporter(
@@ -709,9 +736,6 @@ where P: AsRef<Path>
                         &original_exports,
                         &original_exports_recip
                     );
-
-
-                    
 
                     let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
             
@@ -740,7 +764,33 @@ where P: AsRef<Path>
                         }
                     }
                     writeln!(buf, "{percent:e} {country_counter}").unwrap();
-                    
+                    let idx = hist.increment(percent).unwrap();
+                    sum[idx] += country_counter;
+                    sum_sq[idx] += country_counter * country_counter;
+                }
+                let mut hist_buf = create_buf_with_command_and_version(av_name);
+                let header = [
+                    "interval_left",
+                    "interval_right",
+                    "hits",
+                    "average",
+                    "variance"
+                ];
+                write_slice_head(&mut hist_buf, header).unwrap();
+                let iter = hist.bin_hits_iter()
+                    .zip(sum)
+                    .zip(sum_sq);
+                
+                for (((interval, hits), sum), sum_sq) in iter {
+                    let average = sum as f64 / hits as f64;
+                    let av_2 = sum_sq as f64 / hits as f64;
+                    let var = av_2 - average * average;
+                    writeln!(
+                        hist_buf,
+                        "{} {} {hits} {average:e} {var:e}",
+                        interval[0],
+                        interval[1]
+                    ).unwrap();
                 }
             }
         );
