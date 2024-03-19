@@ -1,6 +1,7 @@
 use std::{
     cmp::Ordering, io::BufWriter, num::*, path::{Path, PathBuf}
 };
+use derivative::Derivative;
 use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
@@ -186,7 +187,8 @@ pub enum CmdChooser{
     /// Create commands to use with compare groups, used to automate stuff
     CompareGroupsCommandCreator(CompGroupComCreOpt),
     MultiShocks(MultiShockOpt),
-    ShockCloud(ShockCloudCmdOpt)
+    ShockCloud(ShockCloudCmdOpt),
+    ShockCloudAll(ShockCloudAllCmdOpt)
 }
 
 #[derive(Debug, Clone, Parser)]
@@ -200,6 +202,24 @@ pub struct ShockCloudCmdOpt{
 
     #[arg(long, short, default_value_t)]
     pub out_stub: String
+}
+
+#[derive(Derivative, Clone, Parser)]
+#[derivative(Default)]
+pub struct ShockCloudAllCmdOpt{
+    /// JSON FILE
+    #[arg(short, long)]
+    pub json: Option<Utf8PathBuf>,
+
+    #[arg(short, long)]
+    pub quiet: bool,
+
+    #[arg(long, short, default_value_t)]
+    pub out_stub: String,
+
+    #[arg(long, short)]
+    #[derivative(Default(value="NonZeroUsize::new(5).unwrap()"))]
+    pub threads: NonZeroUsize
 }
 
 #[derive(Debug, Parser)]
@@ -387,7 +407,7 @@ pub struct FilterOpts
 #[derive(Parser, Debug)]
 pub struct OnlyNetworks{
     /// Networks file
-    pub in_file: PathBuf
+    pub in_file: Utf8PathBuf
 }
 
 
@@ -431,7 +451,7 @@ pub struct MiscOpt{
 pub struct Tests{
     /// input
     #[arg(short, long)]
-    pub in_file: PathBuf,
+    pub in_file: Utf8PathBuf,
 
     #[command(subcommand)]
     pub command: SubCommand

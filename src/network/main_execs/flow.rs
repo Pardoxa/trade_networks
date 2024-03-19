@@ -1,7 +1,7 @@
 use{
     super::flow_helper::*, crate::{
-        config::*, group_cmp::{GroupCompMultiOpts, X}, misc::*, network::{enriched_digraph::*, *}, parser::country_map, UNIT_TESTER
-    }, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, Rng, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, sampling::{
+        config::*, group_cmp::{GroupCompMultiOpts, X}, misc::*, network::{enriched_digraph::*, *}, parser::country_map, sync_queue, UNIT_TESTER
+    }, camino::{Utf8Path, Utf8PathBuf}, clap::ValueEnum, derivative::Derivative, fs_err::File, itertools::Itertools, kahan::KahanSum, ordered_float::OrderedFloat, rand::{distributions::{Distribution, Uniform}, seq::SliceRandom, Rng, SeedableRng}, rand_pcg::Pcg64, rayon::prelude::*, sampling::{
         HistF64, 
         Histogram
     }, serde::{Deserialize, Serialize}, std::{
@@ -18,9 +18,8 @@ use{
             Deref, 
             RangeInclusive
         }, 
-        path::{Path, PathBuf}
-    },
-    rand::seq::SliceRandom
+        path::Path
+    }
 };
 
 const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
@@ -541,7 +540,7 @@ pub struct InCommon{
     pub enrich_file: String,
 
     /// File with the network data
-    pub network_file: PathBuf,
+    pub network_file: Utf8PathBuf,
 
     /// Which year to check
     #[derivative(Default(value = "2000..=2019"))]
@@ -593,6 +592,105 @@ impl Default for Percentages{
     }
 }
 
+fn get_files(glob: &str) -> BTreeMap<usize, Utf8PathBuf>
+{   
+    let expr = r"\d+";
+    let re = regex::Regex::new(expr)
+        .unwrap();
+    glob::glob(glob)
+        .unwrap()
+        .map(Result::unwrap)
+        .map(
+            |path|
+            {
+                let utf8path = Utf8PathBuf::from_path_buf(path).unwrap();
+                let s = utf8path.as_str();
+                let number: usize = match re.find(s){
+                    None => {
+                        panic!("Cannot find label in globbed file {s:?}")
+                    },
+                    Some(m) =>
+                    {
+                        let number = &s[m.start()..m.end()];
+                        number.parse().unwrap()
+                    }
+                };
+                (number, utf8path)
+            }
+        ).collect()
+}
+
+pub fn all_random_cloud_shocks<P>(
+    json: Option<P>, 
+    out_stub: &str,
+    quiet: bool,
+    threads: NonZeroUsize
+)where P: AsRef<Path>
+{
+    let opt: ShockCloudAll = crate::misc::parse_and_add_to_global(json);
+    
+    let enrich_files = get_files(&opt.enrich_glob);
+    let network_files = get_files(&opt.network_glob);
+    let all_item_codes: BTreeSet<usize> = enrich_files.keys()
+        .chain(network_files.keys())
+        .copied()
+        .collect();
+    let mut job_opts = VecDeque::new();
+    for key in all_item_codes{
+        let enrich_path = match enrich_files.get(&key){
+            Some(path) => path,
+            None => {
+                println!("No enrichment for item {key}");
+                continue;
+            }
+        };
+        let network_path = match network_files.get(&key){
+            Some(path) => path,
+            None => {
+                println!("No enrichment for item {key}");
+                continue;
+            }
+        };
+        for y in opt.years.clone(){
+            let shock_opt = ShockCloud{
+                enrich_file: enrich_path.to_owned(),
+                network_file: network_path.to_owned(),
+                years: y..=y,
+                cloud_m: opt.cloud_m,
+                cloud_steps: opt.cloud_steps,
+                item_code: Some(key.to_string()),
+                top: opt.top,
+                iterations: opt.iterations,
+                unstable_country_threshold: opt.unstable_country_threshold,
+                original_avail_filter: opt.original_avail_filter,
+                seed: opt.seed,
+                reducing_factor: opt.reducing_factor,
+                hist_bins: opt.hist_bins
+            };
+            job_opts.push_back(shock_opt);
+        }
+        
+    }
+
+    let sync_queue = sync_queue::SyncQueue::new(job_opts);
+    (0..threads.get())
+        .into_par_iter()
+        .for_each(
+            |_|
+            {
+                while let Some(opt) = sync_queue.pop(){
+                    let folder = opt.item_code.as_deref();
+                    random_cloud_shock_helper(
+                        &opt, 
+                        out_stub, 
+                        quiet,
+                        folder
+                    );
+                }
+            }
+        )
+}
+
 pub fn random_cloud_shock<P>(
     json: Option<P>, 
     out_stub: &str,
@@ -601,14 +699,71 @@ pub fn random_cloud_shock<P>(
 where P: AsRef<Path>
 {
     let opt: ShockCloud = crate::misc::parse_and_add_to_global(json);
+    random_cloud_shock_helper(
+        &opt, 
+        out_stub, 
+        quiet,
+        None
+    );
+}
+
+pub fn random_cloud_shock_helper(
+    opt: &ShockCloud, 
+    out_stub: &str,
+    quiet: bool,
+    folder: Option<&str>,
+)
+{
+
     let mut lazy_networks = LazyNetworks::Filename(opt.network_file.clone());
     lazy_networks.assure_availability();
 
     let mut lazy_enrichments = LazyEnrichmentInfos::Filename(
-        opt.enrich_file.clone(), 
+        opt.enrich_file.as_str().to_owned(), 
         opt.item_code.clone()
     );
     lazy_enrichments.assure_availability();
+    let map = lazy_enrichments.extra_info_idmap_unchecked();
+    let production_idx = map.get(PRODUCTION);
+    for year in opt.years.clone()
+    {
+        let enrich = lazy_enrichments.get_year_unchecked(year);
+        let mut any = false;
+        for e in enrich.values(){
+            if let Some(extra) = e.map.get(&production_idx)
+            {
+                if extra.amount > 0.0 {
+                    any = true;
+                    break;
+                }
+            }
+        }
+        if !any{
+            println!("Missing production in file {} - SKIPPING ITEM", opt.enrich_file);
+            return;
+        }
+    }
+
+    for year in opt.years.clone()
+    {
+        let network = lazy_networks.get_export_network_unchecked(year)
+            .without_unconnected_nodes();
+        if network.node_count() < opt.top
+        {
+            println!("Empty network in file {} - SKIPPING ITEM", opt.network_file);
+            return;
+        }
+    }
+
+    let folder = match folder{
+        Some(f) => {
+            let _ = std::fs::create_dir(folder.unwrap());
+            format!("{f}/")
+        },
+        None => String::default()
+    };
+
+    
     let enrichment_infos = lazy_enrichments.enrichment_infos_unchecked();
     let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
 
@@ -629,10 +784,9 @@ where P: AsRef<Path>
     let mut rng = Pcg64::seed_from_u64(opt.seed);
 
     let years_and_rngs = opt.years
+        .clone()
         .map(|y| (y, Pcg64::from_rng(&mut rng).unwrap()))
         .collect_vec();
-
-
 
 
     years_and_rngs
@@ -641,12 +795,12 @@ where P: AsRef<Path>
             |(year, mut rng)|
             {
                 let out_name = format!(
-                    "{out_stub}_Y{year}_Th{}_R{}.dat", 
+                    "{folder}{out_stub}_Y{year}_Th{}_R{}.dat", 
                     opt.unstable_country_threshold,
                     opt.reducing_factor
                 );
                 let av_name = format!(
-                    "{out_stub}_Y{year}_Th{}_R{}.average", 
+                    "{folder}{out_stub}_Y{year}_Th{}_R{}.average", 
                     opt.unstable_country_threshold,
                     opt.reducing_factor
                 );
@@ -1092,7 +1246,7 @@ where P: AsRef<Path>
 }
 
 pub fn shock_avail<P>(opt: ShockAvailOpts, in_file: P)
-where P: AsRef<Path>
+where P: AsRef<Utf8Path>
 {
     let mut lazy_network = LazyNetworks::Filename(in_file.as_ref().to_owned());
     let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file.clone(), opt.item_code.clone());
@@ -1150,7 +1304,7 @@ where I: IntoIterator<Item = A>,
 }
 
 pub fn reduce_x_test<P>(opt: XOpts, in_file: P)
-where P: AsRef<Path>
+where P: AsRef<Utf8Path>
 {
     let mut lazy_networks = LazyNetworks::Filename(in_file.as_ref().to_owned());
     lazy_networks.assure_availability();
@@ -1229,7 +1383,7 @@ fn c_map<'a>(id: &str, country_map: &'a Option<BTreeMap<String, String>>) -> &'a
 
 
 pub fn reduce_x<P>(opt: XOpts, in_file: P)
-where P: AsRef<Path>
+where P: AsRef<Utf8Path>
 {
     let specifiers: Vec<_> = opt.top.get_specifiers();
 
@@ -1867,7 +2021,7 @@ where P: AsRef<Path>
 }
 
 pub fn shock_dist<P>(opt: ShockDistOpts, in_file: P)
-where P: AsRef<Path>
+where P: AsRef<Utf8Path>
 {
     let mut lazy_networks = LazyNetworks::Filename(in_file.as_ref().to_path_buf());
     let mut lazy_enrichment = LazyEnrichmentInfos::Filename(opt.enrich_file, opt.item_code);
@@ -2188,11 +2342,15 @@ fn calc_available(
             }
         ).collect();
 
-    assert!(at_least_some_production, "No production data!");
+    
     //if !at_least_some_stock{
     //    eprintln!("WARNING: NO STOCK DATA")
     //}
     if !quiet{
+        if !at_least_some_production{
+            eprintln!("No production data!")
+        }
+        assert!(at_least_some_production, "No production data!");
         eprintln!("Stock Variation data is unimplemented! STOCK data unimplemented!");
     }
     

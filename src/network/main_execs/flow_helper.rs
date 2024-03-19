@@ -1,9 +1,9 @@
 use crate::network::{Network, Node};
+use camino::Utf8PathBuf;
 use itertools::*;
 use derivative::*;
 use std::{
     ops::RangeInclusive,
-    path::PathBuf,
     num::*
 };
 use serde::{Serialize, Deserialize};
@@ -56,9 +56,14 @@ impl<'a> CalcShockMultiJob<'a>{
     {
         exporter.sort_unstable_by_key(|e| e.export_id);
 
-        let (mut first, mut slice) = exporter
-            .split_first()
-            .unwrap();
+        let (mut first, mut slice) = match exporter.split_first()
+        {
+            None => {
+                dbg!(exporter);
+                panic!("ERROR");
+            },
+            Some(v) => v
+        };
         
         let free_ids = (0..export_network.nodes.len())
             .filter(
@@ -187,10 +192,10 @@ impl<'a> CalcShockMultiJob<'a>{
 pub struct ShockCloud
 {
     /// File with enrich infos
-    pub enrich_file: String,
+    pub enrich_file: Utf8PathBuf,
 
     /// File with the network data
-    pub network_file: PathBuf,
+    pub network_file: Utf8PathBuf,
 
     /// Which year to check
     #[derivative(Default(value = "2000..=2019"))]
@@ -202,6 +207,54 @@ pub struct ShockCloud
 
     /// Item code, e.g. 27 for Rice
     pub item_code: Option<String>,
+
+    /// how many countrys should restrict their exports?
+    #[derivative(Default(value="5"))]
+    pub top: usize,
+
+    /// the fraction at which countries are counted as unstable
+    #[derivative(Default(value="0.7"))]
+    pub unstable_country_threshold: f64,
+
+    /// Countries that have less than this amount of 
+    /// Product without shock will not be counted as unstable ever
+    /// The idea being that they dont depend on the product so they should not be unstable
+    ///
+    /// NOTE: Countries with negative total will be automatically excluded!
+    /// Also, for numerical reasons, this value is not allowed to be lower than the default value
+    pub original_avail_filter: f64,
+
+    #[derivative(Default(value="NonZeroUsize::new(1000).unwrap()"))]
+    pub cloud_steps: NonZeroUsize,
+
+    #[derivative(Default(value="NonZeroUsize::new(5).unwrap()"))]
+    pub cloud_m: NonZeroUsize,
+
+    pub seed: u64,
+
+    pub reducing_factor: f64,
+
+    #[derivative(Default(value="NonZeroUsize::new(100).unwrap()"))]
+    pub hist_bins: NonZeroUsize
+}
+
+#[derive(Debug, Serialize, Deserialize, Derivative)]
+#[derivative(Default)]
+pub struct ShockCloudAll
+{
+    /// File with enrich infos
+    pub enrich_glob: String,
+
+    /// File with the network data
+    pub network_glob: String,
+
+    /// Which year to check
+    #[derivative(Default(value = "2000..=2019"))]
+    pub years: RangeInclusive<i32>,
+
+    /// Iterations
+    #[derivative(Default(value="10000"))]
+    pub iterations: usize,    
 
     /// how many countrys should restrict their exports?
     #[derivative(Default(value="5"))]

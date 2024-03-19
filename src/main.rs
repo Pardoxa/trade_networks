@@ -13,6 +13,7 @@ mod other_exec;
 pub use other_exec::*;
 mod correlation_coef;
 pub use correlation_coef::*;
+mod sync_queue;
 
 mod group_cmp;
 
@@ -56,6 +57,14 @@ fn main() {
                 opt.json,
                 &opt.out_stub,
                 opt.quiet
+            )
+        },
+        CmdChooser::ShockCloudAll(opt) => {
+            main_execs::all_random_cloud_shocks(
+                opt.json,
+                &opt.out_stub,
+                opt.quiet,
+                opt.threads
             )
         }
     }

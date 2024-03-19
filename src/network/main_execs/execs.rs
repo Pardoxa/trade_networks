@@ -1,5 +1,4 @@
-use std::path::PathBuf;
-
+use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools;
 
 use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}};
@@ -444,7 +443,7 @@ pub fn enrich_to_bin(opt: ParseEnrichOpts){
 
 }
 
-pub fn test_chooser(in_file: PathBuf, cmd: SubCommand){
+pub fn test_chooser(in_file: Utf8PathBuf, cmd: SubCommand){
     match cmd
     {
         SubCommand::OutComp(o) => out_comparison(in_file, o),
@@ -465,7 +464,7 @@ pub fn test_chooser(in_file: PathBuf, cmd: SubCommand){
     }
 }
 
-fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
+fn calc_cor_weights(in_file: Utf8PathBuf, opt: CalcWeights)
 {
     let population = LazyEnrichmentInfos::lazy_option(opt.population_file);
     let population_year = population.as_ref()
@@ -572,7 +571,7 @@ fn calc_cor_weights(in_file: PathBuf, opt: CalcWeights)
 }
 
 fn order_trade_volume<P>(opt: OrderedTradeVolue, in_file: P)
-where P: AsRef<Path>
+where P: AsRef<Utf8Path>
 {
     let in_file = in_file.as_ref();
     let map = opt
@@ -750,7 +749,7 @@ where P: AsRef<Path>
     }
 }
 
-pub fn out_comparison(in_file: PathBuf, cmd: OutOpt){
+pub fn out_comparison(in_file: Utf8PathBuf, cmd: OutOpt){
     let networks = read_networks(in_file);
 
     let mut network = None;

@@ -1,22 +1,10 @@
 use{
-    std::{
-        collections::{BTreeMap, VecDeque}, 
-        num::NonZeroU32,
-        fs::File,
-        io::{BufReader, Write},
-        path::{
-            Path,
-            PathBuf
-        }
-    },
-    net_ensembles::Graph,
-    serde::{Serialize, Deserialize},
-    super::helper_structs::*,
-    strum::EnumString,
-    crate::{
-        misc::*,
-        config::*
-    }
+    super::helper_structs::*, crate::{
+        config::*, misc::*
+    }, camino::Utf8PathBuf, net_ensembles::Graph, serde::{Deserialize, Serialize}, std::{
+        collections::{BTreeMap, VecDeque}, fs::File, io::{BufReader, Write}, num::NonZeroU32, 
+        path::Path
+    }, strum::EnumString
 };
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, EnumString)]
@@ -119,7 +107,7 @@ pub struct GraphVizExtra{
 
 #[derive(Clone, Debug)]
 pub enum LazyNetworks{
-    Filename(PathBuf),
+    Filename(Utf8PathBuf),
     Networks(Vec<Network>, Vec<Network>)
 }
 
