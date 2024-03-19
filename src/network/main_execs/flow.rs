@@ -679,6 +679,7 @@ pub fn all_random_cloud_shocks<P>(
             |_|
             {
                 while let Some(opt) = sync_queue.pop(){
+                    sync_queue.print_remaining();
                     let folder = opt.item_code.as_deref();
                     random_cloud_shock_helper(
                         &opt, 
