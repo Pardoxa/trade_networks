@@ -693,13 +693,15 @@ where P: AsRef<Path>
                     .sum::<f64>();
                 let mut hist = HistF64::new(0.0, 1.0, opt.hist_bins.get())
                         .unwrap();
-                let mut sum = vec![0_u64; hist.bin_count()];
+                let mut sum = vec![0_u64; hist.bin_count() + 1];
                 let mut sum_sq = sum.clone();
+                let last_sum_idx = sum.len() - 1;
+                let mut last_hits = 0;
 
                 let max = top.len();
                 let delta = max as f64 / (opt.cloud_steps.get() - 1) as f64;
 
-                let maximal_target = 0.999999999 * top.len() as f64;
+                let maximal_target = top.len() as f64;
                 for i in 0..opt.cloud_steps.get(){
                     let target = (i as f64 * delta).min(maximal_target);
                     let matrix = rand_fixed_sum(
@@ -760,7 +762,14 @@ where P: AsRef<Path>
                             }
                         }
                         writeln!(buf, "{percent:e} {country_counter}").unwrap();
-                        let idx = hist.increment(percent).unwrap();
+                        let idx = match hist.increment(percent){
+                            Ok(idx) => idx,
+                            Err(_) => {
+                                assert!(target >= top.len() as f64);
+                                last_hits += 1;
+                                last_sum_idx
+                            }
+                        };
                         sum[idx] += country_counter;
                         sum_sq[idx] += country_counter * country_counter;
                     }
@@ -777,6 +786,7 @@ where P: AsRef<Path>
                 ];
                 write_slice_head(&mut hist_buf, header).unwrap();
                 let iter = hist.bin_hits_iter()
+                    .chain(std::iter::once((&[1.0, 1.0], last_hits)))
                     .zip(sum)
                     .zip(sum_sq);
 
@@ -2205,6 +2215,9 @@ where R: Rng
     let n_isize = n as isize;
     if sum <= 0.0 {
         return vec![vec![0.0;n]; m.get()];
+    } else if sum >= n as f64
+    {
+        return vec![vec![1.0; n]; m.get()];
     }
     let b_minus_a = b - a;
     let dist = Uniform::new(0.0, 1.0);
