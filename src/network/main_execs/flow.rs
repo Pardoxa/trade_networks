@@ -699,73 +699,72 @@ where P: AsRef<Path>
                 let max = top.len();
                 let delta = max as f64 / (opt.cloud_steps.get() - 1) as f64;
 
+                let maximal_target = 0.999999999 * top.len() as f64;
                 for i in 0..opt.cloud_steps.get(){
-                    let target = (i as f64 * delta).min(0.999999999);
+                    let target = (i as f64 * delta).min(maximal_target);
                     let matrix = rand_fixed_sum(
                         top.len(), 
-                        NonZeroUsize::new(2).unwrap(), 
+                        opt.cloud_m, 
                         target, 
                         0.0, 
                         1.0, 
                         &mut rng
                     );
-                    dbg!(&matrix);
-                    let test_sum: f64 = matrix[0].iter().sum();
-                    dbg!(target);
-                    dbg!(test_sum);
-                    dbg!(test_sum - target);
-                    let exports = top.iter()
-                        .zip(matrix[0].iter())
-                        .map(
-                            |(id, frac)|
-                            {
-                                ExportShockItem{
-                                    export_frac: *frac,
-                                    export_id: *id
+                    for random_export_fracs in matrix.iter(){
+                        let exports = top.iter()
+                            .zip(random_export_fracs.iter())
+                            .map(
+                                |(id, frac)|
+                                {
+                                    ExportShockItem{
+                                        export_frac: *frac,
+                                        export_id: *id
+                                    }
                                 }
+                            ).collect_vec();
+    
+                        let job = CalcShockMultiJob::new_exporter(
+                            exports, 
+                            opt.iterations, 
+                            &export_without_unconnected, 
+                            &original_imports,
+                            &original_imports_recip,
+                            &original_exports,
+                            &original_exports_recip
+                        );
+    
+                        let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
+                
+                        let remaining_export = top.iter()
+                            .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
+                            .sum::<f64>();
+                
+                        let percent = remaining_export / total_export;
+                
+                        let avail_after_shock = calc_available(
+                            &export_without_unconnected, 
+                            enrich, 
+                            &shock_result, 
+                            &node_info_map,
+                            quiet
+                        );
+                        let mut country_counter = 0;
+                        
+                        for &idx in countries_where_country_count_is_applicable.iter()
+                        {
+                            let original = no_shock[idx];
+                            let shocked = avail_after_shock[idx];
+                            let frac = shocked / original;
+                            if frac < opt.unstable_country_threshold{
+                                country_counter += 1;
                             }
-                        ).collect_vec();
-
-                    let job = CalcShockMultiJob::new_exporter(
-                        exports, 
-                        opt.iterations, 
-                        &export_without_unconnected, 
-                        &original_imports,
-                        &original_imports_recip,
-                        &original_exports,
-                        &original_exports_recip
-                    );
-
-                    let shock_result = multi_shock_distribution(&import_without_unconnected, &job);
-            
-                    let remaining_export = top.iter()
-                        .map(|&idx| job.original_exports[idx] * shock_result.export_fracs[idx])
-                        .sum::<f64>();
-            
-                    let percent = remaining_export / total_export;
-            
-                    let avail_after_shock = calc_available(
-                        &export_without_unconnected, 
-                        enrich, 
-                        &shock_result, 
-                        &node_info_map,
-                        quiet
-                    );
-                    let mut country_counter = 0;
-                    
-                    for &idx in countries_where_country_count_is_applicable.iter()
-                    {
-                        let original = no_shock[idx];
-                        let shocked = avail_after_shock[idx];
-                        let frac = shocked / original;
-                        if frac < opt.unstable_country_threshold{
-                            country_counter += 1;
                         }
+                        writeln!(buf, "{percent:e} {country_counter}").unwrap();
+                        let idx = hist.increment(percent).unwrap();
+                        sum[idx] += country_counter;
+                        sum_sq[idx] += country_counter * country_counter;
                     }
-                    writeln!(buf, "{percent:e} {country_counter}").unwrap();
-                    let idx = hist.increment(percent).unwrap();
-                    sum[idx] += country_counter;
-                    sum_sq[idx] += country_counter * country_counter;
+                    
                 }
                 let mut hist_buf = create_buf_with_command_and_version(av_name);
                 let header = [
@@ -773,20 +772,31 @@ where P: AsRef<Path>
                     "interval_right",
                     "hits",
                     "average",
-                    "variance"
+                    "variance",
+                    "average_normed"
                 ];
                 write_slice_head(&mut hist_buf, header).unwrap();
                 let iter = hist.bin_hits_iter()
                     .zip(sum)
                     .zip(sum_sq);
+
+                let mut norm = None;
                 
                 for (((interval, hits), sum), sum_sq) in iter {
                     let average = sum as f64 / hits as f64;
                     let av_2 = sum_sq as f64 / hits as f64;
                     let var = av_2 - average * average;
+
+                    let normed = match norm{
+                        None => {
+                            norm = Some(average);
+                            1.0
+                        },
+                        Some(n) => average / n
+                    };
                     writeln!(
                         hist_buf,
-                        "{} {} {hits} {average:e} {var:e}",
+                        "{} {} {hits} {average:e} {var:e} {normed:e}",
                         interval[0],
                         interval[1]
                     ).unwrap();

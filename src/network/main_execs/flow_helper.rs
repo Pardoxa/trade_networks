@@ -222,6 +222,9 @@ pub struct ShockCloud
     #[derivative(Default(value="NonZeroUsize::new(1000).unwrap()"))]
     pub cloud_steps: NonZeroUsize,
 
+    #[derivative(Default(value="NonZeroUsize::new(5).unwrap()"))]
+    pub cloud_m: NonZeroUsize,
+
     pub seed: u64,
 
     pub reducing_factor: f64,
