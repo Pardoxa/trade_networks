@@ -69,6 +69,9 @@ fn main() {
         },
         CmdChooser::ShockCloudCmpYears(opt) => {
             main_execs::match_maker::make_matches(&opt)
+        },
+        CmdChooser::ShockCloudCalcAverages(opt) => {
+            main_execs::match_maker::calc_averages(opt)
         }
     }
 }

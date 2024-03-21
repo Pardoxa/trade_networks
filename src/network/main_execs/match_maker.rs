@@ -104,6 +104,8 @@ pub enum MatchHelper{
     Skip
 }
 
+
+
 impl Matched{
     fn work(&self, how: MatchHelper)
     {
@@ -146,16 +148,6 @@ impl Matched{
         let old_iter = open_as_unwrapped_lines_filter_comments(&self.old.path);
         let new_iter = open_as_unwrapped_lines_filter_comments(&self.new.path);
 
-        let get_vals = |line: &str| -> (f64, f64)
-        {
-            let mut iter = line.split_ascii_whitespace()
-                .map(|s| s.parse::<f64>().unwrap());
-            let left = iter.next().unwrap();
-            let right = iter.next().unwrap();
-            let normed_average = iter.last().unwrap();
-            ((left + right) * 0.5, normed_average)
-        };
-
         for (old, new) in old_iter.zip(new_iter)
         {
             let (o_mid, o_normed) = get_vals(&old);
@@ -172,4 +164,119 @@ impl Matched{
             ).unwrap();
         }
     } 
+}
+
+#[derive(Parser)]
+pub struct MatchCalcAverage{
+    /// Glob to files to compare
+    glob: String,
+
+    /// Output path
+    out: Utf8PathBuf,
+
+    /// which mode?
+    #[arg(short, long)]
+    mode: Mode,
+
+    #[arg(long, value_enum, default_value_t)]
+    /// Sum normal or just the absolute?
+    how: AverageCalcOpt
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy, Default)]
+pub enum AverageCalcOpt{
+    Abs,
+    #[default]
+    Normal
+}
+
+fn get_vals(line: &str) -> (f64, f64)
+{
+    let mut iter = line.split_ascii_whitespace()
+        .map(|s| s.parse::<f64>().unwrap());
+    let left = iter.next().unwrap();
+    let right = iter.next().unwrap();
+    let normed_average = iter.last().unwrap();
+    ((left + right) * 0.5, normed_average)
+}
+
+pub fn processed_get_vals(line: &str) -> (f64, f64)
+{
+    line.split_ascii_whitespace()
+        .map(|s| s.parse::<f64>().unwrap())
+        .collect_tuple()
+        .unwrap()
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy)]
+pub enum Mode{
+    /// output of shock-cloud-all
+    Raw,
+    /// output of shock-cloud-cmp-years
+    Processed
+}
+
+pub fn calc_averages(opt: MatchCalcAverage)
+{
+    let fun = match opt.mode{
+        Mode::Processed => {
+            processed_get_vals
+        },
+        Mode::Raw => {
+            get_vals
+        }
+    };
+    let mut iter = utf8_path_iter(&opt.glob);
+    let first = iter.next().unwrap();
+    println!("reading {first}");
+    let (mid_vec, mut sum): (Vec<_>, Vec<_>) = open_as_unwrapped_lines_filter_comments(first)
+        .map(
+            |line|
+            {
+                fun(&line)
+            }
+        ).unzip();
+    let mut count = 1_u32;
+
+    for path in iter{
+        println!("Reading {path}");
+        count += 1;
+        open_as_unwrapped_lines_filter_comments(path)
+        .map(
+            |line|
+            {
+                fun(&line)
+            }
+        ).enumerate()
+        .for_each(
+            |(idx, (mid, val))|
+            {
+                assert_eq!(
+                    mid,
+                    mid_vec[idx],
+                    "Mids need to match!"
+                );
+                if val.is_nan(){
+                    println!("NAN!");
+                }
+                sum[idx] += match opt.how{
+                    AverageCalcOpt::Normal => val,
+                    AverageCalcOpt::Abs => val.abs()
+                };
+            }
+        )
+    }
+    let header = [
+        "mid",
+        "average"
+    ];
+    let mut buf = create_buf_with_command_and_version_and_header(opt.out, header);
+    for (mid, mut sum) in mid_vec.iter().zip(sum)
+    {
+        sum /= count as f64;
+        writeln!(
+            buf,
+            "{mid} {sum}"
+        ).unwrap();
+    }
 }
