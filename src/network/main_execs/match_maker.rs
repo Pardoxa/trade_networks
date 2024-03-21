@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools;
+use ordered_float::OrderedFloat;
 use crate::misc::*;
 use regex::Regex;
 use clap::{Parser, ValueEnum};
@@ -229,18 +230,21 @@ pub fn calc_averages(opt: MatchCalcAverage)
     let mut iter = utf8_path_iter(&opt.glob);
     let first = iter.next().unwrap();
     println!("reading {first}");
-    let (mid_vec, mut sum): (Vec<_>, Vec<_>) = open_as_unwrapped_lines_filter_comments(first)
+    let (mid_vec, mut sum): (Vec<_>, Vec<Vec<_>>) = open_as_unwrapped_lines_filter_comments(first)
         .map(
             |line|
             {
-                fun(&line)
+                let (mid, val) = fun(&line);
+                let val = match opt.how{
+                    AverageCalcOpt::Abs => val.abs(),
+                    AverageCalcOpt::Normal => val
+                };
+                (mid, vec![val])
             }
         ).unzip();
-    let mut count = 1_u32;
 
     for path in iter{
         println!("Reading {path}");
-        count += 1;
         open_as_unwrapped_lines_filter_comments(path)
         .map(
             |line|
@@ -259,24 +263,29 @@ pub fn calc_averages(opt: MatchCalcAverage)
                 if val.is_nan(){
                     println!("NAN!");
                 }
-                sum[idx] += match opt.how{
-                    AverageCalcOpt::Normal => val,
-                    AverageCalcOpt::Abs => val.abs()
-                };
+                sum[idx].push(
+                    match opt.how{
+                        AverageCalcOpt::Normal => val,
+                        AverageCalcOpt::Abs => val.abs()
+                    }
+                );
             }
         )
     }
     let header = [
         "mid",
-        "average"
+        "average",
+        "median"
     ];
     let mut buf = create_buf_with_command_and_version_and_header(opt.out, header);
     for (mid, mut sum) in mid_vec.iter().zip(sum)
     {
-        sum /= count as f64;
+        sum.sort_unstable_by_key(|v| OrderedFloat(*v));
+        let median = sum[sum.len() / 2];
+        let average = sum.iter().sum::<f64>() / sum.len() as f64;
         writeln!(
             buf,
-            "{mid} {sum}"
+            "{mid} {average} {median}"
         ).unwrap();
     }
 }
