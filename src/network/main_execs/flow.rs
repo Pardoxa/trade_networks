@@ -597,24 +597,12 @@ fn get_files(glob: &str) -> BTreeMap<usize, Utf8PathBuf>
     let expr = r"\d+";
     let re = regex::Regex::new(expr)
         .unwrap();
-    glob::glob(glob)
-        .unwrap()
-        .map(Result::unwrap)
+    utf8_path_iter(glob)
         .map(
-            |path|
+            |utf8path|
             {
-                let utf8path = Utf8PathBuf::from_path_buf(path).unwrap();
                 let s = utf8path.as_str();
-                let number: usize = match re.find(s){
-                    None => {
-                        panic!("Cannot find label in globbed file {s:?}")
-                    },
-                    Some(m) =>
-                    {
-                        let number = &s[m.start()..m.end()];
-                        number.parse().unwrap()
-                    }
-                };
+                let number: usize = regex_first_match_parsed(&re, s);
                 (number, utf8path)
             }
         ).collect()

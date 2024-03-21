@@ -66,6 +66,9 @@ fn main() {
                 opt.quiet,
                 opt.threads
             )
+        },
+        CmdChooser::ShockCloudCmpYears(opt) => {
+            main_execs::match_maker::make_matches(&opt)
         }
     }
 }

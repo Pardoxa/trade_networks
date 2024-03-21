@@ -1,6 +1,9 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::io::{Write, BufWriter, BufReader, BufRead, stdin};
+use std::str::FromStr;
+use camino::Utf8PathBuf;
 use fs_err::File;
+use regex::Regex;
 use std::path::Path;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Serialize, de::DeserializeOwned};
@@ -225,4 +228,32 @@ where P: AsRef<Path>,
             opt  
         }
     }
+}
+
+pub fn utf8_path_iter(globbing: &str) -> impl Iterator<Item = Utf8PathBuf>
+{
+    glob::glob(globbing)
+        .unwrap()
+        .map(Result::unwrap)
+        .map(|p| Utf8PathBuf::from_path_buf(p).unwrap())
+}
+
+pub fn regex_first_match<'a>(re: &Regex, s: &'a str) -> &'a str
+{
+    match re.find(s){
+        None => {
+            panic!("Cannot find label in globbed file {s:?}")
+        },
+        Some(m) =>
+        {
+            &s[m.start()..m.end()]
+        }
+    }
+}
+
+pub fn regex_first_match_parsed<T>(re: &Regex, s: &str) -> T
+where T: FromStr,
+ <T as std::str::FromStr>::Err: Debug
+{
+    regex_first_match(re, s).parse().unwrap()
 }

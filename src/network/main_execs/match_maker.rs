@@ -1,0 +1,175 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::io::Write;
+use camino::{Utf8Path, Utf8PathBuf};
+use itertools::Itertools;
+use crate::misc::*;
+use regex::Regex;
+use clap::{Parser, ValueEnum};
+use rayon::prelude::*;
+
+pub fn make_matches(opt: &MatchMakerOpts)
+{
+    create_matches(opt)
+        .into_par_iter()
+        .for_each(
+            |m|
+            {
+                m.work(opt.how)
+            }
+        );
+}
+
+
+#[derive(Parser)]
+pub struct MatchMakerOpts{
+    /// Glob to files representing the older year
+    old_glob: String,
+    /// Glob to files representing the newer year
+    new_glob: String,
+    /// What to do if matching files are in different dirs?
+    #[arg(long, value_enum, default_value_t = MatchHelper::Skip)]
+    how: MatchHelper
+}
+
+fn create_matches_helper(glob: &str) -> BTreeMap<u16, MatchItem>
+{
+    let expr = r"\d+";
+    let re = Regex::new(expr).unwrap();
+
+    utf8_path_iter(glob)
+        .map(
+            |p|
+            {
+                let file = p.file_name().unwrap();
+                let year: u16 = regex_first_match_parsed(&re, file);
+                let canon = p.canonicalize_utf8().unwrap();
+                let parent = canon.parent().unwrap();
+                let dir = parent.components()
+                    .last()
+                    .unwrap()
+                    .as_str();
+                let item_code: u16 = regex_first_match_parsed(&re, dir);
+                let matched = MatchItem{
+                    year,
+                    path: p
+                };
+                (item_code, matched)
+            }
+        ).collect()
+}
+
+pub fn create_matches(opt: &MatchMakerOpts) -> Vec<Matched>
+{
+    let mut old_matches = create_matches_helper(&opt.old_glob);
+    let mut new_matches = create_matches_helper(&opt.new_glob);
+    let items_old: BTreeSet<_> = old_matches.keys().copied().collect();
+    let new_items: BTreeSet<u16> = new_matches.keys().copied().collect();
+
+    items_old.intersection(&new_items)
+        .map(
+            |key|
+            {
+                let old = old_matches.remove(key).unwrap();
+                let new = new_matches.remove(key).unwrap();
+                Matched{
+                    old,
+                    new,
+                    item: *key
+                }
+            }
+        ).collect_vec()
+}
+
+#[derive(Debug)]
+pub struct MatchItem{
+    year: u16,
+    path: Utf8PathBuf
+}
+
+#[derive(Debug)]
+pub struct Matched{
+    old: MatchItem,
+    new: MatchItem,
+    item: u16
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+/// What to do when dirs don't match?
+pub enum MatchHelper{
+    /// Put output in dir of old file
+    Old,
+    /// Put output in dir of new file
+    New,
+    /// Skip if dir of old != dir of new
+    Skip
+}
+
+impl Matched{
+    fn work(&self, how: MatchHelper)
+    {
+        let get_parent = |path: &Utf8Path|
+        {
+            path.canonicalize_utf8()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_owned()
+        };
+        let mut result_path = match how{
+            MatchHelper::New => {
+                get_parent(&self.new.path)
+            },
+            MatchHelper::Old => {
+                get_parent(&self.old.path)
+            },
+            MatchHelper::Skip => {
+                let old_parent = get_parent(&self.old.path);
+                let new_parent = get_parent(&self.new.path);
+                if old_parent != new_parent {
+                    println!("SKIPPING: {self:?}");
+                    return;
+                }
+                old_parent
+            }
+        };
+        result_path.push(
+            format!("Item{}_{}_vs_{}.dat", self.item, self.old.year, self.new.year)
+        );
+        let header = [
+            "total_export_fraction".to_owned(),
+            format!("Y{}-Y{}", self.new.year, self.old.year)
+        ];
+        let mut buf = create_buf_with_command_and_version_and_header(
+            result_path, 
+            header
+        );
+        let old_iter = open_as_unwrapped_lines_filter_comments(&self.old.path);
+        let new_iter = open_as_unwrapped_lines_filter_comments(&self.new.path);
+
+        let get_vals = |line: &str| -> (f64, f64)
+        {
+            let mut iter = line.split_ascii_whitespace()
+                .map(|s| s.parse::<f64>().unwrap());
+            let left = iter.next().unwrap();
+            let right = iter.next().unwrap();
+            let normed_average = iter.last().unwrap();
+            ((left + right) * 0.5, normed_average)
+        };
+
+        for (old, new) in old_iter.zip(new_iter)
+        {
+            let (o_mid, o_normed) = get_vals(&old);
+            let (n_mid, n_normed) = get_vals(&new);
+            assert_eq!(
+                o_mid, 
+                n_mid,
+                "Histograms don't match?"
+            );
+            writeln!(
+                buf,
+                "{o_mid} {}",
+                n_normed - o_normed
+            ).unwrap();
+        }
+    } 
+}
