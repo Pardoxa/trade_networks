@@ -5,7 +5,7 @@ use derivative::Derivative;
 use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
-    match_maker::{MatchCalcAverage, MatchMakerOpts}, misc::{create_buf, create_buf_with_command_and_version}, network::{enriched_digraph::*, main_execs::{ExportRestrictionType, Relative}, Direction, Network}, CorrelationInput, CorrelationMeasurement, WeightFun
+    match_maker::{MatchCalcAverage, MatchMakerOpts}, misc::{create_buf, create_buf_with_command_and_version}, network::{self, enriched_digraph::*, main_execs::{ExportRestrictionType, Relative}, Direction, Network}, CorrelationInput, CorrelationMeasurement, WeightFun
 };
 use serde::{Serialize, Deserialize};
 use camino::Utf8PathBuf;
@@ -187,7 +187,8 @@ pub enum CmdChooser{
     ShockCloudAll(ShockCloudAllCmdOpt),
     /// Compare averages of different years
     ShockCloudCmpYears(MatchMakerOpts),
-    ShockCloudCalcAverages(MatchCalcAverage)
+    ShockCloudCalcAverages(MatchCalcAverage),
+    ShockCloudDispersion(network::main_execs::av_analyzer::AnalyzerOpts)
 }
 
 #[derive(Debug, Clone, Parser)]

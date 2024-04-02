@@ -72,6 +72,9 @@ fn main() {
         },
         CmdChooser::ShockCloudCalcAverages(opt) => {
             main_execs::match_maker::calc_averages(opt)
+        },
+        CmdChooser::ShockCloudDispersion(opt) => {
+            main_execs::av_analyzer::analyze(opt)
         }
     }
 }
