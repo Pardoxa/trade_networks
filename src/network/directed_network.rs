@@ -67,7 +67,11 @@ impl Node {
     pub fn print_infos(&self, network: &Network)
     {
         let idx = network.get_index(&self.identifier).unwrap();
-        print!("Node: id: {} idx: {idx} [", self.identifier);
+        let list_len = self.adj.len();
+        print!(
+            "Node: id: {} idx: {idx} list_len: {list_len} [", 
+            self.identifier
+        );
         for edge in &self.adj{
             let other_id = &network.nodes[edge.index].identifier;
             print!(
@@ -80,7 +84,6 @@ impl Node {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Edge{
     pub index: usize,
