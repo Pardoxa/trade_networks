@@ -407,7 +407,15 @@ pub struct FilterOpts
 #[derive(Parser, Debug)]
 pub struct OnlyNetworks{
     /// Networks file
-    pub in_file: Utf8PathBuf
+    pub in_file: Utf8PathBuf,
+
+    /// Year of which infos should be printed
+    #[arg(short, long)]
+    pub year: Option<i32>,
+
+    #[arg(short, long)]
+    /// Print trade amount for top X
+    pub top: Option<NonZeroU32>
 }
 
 

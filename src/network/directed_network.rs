@@ -63,6 +63,21 @@ impl Node {
     {
         self.adj.iter().map(|edge| edge.amount).sum()
     }
+
+    pub fn print_infos(&self, network: &Network)
+    {
+        let idx = network.get_index(&self.identifier).unwrap();
+        print!("Node: id: {} idx: {idx} [", self.identifier);
+        for edge in &self.adj{
+            let other_id = &network.nodes[edge.index].identifier;
+            print!(
+                "(idx: {}, id: {other_id}, amount: {})",
+                edge.index,
+                edge.amount
+            );
+        }
+        print!("]");
+    }
 }
 
 #[allow(dead_code)]
@@ -434,7 +449,9 @@ impl Network{
                             .for_each(
                                 |edge|
                                 {
-                                    list_of_connected[edge.index] = true;
+                                    if edge.amount > 0.0{
+                                        list_of_connected[edge.index] = true;
+                                    }
                                 }
                             )
                     }

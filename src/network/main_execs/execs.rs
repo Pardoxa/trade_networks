@@ -1,6 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools;
-
+use ordered_float::OrderedFloat;
 use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}};
 use fs_err::File;
 use {
@@ -9,7 +9,9 @@ use {
         collections::{BTreeSet, BTreeMap}, 
         fmt::Display,
         f64::consts::TAU,
-        path::Path
+        path::Path,
+        num::*,
+        cmp::Reverse
     },
     crate::network::{*, helper_structs::*},
     crate::{config::*, misc::*, parser},
@@ -1317,7 +1319,7 @@ pub fn to_three_sets(file: &str, border_low: f64, border_high: f64) -> ThreeSets
 
 pub fn print_network_info(opt: OnlyNetworks)
 {
-    fn print_info(n: &Network)
+    fn print_info(n: &Network, top: Option<NonZeroU32>)
     {
         let without_unconnected = n.without_unconnected_nodes();
         println!(
@@ -1328,15 +1330,51 @@ pub fn print_network_info(opt: OnlyNetworks)
             n.direction,
             without_unconnected.node_count()
         );
+        if let Some(t) = top{
+            let mut list = without_unconnected
+                .nodes
+                .iter()
+                .map(
+                    |n|
+                    {
+                        (
+                            OrderedFloat(n.trade_amount()),
+                            &n.identifier
+                        )
+
+                    }
+                ).collect_vec();
+            list.sort_unstable_by_key(|item| Reverse(item.0));
+            for (trade, id) in list.iter().take(t.get() as usize){
+                let idx = without_unconnected.get_index(id).unwrap();
+                let node = &without_unconnected.nodes[idx];
+                print!(
+                    "ID: {id}, trade_amount: {trade} "
+                );
+                node.print_infos(&without_unconnected);
+                println!();
+            }
+        }
+        
     }
 
     let mut networks = LazyNetworks::Filename(opt.in_file);
     networks.assure_availability();
-    let export = networks.export_networks_unchecked();
     println!("Export:");
-    export.iter().for_each(print_info);
+    if let Some(y) = opt.year{
+        let network = networks.get_export_network_unchecked(y);
+        print_info(network, opt.top);
+    } else {
+        let export = networks.export_networks_unchecked();
+        export.iter().for_each(|e| print_info(e, opt.top));
+    }
 
-    let import = networks.import_networks_unchecked();
     println!("Import:");
-    import.iter().for_each(print_info);
+    if let Some(y) = opt.year{
+        let network = networks.get_import_network_unchecked(y);
+        print_info(network, opt.top);
+    } else {
+        let import = networks.import_networks_unchecked();
+        import.iter().for_each(|i| print_info(i, opt.top));
+    }
 }
