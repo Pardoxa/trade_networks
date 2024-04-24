@@ -1,4 +1,4 @@
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use clap::Parser;
 use ordered_float::OrderedFloat;
 use regex::Regex;
@@ -136,13 +136,34 @@ impl Data{
 
 pub fn create_shadow_plots(opt: ShockCloudShadoOpt)
 {
+    let mut all_file = create_gnuplot_buf("all_disp_test.gp");
+    writeln!(
+        all_file,
+        "set t pdfcairo"
+    ).unwrap();
+    writeln!(
+        all_file,
+        "set output 'test_all_disp.pdf'"
+    ).unwrap();
+    write!(
+        all_file,
+        "p "
+    ).unwrap();
     utf8_path_iter(&opt.glob)
-        .for_each(
-            create_shadow_plots_helper
+        .for_each(|file|
+            {
+                let average_at_0 = create_shadow_plots_helper(&file);
+                write!(
+                    all_file,
+                    "'{file}' u 1:((sqrt($5)/({average_at_0}*$6))) w lp, "
+                ).unwrap();
+            }
         );
+    drop(all_file);
 }
 
-pub fn create_shadow_plots_helper(file: Utf8PathBuf){
+pub fn create_shadow_plots_helper(file: &Utf8Path) -> f64
+{
     let file_name = file.file_name().unwrap();
     let first_line = open_as_unwrapped_lines_filter_comments(&file).next().unwrap();
     let mut iter = first_line.split_ascii_whitespace();
@@ -211,5 +232,6 @@ pub fn create_shadow_plots_helper(file: Utf8PathBuf){
     std::env::set_current_dir(gp_dir).unwrap();
     exec_gnuplot(gp_file_name);
     std::env::set_current_dir(current_dir).unwrap();
+    average_at_0
 
 }
