@@ -1,10 +1,10 @@
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use ordered_float::OrderedFloat;
 use regex::Regex;
 use std::io::Write;
 
-use crate::misc::*;
+use crate::{config::ShockCloudShadoOpt, misc::*};
 
 #[derive(Parser)]
 pub struct AnalyzerOpts{
@@ -132,4 +132,84 @@ impl Data{
             export_fraction: export_frac
         }
     }
+}
+
+pub fn create_shadow_plots(opt: ShockCloudShadoOpt)
+{
+    utf8_path_iter(&opt.glob)
+        .for_each(
+            create_shadow_plots_helper
+        );
+}
+
+pub fn create_shadow_plots_helper(file: Utf8PathBuf){
+    let file_name = file.file_name().unwrap();
+    let first_line = open_as_unwrapped_lines_filter_comments(&file).next().unwrap();
+    let mut iter = first_line.split_ascii_whitespace();
+    let first: f64 = iter.next().unwrap().parse().unwrap();
+    assert_eq!(
+        first,
+        0.0,
+        "first is not 0… Cannot create plot"
+    );
+    let name = file.file_stem().unwrap();
+    let gp_name = format!("{name}_shadow_plot.gp");
+    let pdf_name = format!("{name}_shadow_plot.pdf");
+    let pdf_name2 = format!("{name}_disp_plot.pdf");
+
+    let average_at_0: f64 = iter.nth(2).unwrap().parse().unwrap();
+    let gp_file_path = file.with_file_name(gp_name);
+
+    let mut gp_buf = create_gnuplot_buf(&gp_file_path);
+    writeln!(
+        gp_buf,
+        "set t pdfcairo"
+    ).unwrap();
+    writeln!(
+        gp_buf, "set output '{pdf_name}'"
+    ).unwrap();
+
+    writeln!(
+        gp_buf,
+        "set xlabel 'export fraction'"
+    ).unwrap();
+    writeln!(
+        gp_buf,
+        "set ylabel 'normed fragile country count'"
+    ).unwrap();
+
+    writeln!(
+        gp_buf,
+        "p '{file_name}' u 1:($6+$6*(sqrt($5)/({average_at_0}*$6))) w lp, \"\" u 1:($6-$6*(sqrt($5)/({average_at_0}*$6))) w lp, \"\" u 1:6"
+    ).unwrap();
+    writeln!(
+        gp_buf,
+        "set output"
+    ).unwrap();
+
+    writeln!(
+        gp_buf,
+        "set output '{pdf_name2}'"
+    ).unwrap();
+    writeln!(
+        gp_buf,
+        "set ylabel 'dispersion'"
+    ).unwrap();
+    writeln!(
+        gp_buf,
+        "p '{file_name}' u 1:((sqrt($5)/({average_at_0}*$6))) w lp"
+    ).unwrap();
+    writeln!(
+        gp_buf,
+        "set output"
+    ).unwrap();
+
+    drop(gp_buf);
+    let current_dir = std::env::current_dir().unwrap();
+    let gp_dir = gp_file_path.canonicalize_utf8().unwrap().parent().unwrap().to_owned();
+    let gp_file_name = gp_file_path.file_name().unwrap();
+    std::env::set_current_dir(gp_dir).unwrap();
+    exec_gnuplot(gp_file_name);
+    std::env::set_current_dir(current_dir).unwrap();
+
 }

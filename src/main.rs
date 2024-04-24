@@ -75,6 +75,9 @@ fn main() {
         },
         CmdChooser::ShockCloudDispersion(opt) => {
             main_execs::av_analyzer::analyze(opt)
+        },
+        CmdChooser::ShockCloudShadow(opt) => {
+            main_execs::av_analyzer::create_shadow_plots(opt)
         }
     }
 }

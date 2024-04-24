@@ -188,7 +188,15 @@ pub enum CmdChooser{
     /// Compare averages of different years
     ShockCloudCmpYears(MatchMakerOpts),
     ShockCloudCalcAverages(MatchCalcAverage),
-    ShockCloudDispersion(network::main_execs::av_analyzer::AnalyzerOpts)
+    ShockCloudDispersion(network::main_execs::av_analyzer::AnalyzerOpts),
+    /// Create shadow plot
+    ShockCloudShadow(ShockCloudShadoOpt)
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct ShockCloudShadoOpt{
+    /// Glob of average files
+    pub glob: String,
 }
 
 #[derive(Debug, Clone, Parser)]
