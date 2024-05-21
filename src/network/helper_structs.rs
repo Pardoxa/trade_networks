@@ -56,14 +56,7 @@ pub enum DikstraState{
     From(usize)
 }
 
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReducedNode{
     pub id: String
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct DirectedEdge{
-    pub from: usize,
-    pub to: usize
 }
