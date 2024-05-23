@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 use std::io::{Write, BufWriter, BufReader, BufRead, stdin};
 use std::str::FromStr;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fs_err::File;
 use regex::Regex;
 use std::path::Path;
@@ -256,4 +256,13 @@ where T: FromStr,
  <T as std::str::FromStr>::Err: Debug
 {
     regex_first_match(re, s).parse().unwrap()
+}
+
+pub fn get_owned_parent_path(path: &Utf8Path) -> Utf8PathBuf
+{
+    path.canonicalize_utf8()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_owned()
 }

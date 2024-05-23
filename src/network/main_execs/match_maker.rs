@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use crate::misc::*;
@@ -110,24 +110,16 @@ pub enum MatchHelper{
 impl Matched{
     fn work(&self, how: MatchHelper)
     {
-        let get_parent = |path: &Utf8Path|
-        {
-            path.canonicalize_utf8()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .to_owned()
-        };
         let mut result_path = match how{
             MatchHelper::New => {
-                get_parent(&self.new.path)
+                get_owned_parent_path(&self.new.path)
             },
             MatchHelper::Old => {
-                get_parent(&self.old.path)
+                get_owned_parent_path(&self.old.path)
             },
             MatchHelper::Skip => {
-                let old_parent = get_parent(&self.old.path);
-                let new_parent = get_parent(&self.new.path);
+                let old_parent = get_owned_parent_path(&self.old.path);
+                let new_parent = get_owned_parent_path(&self.new.path);
                 if old_parent != new_parent {
                     println!("SKIPPING: {self:?}");
                     return;

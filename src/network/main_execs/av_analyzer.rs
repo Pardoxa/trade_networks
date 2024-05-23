@@ -227,7 +227,7 @@ pub fn create_shadow_plots_helper(file: &Utf8Path) -> f64
 
     drop(gp_buf);
     let current_dir = std::env::current_dir().unwrap();
-    let gp_dir = gp_file_path.canonicalize_utf8().unwrap().parent().unwrap().to_owned();
+    let gp_dir = get_owned_parent_path(&gp_file_path);
     let gp_file_name = gp_file_path.file_name().unwrap();
     std::env::set_current_dir(gp_dir).unwrap();
     exec_gnuplot(gp_file_name);
