@@ -169,9 +169,9 @@ impl LazyNetworks{
                 }
             }
         } else {
-            panic!("{AVAILABILITY_ERR}")
+            panic!("{AVAILABILITY_ERR}: year {year}")
         }
-        panic!("{YEAR_ERR}")
+        panic!("{YEAR_ERR}: year {year}")
     }
 
     pub fn get_import_network_unchecked(&self, year: i32) -> &Network
