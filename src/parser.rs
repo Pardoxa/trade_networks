@@ -535,7 +535,13 @@ pub fn parse_all_networks(
     let line_len = map.len();
     let line_iter = lines
         .map(|line| {
-            let line = line.unwrap();
+            let line = match line {
+                Ok(line) => line,
+                Err(e) => {
+                    dbg!(e);
+                    panic!()
+                }
+            };
             let line_v = line_to_vec(&line);
             assert_eq!(line_v.len(), line_len);
             line_v
