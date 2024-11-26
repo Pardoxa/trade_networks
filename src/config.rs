@@ -5,7 +5,7 @@ use derivative::Derivative;
 use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
-    match_maker::{MatchCalcAverage, MatchMakerOpts}, misc::{create_buf, create_buf_with_command_and_version}, network::{self, enriched_digraph::*, main_execs::{ExportRestrictionType, Relative}, Direction, Network}, CorrelationInput, CorrelationMeasurement, WeightFun
+    match_maker::{MatchCalcAverage, MatchMakerOpts}, misc::{create_buf, create_buf_with_command_and_version}, network::{self, enriched_digraph::*, main_execs::{ExportRestrictionType, Relative}, Direction, Network}, sort_year_cmps, CorrelationInput, CorrelationMeasurement, WeightFun
 };
 use serde::{Serialize, Deserialize};
 use camino::Utf8PathBuf;
@@ -190,7 +190,9 @@ pub enum CmdChooser{
     ShockCloudCalcAverages(MatchCalcAverage),
     ShockCloudDispersion(network::main_execs::av_analyzer::AnalyzerOpts),
     /// Create shadow plot
-    ShockCloudShadow(ShockCloudShadoOpt)
+    ShockCloudShadow(ShockCloudShadoOpt),
+    /// Compare years with one another. You need to be in a folder with subfolders where each subfolder represents an item
+    SortYearComp(sort_year_cmps::Comparison)
 }
 
 #[derive(Debug, Clone, Parser)]

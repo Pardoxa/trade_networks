@@ -14,7 +14,7 @@ pub use other_exec::*;
 mod correlation_coef;
 pub use correlation_coef::*;
 mod sync_queue;
-
+mod sort_year_cmps;
 mod group_cmp;
 
 fn main() {
@@ -78,6 +78,9 @@ fn main() {
         },
         CmdChooser::ShockCloudShadow(opt) => {
             main_execs::av_analyzer::create_shadow_plots(opt)
+        },
+        CmdChooser::SortYearComp(comp) => {
+            sort_year_cmps::sorting_stuff(comp);
         }
     }
 }
