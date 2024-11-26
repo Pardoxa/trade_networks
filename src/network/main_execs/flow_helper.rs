@@ -283,5 +283,8 @@ pub struct ShockCloudAll
     pub reducing_factor: f64,
 
     #[derivative(Default(value="NonZeroUsize::new(100).unwrap()"))]
-    pub hist_bins: NonZeroUsize
+    pub hist_bins: NonZeroUsize,
+
+    /// FIle to map ids to countries
+    pub id_file: Option<String>
 }

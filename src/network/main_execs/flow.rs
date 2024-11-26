@@ -18,7 +18,7 @@ use{
             Deref, 
             RangeInclusive
         }, 
-        path::Path
+        path::Path, sync::Mutex
     }
 };
 
@@ -659,6 +659,8 @@ pub fn all_random_cloud_shocks<P>(
         }
         
     }
+    
+    let issues = Mutex::new(Vec::new());
 
     let sync_queue = sync_queue::SyncQueue::new(job_opts);
     (0..threads.get())
@@ -669,15 +671,55 @@ pub fn all_random_cloud_shocks<P>(
                 while let Some(opt) = sync_queue.pop(){
                     sync_queue.print_remaining();
                     let folder = opt.item_code.as_deref();
-                    random_cloud_shock_helper(
+                    let result = random_cloud_shock_helper(
                         &opt, 
                         out_stub, 
                         quiet,
                         folder
                     );
+                    if let Err(info) = result {
+                        let mut lock = issues.lock()
+                            .unwrap();
+                        lock.push(info);
+                        drop(lock);
+                    }
                 }
             }
-        )
+        );
+
+    let issues = issues.into_inner().unwrap();
+    dbg!(&issues);
+    if !issues.is_empty(){
+        let id_map = opt.id_file.map(crate::parser::id_map);
+        
+        let error_log_name = format!("{out_stub}_shock_cloud_error.log");
+        let mut buf = create_buf_with_command_and_version(error_log_name);
+        for missing in issues{
+
+            if let (Some(map), Some(id)) = (&id_map, &missing.item_id){
+                let name = map.get(id);
+                writeln!(
+                    buf,
+                    "{:?} {} {:?} {:?}",
+                    missing.item_id,
+                    missing.year,
+                    missing.why,
+                    name
+                ).unwrap();
+            } else {
+                writeln!(
+                    buf,
+                    "{:?} {} {:?}",
+                    missing.item_id,
+                    missing.year,
+                    missing.why
+                ).unwrap(); 
+            }
+
+
+        }
+    }
+    
 }
 
 pub fn random_cloud_shock<P>(
@@ -696,12 +738,26 @@ where P: AsRef<Path>
     );
 }
 
+#[derive(Debug)]
+pub enum Reason{
+    Production,
+    Network
+}
+
+#[derive(Debug)]
+pub struct MissingInfo{
+    pub item_id: Option<String>,
+    pub year: i32,
+    pub why: Reason
+
+}
+
 pub fn random_cloud_shock_helper(
     opt: &ShockCloud, 
     out_stub: &str,
     quiet: bool,
     folder: Option<&str>,
-)
+) -> Result<(), MissingInfo>
 {
 
     let mut lazy_networks = LazyNetworks::Filename(opt.network_file.clone());
@@ -728,8 +784,14 @@ pub fn random_cloud_shock_helper(
             }
         }
         if !any{
-            println!("Missing production in file {} - SKIPPING ITEM", opt.enrich_file);
-            return;
+            println!("Missing production in file {} - for year {year}: SKIPPING ITEM", opt.enrich_file);
+            return Err(
+                MissingInfo{
+                    item_id: opt.item_code.clone(),
+                    year,
+                    why: Reason::Production
+                }
+            );
         }
     }
 
@@ -739,8 +801,14 @@ pub fn random_cloud_shock_helper(
             .without_unconnected_nodes();
         if network.node_count() < opt.top
         {
-            println!("Empty network in file {} - SKIPPING ITEM", opt.network_file);
-            return;
+            println!("Empty network in file {} for year {year} - SKIPPING ITEM", opt.network_file);
+            return Err(
+                MissingInfo{
+                    item_id: opt.item_code.clone(),
+                    year,
+                    why: Reason::Network
+                }
+            );
         }
     }
 
@@ -956,6 +1024,7 @@ pub fn random_cloud_shock_helper(
                 }
             }
         );
+    Ok(())
 }
  
 pub fn measure_multi_shock<P>(

@@ -906,6 +906,25 @@ where P: AsRef<Path>
 
 }
 
+pub fn id_map<P>(code_file: P) -> BTreeMap<String, String>
+where P: AsRef<Path>
+{
+    let lines = open_as_unwrapped_lines(code_file)
+        .skip(1);
+
+    let mut code_id_map: BTreeMap<_,_> = BTreeMap::new();
+
+    for line in lines {
+        let mut s_iter = LineIter{line: &line};
+        let code = s_iter.next().unwrap();
+        let name = s_iter.nth(1).unwrap();
+
+        code_id_map.insert(code.to_owned(), name.to_owned());
+    }
+    code_id_map
+
+}
+
 
 
 #[cfg(test)]
