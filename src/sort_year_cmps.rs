@@ -83,6 +83,8 @@ pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
             }
         ).collect_vec();
 
+    list.retain(|item| item.1 != 0.0);
+
     list.sort_unstable_by_key(|tuple| tuple.1);
     if opt.reverse{
         list.reverse();
@@ -173,6 +175,7 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
         ).collect();
 
     let name = format!("From_{}_to_{}_{:?}_cmp.dat", opt.start_year, opt.end_year, opt.how);
+    let name2 = format!("From_{}_to_{}_{:?}_cmp_val.dat", opt.start_year, opt.end_year, opt.how);
 
     let mut header = vec!["ID".to_string()];
 
@@ -184,36 +187,52 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
         header.push("humanreadable_ID".into());
     }        
 
-    let mut buf = create_buf_with_command_and_version_and_header(name, header);
+    let mut buf = create_buf_with_command_and_version_and_header(
+        name, 
+        header.as_slice()
+    );
+    let mut buf_value = create_buf_with_command_and_version_and_header(
+        name2, 
+        header
+    );
 
-    for (rank, (id, _amount)) in first_year.iter().enumerate()
+    for (rank, (id, amount)) in first_year.iter().enumerate()
     {
         write!(
             buf,
             "{id} {rank}"
         ).unwrap();
+        write!(
+            buf_value,
+            "{id} {amount}"
+        ).unwrap();
         for other in other_year_maps.iter()
         {
             match other.get(id){
                 None => {
-                    write!(buf, " NaN").unwrap()
+                    write!(buf, " NaN").unwrap();
+                    write!(buf_value, " NaN").unwrap();
                 },
-                Some((rank, _value)) => {
-                    write!(buf, " {rank}").unwrap()
+                Some((rank, value)) => {
+                    write!(buf, " {rank}").unwrap();
+                    write!(buf_value, " {value}").unwrap();
                 }
             }
         }
         if let Some(map) = id_map.as_ref(){
             match map.get(id) {
                 Some(name) => {
-                    write!(buf, " {name}")
+                    write!(buf, " {name}").unwrap();
+                    write!(buf_value, " {name}")
                 },
                 None => {
-                    write!(buf, " Unknown")
+                    write!(buf, " Unknown").unwrap();
+                    write!(buf_value, " Unkown")
                 }
             }.unwrap();
         }
         writeln!(buf).unwrap();
+        writeln!(buf_value).unwrap();
     }
 
     for id in all_ids.difference(&first_year_set)
@@ -222,28 +241,37 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
             buf,
             "{id} NaN"
         ).unwrap();
+        write!(
+            buf_value,
+            "{id} NaN"
+        ).unwrap();
         for other in other_year_maps.iter()
         {
             match other.get(id){
                 None => {
-                    write!(buf, " NaN").unwrap()
+                    write!(buf, " NaN").unwrap();
+                    write!(buf_value, " NaN").unwrap()
                 },
-                Some((rank, _value)) => {
-                    write!(buf, " {rank}").unwrap()
+                Some((rank, value)) => {
+                    write!(buf, " {rank}").unwrap();
+                    write!(buf_value, " {value}").unwrap();
                 }
             }
         }
         if let Some(map) = id_map.as_ref(){
             match map.get(id) {
                 Some(name) => {
-                    write!(buf, " {name}")
+                    write!(buf, " {name}").unwrap();
+                    write!(buf_value, " {name}")
                 },
                 None => {
-                    write!(buf, " Unknown")
+                    write!(buf, " Unknown").unwrap();
+                    write!(buf_value, " Unknown")
                 }
             }.unwrap();
         }
         writeln!(buf).unwrap();
+        writeln!(buf_value).unwrap();
     }
 
 }
