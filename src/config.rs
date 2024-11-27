@@ -5,7 +5,7 @@ use derivative::Derivative;
 use fs_err::File;
 use clap::{Parser, Subcommand, ValueEnum};
 use crate::{
-    match_maker::{MatchCalcAverage, MatchMakerOpts}, misc::{create_buf, create_buf_with_command_and_version}, network::{self, enriched_digraph::*, main_execs::{ExportRestrictionType, Relative}, Direction, Network}, sort_year_cmps, CorrelationInput, CorrelationMeasurement, WeightFun
+    match_maker::{MatchCalcAverage, MatchMakerOpts}, misc::{create_buf, create_buf_with_command_and_version}, network::{self, enriched_digraph::*, main_execs::{self, ExportRestrictionType, Relative}, Direction, Network}, sort_year_cmps, CorrelationInput, CorrelationMeasurement, WeightFun
 };
 use serde::{Serialize, Deserialize};
 use camino::Utf8PathBuf;
@@ -194,7 +194,10 @@ pub enum CmdChooser{
     /// Compare years with one another. You need to be in a folder with subfolders where each subfolder represents an item
     SortYearComp(sort_year_cmps::Comparison),
     /// Compare multiple years in sequential order. You need to be in a folder with subfolders where each subfolder represents an item
-    SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears)
+    SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears),
+    /// Get a list of how many countries trade in the respective years
+    TradeCount(main_execs::trade_count::TradeCountOptions),
+    Tmp
 }
 
 #[derive(Debug, Clone, Parser)]

@@ -601,7 +601,7 @@ fn get_files(glob: &str) -> BTreeMap<usize, Utf8PathBuf>
         .map(
             |utf8path|
             {
-                let s = utf8path.as_str();
+                let s = utf8path.file_name().unwrap();
                 let number: usize = regex_first_match_parsed(&re, s);
                 (number, utf8path)
             }
@@ -618,6 +618,7 @@ pub fn all_random_cloud_shocks<P>(
     let opt: ShockCloudAll = crate::misc::parse_and_add_to_global(json);
     
     let enrich_files = get_files(&opt.enrich_glob);
+    dbg!(&enrich_files);
     let network_files = get_files(&opt.network_glob);
     let all_item_codes: BTreeSet<usize> = enrich_files.keys()
         .chain(network_files.keys())
@@ -993,7 +994,8 @@ pub fn random_cloud_shock_helper(
                     "hits",
                     "average",
                     "variance",
-                    "average_normed"
+                    "average_normed_by_max",
+                    "average_normed_by_trading_countries"
                 ];
                 write_slice_head(&mut hist_buf, header).unwrap();
                 let iter = hist.bin_hits_iter()
@@ -1002,6 +1004,8 @@ pub fn random_cloud_shock_helper(
                     .zip(sum_sq);
 
                 let mut norm = None;
+
+                let trading_norm_factor = (export_without_unconnected.node_count() as f64).recip();
                 
                 for (((interval, hits), sum), sum_sq) in iter {
                     let average = sum as f64 / hits as f64;
@@ -1015,9 +1019,12 @@ pub fn random_cloud_shock_helper(
                         },
                         Some(n) => average / n
                     };
+
+                    let normed_by_trading = average * trading_norm_factor;
+
                     writeln!(
                         hist_buf,
-                        "{} {} {hits} {average:e} {var:e} {normed:e}",
+                        "{} {} {hits} {average:e} {var:e} {normed:e} {normed_by_trading:e}",
                         interval[0],
                         interval[1]
                     ).unwrap();
@@ -2601,4 +2608,37 @@ where R: Rng
                 vec
             }
         ).collect_vec()
+}
+
+pub fn renormalize(
+    file: &Utf8Path,
+    network: &mut LazyNetworks
+)
+{
+    let name= file.file_name().unwrap();
+    let year = &name[2..6];
+    let year: i32 = year.parse().unwrap();
+
+    network.assure_availability();
+    let trading = network.get_import_network_unchecked(year)
+        .list_of_trading_nodes()
+        .len();
+    println!("{year} {trading}");
+
+    let norm_factor = (trading as f64).recip();
+
+    let data = open_as_unwrapped_lines_filter_comments(name)
+        .map(
+            |line|
+            {
+                let mut iter = line.split_ascii_whitespace();
+                let rho: f64 = iter.next().unwrap().parse().unwrap();
+                let mut country_count: f64 = iter.next().unwrap().parse().unwrap();
+                country_count *= norm_factor;
+                (rho, country_count)
+            }
+        ).collect_vec();
+    
+    // THIS FUNCTION IS INCOMPLETE!
+    
 }

@@ -15,7 +15,7 @@ pub fn make_matches(opt: &MatchMakerOpts)
         .for_each(
             |m|
             {
-                m.work(opt.how)
+                m.work(opt.how, opt.norm_by_trading_countries)
             }
         );
 }
@@ -29,7 +29,10 @@ pub struct MatchMakerOpts{
     new_glob: String,
     /// What to do if matching files are in different dirs?
     #[arg(long, value_enum, default_value_t = MatchHelper::Skip)]
-    how: MatchHelper
+    how: MatchHelper,
+    /// Which norming to use? Default: Norm by max.
+    #[arg(long, short)]
+    pub norm_by_trading_countries: bool
 }
 
 fn create_matches_helper(glob: &str) -> BTreeMap<u16, MatchItem>
@@ -108,8 +111,14 @@ pub enum MatchHelper{
 
 
 impl Matched{
-    fn work(&self, how: MatchHelper)
+    fn work(&self, how: MatchHelper, norm_by_trading_countries: bool)
     {
+
+        let fun = if norm_by_trading_countries{
+            get_vals_trading
+        } else {
+            get_vals_max_normed
+        };
         let mut result_path = match how{
             MatchHelper::New => {
                 get_owned_parent_path(&self.new.path)
@@ -143,8 +152,8 @@ impl Matched{
 
         for (old, new) in old_iter.zip(new_iter)
         {
-            let (o_mid, o_normed) = get_vals(&old);
-            let (n_mid, n_normed) = get_vals(&new);
+            let (o_mid, o_normed) = fun(&old);
+            let (n_mid, n_normed) = fun(&new);
             assert_eq!(
                 o_mid, 
                 n_mid,
@@ -173,7 +182,10 @@ pub struct MatchCalcAverage{
 
     #[arg(long, value_enum, default_value_t)]
     /// Sum normal or just the absolute?
-    how: AverageCalcOpt
+    how: AverageCalcOpt,
+
+    /// Use the trading_countries normalized values? Default: Max normalized
+    trading_countries_norm: bool
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy, Default)]
@@ -183,13 +195,23 @@ pub enum AverageCalcOpt{
     Normal
 }
 
-fn get_vals(line: &str) -> (f64, f64)
+fn get_vals_trading(line: &str) -> (f64, f64)
 {
     let mut iter = line.split_ascii_whitespace()
         .map(|s| s.parse::<f64>().unwrap());
     let left = iter.next().unwrap();
     let right = iter.next().unwrap();
     let normed_average = iter.last().unwrap();
+    ((left + right) * 0.5, normed_average)
+}
+
+fn get_vals_max_normed(line: &str) -> (f64, f64)
+{
+    let mut iter = line.split_ascii_whitespace()
+        .map(|s| s.parse::<f64>().unwrap());
+    let left = iter.next().unwrap();
+    let right = iter.next().unwrap();
+    let normed_average = iter.nth(3).unwrap();
     ((left + right) * 0.5, normed_average)
 }
 
@@ -216,7 +238,11 @@ pub fn calc_averages(opt: MatchCalcAverage)
             processed_get_vals
         },
         Mode::Raw => {
-            get_vals
+            if opt.trading_countries_norm{
+                get_vals_trading
+            } else {
+                get_vals_max_normed
+            }
         }
     };
     let mut iter = utf8_path_iter(&opt.glob);

@@ -285,6 +285,6 @@ pub struct ShockCloudAll
     #[derivative(Default(value="NonZeroUsize::new(100).unwrap()"))]
     pub hist_bins: NonZeroUsize,
 
-    /// FIle to map ids to countries
-    pub id_file: Option<String>
+    /// File to map ids to countries
+    pub id_file: Option<String>,
 }
