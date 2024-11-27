@@ -81,6 +81,9 @@ fn main() {
         },
         CmdChooser::SortYearComp(comp) => {
             sort_year_cmps::sorting_stuff(comp);
+        },
+        CmdChooser::SortCompMultiYears(opt) => {
+            sort_year_cmps::sort_compare_multiple_years(opt);
         }
     }
 }

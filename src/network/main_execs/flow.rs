@@ -730,7 +730,7 @@ pub fn random_cloud_shock<P>(
 where P: AsRef<Path>
 {
     let opt: ShockCloud = crate::misc::parse_and_add_to_global(json);
-    random_cloud_shock_helper(
+    let _ = random_cloud_shock_helper(
         &opt, 
         out_stub, 
         quiet,

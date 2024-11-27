@@ -3,9 +3,9 @@ use camino::Utf8PathBuf;
 use clap::{Parser, ValueEnum};
 use itertools::Itertools;
 use ordered_float::NotNan;
-use std::io::Write;
+use std::{collections::{BTreeMap, BTreeSet}, io::Write};
 
-use crate::misc::{create_buf_with_command_and_version, open_as_unwrapped_lines_filter_comments};
+use crate::misc::{create_buf_with_command_and_version, create_buf_with_command_and_version_and_header, open_as_unwrapped_lines_filter_comments};
 
 #[derive(Debug, Clone, Parser)]
 pub struct Comparison
@@ -35,7 +35,7 @@ pub enum How
     AbsSumIgnoreNan
 }
 
-pub fn sorting_stuff(opt: Comparison)
+pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
 {
     let glob = format!("*/Item*_{}_vs_{}.dat", opt.year1, opt.year2);
     dbg!(&glob);
@@ -105,4 +105,145 @@ pub fn sorting_stuff(opt: Comparison)
         writeln!(buf, "{val} {item_id} {item_name}").unwrap();
     }
     println!("We have a total of {} items", list.len());
+    list
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct SortCompareMultipleYears
+{
+    /// First year of comparison
+    start_year: i32,
+    /// Last year of comparison
+    end_year: i32,
+    /// File used to map Ids to Items
+    #[arg(long, short)]
+    itemid_to_item_file: Option<Utf8PathBuf>,
+
+    #[arg(long, short)]
+    how: How,
+
+    /// Reverse the order
+    #[arg(long, short)]
+    reverse: bool
+}
+
+pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
+{
+    let mut all_years = Vec::new();
+    let mut all_ids = BTreeSet::new();
+    for year in opt.start_year..opt.end_year
+    {
+        let comp_opt = Comparison{
+            year1: year,
+            year2: year + 1,
+            itemid_to_item_file: opt.itemid_to_item_file.clone(),
+            how: opt.how,
+            reverse: opt.reverse
+        };
+        let list = sorting_stuff(comp_opt);
+        all_ids.extend(
+            list.iter().map(|tuple| tuple.0.clone())
+        );
+        all_years.push(list);
+    }
+    let first_year = all_years.remove(0);
+    let first_year_set: BTreeSet<_> = first_year.iter()
+        .map(|tuple| tuple.0.clone())
+        .collect();
+
+    let id_map = opt.itemid_to_item_file
+        .as_deref()
+        .map(crate::parser::id_map);
+
+    let other_year_maps: Vec<BTreeMap<_, _>> = all_years
+        .into_iter()
+        .map(
+            |list|
+            {
+                list.into_iter()
+                    .enumerate()
+                    .map(
+                        |(rank, (id, val))|
+                        {
+                            (id, (rank, val))
+                        }
+                    ).collect()
+
+            }
+        ).collect();
+
+    let name = format!("From_{}_to_{}_{:?}_cmp.dat", opt.start_year, opt.end_year, opt.how);
+
+    let mut header = vec!["ID".to_string()];
+
+    header.extend(
+        (opt.start_year..=opt.end_year)
+            .map(|year| year.to_string())
+    );
+    if opt.itemid_to_item_file.is_some(){
+        header.push("humanreadable_ID".into());
+    }        
+
+    let mut buf = create_buf_with_command_and_version_and_header(name, header);
+
+    for (rank, (id, _amount)) in first_year.iter().enumerate()
+    {
+        write!(
+            buf,
+            "{id} {rank}"
+        ).unwrap();
+        for other in other_year_maps.iter()
+        {
+            match other.get(id){
+                None => {
+                    write!(buf, " NaN").unwrap()
+                },
+                Some((rank, _value)) => {
+                    write!(buf, " {rank}").unwrap()
+                }
+            }
+        }
+        if let Some(map) = id_map.as_ref(){
+            match map.get(id) {
+                Some(name) => {
+                    write!(buf, " {name}")
+                },
+                None => {
+                    write!(buf, " Unknown")
+                }
+            }.unwrap();
+        }
+        writeln!(buf).unwrap();
+    }
+
+    for id in all_ids.difference(&first_year_set)
+    {
+        write!(
+            buf,
+            "{id} NaN"
+        ).unwrap();
+        for other in other_year_maps.iter()
+        {
+            match other.get(id){
+                None => {
+                    write!(buf, " NaN").unwrap()
+                },
+                Some((rank, _value)) => {
+                    write!(buf, " {rank}").unwrap()
+                }
+            }
+        }
+        if let Some(map) = id_map.as_ref(){
+            match map.get(id) {
+                Some(name) => {
+                    write!(buf, " {name}")
+                },
+                None => {
+                    write!(buf, " Unknown")
+                }
+            }.unwrap();
+        }
+        writeln!(buf).unwrap();
+    }
+
 }

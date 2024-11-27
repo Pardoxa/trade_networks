@@ -192,7 +192,9 @@ pub enum CmdChooser{
     /// Create shadow plot
     ShockCloudShadow(ShockCloudShadoOpt),
     /// Compare years with one another. You need to be in a folder with subfolders where each subfolder represents an item
-    SortYearComp(sort_year_cmps::Comparison)
+    SortYearComp(sort_year_cmps::Comparison),
+    /// Compare multiple years in sequential order. You need to be in a folder with subfolders where each subfolder represents an item
+    SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears)
 }
 
 #[derive(Debug, Clone, Parser)]
