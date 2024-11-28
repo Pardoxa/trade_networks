@@ -5,7 +5,12 @@ use itertools::Itertools;
 use ordered_float::NotNan;
 use std::{collections::{BTreeMap, BTreeSet}, io::Write};
 
-use crate::misc::{create_buf_with_command_and_version, create_buf_with_command_and_version_and_header, open_as_unwrapped_lines_filter_comments};
+use crate::misc::{
+    create_buf_with_command_and_version, 
+    create_buf_with_command_and_version_and_header, 
+    open_as_unwrapped_lines_filter_comments,
+    utf8_path_iter
+};
 
 #[derive(Debug, Clone, Parser)]
 pub struct Comparison
@@ -35,11 +40,49 @@ pub enum How
     AbsSumIgnoreNan
 }
 
+#[derive(Debug, Clone, Parser)]
+pub struct AverageSortOpt{
+    /// Globbing for all the files. They need to be in a folder which is their item id
+    glob: String,
+    #[arg(long, short)]
+    item_id_map_file: Option<Utf8PathBuf>
+}
+
+pub fn sort_averages(opt: AverageSortOpt)
+{
+    let id_map = opt.item_id_map_file
+        .map(crate::parser::id_map);
+
+    let mut list = utf8_path_iter(&opt.glob)
+        .map(
+            |path|
+            {
+                let item_id = path.parent().unwrap().as_str().to_owned();
+                let mut iter = open_as_unwrapped_lines_filter_comments(path);
+                let first_line = iter.next().unwrap();
+                let mut first_line_iter = first_line.split_ascii_whitespace();
+                let val = first_line_iter.nth(6).unwrap();
+                let val: f64 = val.parse().unwrap();
+                (item_id, NotNan::new(val).unwrap())
+            }
+        ).collect_vec();
+
+    list.sort_unstable_by_key(|tuple| tuple.1);
+    for entry in list{
+        let name = if let Some(map) = &id_map {
+            map.get(&entry.0).unwrap()
+        } else {
+            ""
+        };
+        println!("{} {} {name}", entry.1, entry.0);
+    }
+}
+
 pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
 {
     let glob = format!("*/Item*_{}_vs_{}.dat", opt.year1, opt.year2);
     dbg!(&glob);
-    let mut list = crate::misc::utf8_path_iter(&glob)
+    let mut list = utf8_path_iter(&glob)
         .map(
             |path|
             {

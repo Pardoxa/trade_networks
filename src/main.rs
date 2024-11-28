@@ -91,6 +91,9 @@ fn main() {
             let path: Utf8PathBuf = "/home/yannick/Documents/France/Docs/TradeData/23.10.24/cmp_all/2018-2022/987/_Y2020_Th0.7_R0.1.dat".into();
             let mut network = network::LazyNetworks::Filename("/home/yannick/Documents/France/Docs/TradeData/23.10.24/country/all/987.bincode".into());
             renormalize(&path, &mut network);
+        },
+        CmdChooser::SortAverages(opt) => {
+            sort_year_cmps::sort_averages(opt);
         }
     }
 }

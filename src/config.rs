@@ -197,7 +197,9 @@ pub enum CmdChooser{
     SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears),
     /// Get a list of how many countries trade in the respective years
     TradeCount(main_execs::trade_count::TradeCountOptions),
-    Tmp
+    Tmp,
+    /// Sort the averages and print out order
+    SortAverages(sort_year_cmps::AverageSortOpt)
 }
 
 #[derive(Debug, Clone, Parser)]
