@@ -28,7 +28,11 @@ pub struct Comparison
 
     /// Reverse the order
     #[arg(long, short)]
-    reverse: bool
+    reverse: bool,
+
+    /// Using the country normed file!
+    #[arg(long, short)]
+    country_normed: bool
 }
 
 #[derive(Debug, Default, ValueEnum, Clone, Copy)]
@@ -80,7 +84,12 @@ pub fn sort_averages(opt: AverageSortOpt)
 
 pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
 {
-    let glob = format!("*/Item*_{}_vs_{}.dat", opt.year1, opt.year2);
+    let glob = if opt.country_normed{
+        format!("*/Country_normed_Item*_{}_vs_{}.dat", opt.year1, opt.year2)
+    } else {
+        format!("*/Item*_{}_vs_{}.dat", opt.year1, opt.year2)
+    };
+    
     dbg!(&glob);
     let mut list = utf8_path_iter(&glob)
         .map(
@@ -169,7 +178,11 @@ pub struct SortCompareMultipleYears
 
     /// Reverse the order
     #[arg(long, short)]
-    reverse: bool
+    reverse: bool,
+
+    /// Use the country normed files!
+    #[arg(long, short)]
+    country_normed: bool
 }
 
 pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
@@ -183,7 +196,8 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
             year2: year + 1,
             itemid_to_item_file: opt.itemid_to_item_file.clone(),
             how: opt.how,
-            reverse: opt.reverse
+            reverse: opt.reverse,
+            country_normed: opt.country_normed
         };
         let list = sorting_stuff(comp_opt);
         all_ids.extend(
@@ -217,8 +231,14 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
             }
         ).collect();
 
-    let name = format!("From_{}_to_{}_{:?}_cmp.dat", opt.start_year, opt.end_year, opt.how);
-    let name2 = format!("From_{}_to_{}_{:?}_cmp_val.dat", opt.start_year, opt.end_year, opt.how);
+    let prefix = if opt.country_normed{
+        "CN_"
+    } else {
+        ""
+    };
+
+    let name = format!("{prefix}From_{}_to_{}_{:?}_cmp.dat", opt.start_year, opt.end_year, opt.how);
+    let name2 = format!("{prefix}From_{}_to_{}_{:?}_cmp_val.dat", opt.start_year, opt.end_year, opt.how);
 
     let mut header = vec!["ID".to_string()];
 
@@ -231,11 +251,11 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
     }        
 
     let mut buf = create_buf_with_command_and_version_and_header(
-        name, 
+        &name, 
         header.as_slice()
     );
     let mut buf_value = create_buf_with_command_and_version_and_header(
-        name2, 
+        &name2, 
         header
     );
 
@@ -316,5 +336,6 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
         writeln!(buf).unwrap();
         writeln!(buf_value).unwrap();
     }
+    println!("Created {name} and {name2}");
 
 }
