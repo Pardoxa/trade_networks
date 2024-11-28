@@ -142,8 +142,15 @@ pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
         list.reverse();
     }
     let map = opt.itemid_to_item_file.map(crate::parser::id_map);
-    let name = format!("Cmp_res_{}_{}_{:?}.dat", opt.year1, opt.year2, opt.how);
-    let mut buf = create_buf_with_command_and_version(name);
+
+    let prefix = if opt.country_normed{
+        "CN_"
+    } else {
+        ""
+    };
+
+    let name = format!("{prefix}Cmp_res_{}_{}_{:?}.dat", opt.year1, opt.year2, opt.how);
+    let mut buf = create_buf_with_command_and_version(&name);
     for (item_id, val) in list.iter() {
         let mut item_name = "None";
         if let Some(map) = &map {
@@ -159,6 +166,7 @@ pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
         writeln!(buf, "{val} {item_id} {item_name}").unwrap();
     }
     println!("We have a total of {} items", list.len());
+    println!("Created {name}");
     list
 }
 
