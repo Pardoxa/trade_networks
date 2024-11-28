@@ -2627,7 +2627,7 @@ pub fn renormalize(
 
     let norm_factor = (trading as f64).recip();
 
-    let data = open_as_unwrapped_lines_filter_comments(name)
+    let _data = open_as_unwrapped_lines_filter_comments(name)
         .map(
             |line|
             {
@@ -2640,5 +2640,5 @@ pub fn renormalize(
         ).collect_vec();
     
     // THIS FUNCTION IS INCOMPLETE!
-    
+    panic!("THIS FUNCTION WAS NEVER FINISHED!")
 }

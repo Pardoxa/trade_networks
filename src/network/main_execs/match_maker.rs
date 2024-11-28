@@ -136,8 +136,15 @@ impl Matched{
                 old_parent
             }
         };
+
+        let prefix = if norm_by_trading_countries {
+            "Country_normed_"
+        } else {
+            ""
+        };
+
         result_path.push(
-            format!("Item{}_{}_vs_{}.dat", self.item, self.old.year, self.new.year)
+            format!("{prefix}Item{}_{}_vs_{}.dat", self.item, self.old.year, self.new.year)
         );
         let header = [
             "total_export_fraction".to_owned(),
@@ -185,6 +192,7 @@ pub struct MatchCalcAverage{
     how: AverageCalcOpt,
 
     /// Use the trading_countries normalized values? Default: Max normalized
+    #[arg(long, short)]
     trading_countries_norm: bool
 }
 
