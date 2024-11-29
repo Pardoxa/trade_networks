@@ -147,7 +147,7 @@ impl LazyEnrichmentInfos{
 
     pub fn get_year_unchecked(&self, year: i32) -> &BTreeMap<String, ExtraInfo>
     {
-        return self.enrichment_infos_unchecked().get_year(year)
+        self.enrichment_infos_unchecked().get_year(year)
     }
 
     pub fn enrichment_infos_unchecked(&self) -> &EnrichmentInfos

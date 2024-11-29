@@ -849,8 +849,49 @@ pub fn random_cloud_shock_helper(
 
     years_and_rngs
         .into_par_iter()
+        .filter_map(
+            |(year, rng)|
+            {
+                let export_without_unconnected = lazy_networks
+                    .get_export_network_unchecked(year)
+                    .without_unconnected_nodes();
+            
+                let import_without_unconnected = export_without_unconnected.invert();
+        
+                let enrich = enrichment_infos.get_year(year);
+    
+                let top = get_top_k_ids(&export_without_unconnected, opt.top);
+
+                let is_good = check_quick_and_dirty(
+                    &top, 
+                    &export_without_unconnected, 
+                    enrich,
+                    opt.item_code.as_deref().unwrap(),
+                    year
+                );
+                is_good.then_some(
+                    (
+                        year,
+                        rng,
+                        export_without_unconnected,
+                        import_without_unconnected,
+                        enrich,
+                        top
+                    )
+                )
+            }
+        )
         .for_each(
-            |(year, mut rng)|
+            |
+                (
+                    year, 
+                    mut rng,
+                    export_without_unconnected,
+                    import_without_unconnected,
+                    enrich,
+                    top
+                )
+            |
             {
                 let out_name = format!(
                     "{folder}{out_stub}_Y{year}_Th{}_R{}.dat", 
@@ -862,15 +903,7 @@ pub fn random_cloud_shock_helper(
                     opt.unstable_country_threshold,
                     opt.reducing_factor
                 );
-                let export_without_unconnected = lazy_networks
-                    .get_export_network_unchecked(year)
-                    .without_unconnected_nodes();
                 
-                let import_without_unconnected = export_without_unconnected.invert();
-            
-                let enrich = enrichment_infos.get_year(year);
-        
-                let top = get_top_k_ids(&export_without_unconnected, opt.top);
             
                 let mut buf = create_buf_with_command_and_version_and_header(out_name, header);
                 let no_shock = {
@@ -2641,4 +2674,51 @@ pub fn renormalize(
     
     // THIS FUNCTION IS INCOMPLETE!
     panic!("THIS FUNCTION WAS NEVER FINISHED!")
+}
+
+pub fn check_quick_and_dirty(
+    top: &[usize], 
+    network: &Network, 
+    enrich: &BTreeMap<String, ExtraInfo>,
+    product_id: &str,
+    year: i32
+) -> bool
+{
+    eprint!("Y {year} - ");
+    let import_dir = network.get_network_with_direction(Direction::ImportFrom);
+    let production_key = GLOBAL_NODE_INFO_MAP.get(PRODUCTION);
+    let mut is_good = true;
+    for idx in top{
+        let id = network.nodes[*idx]
+            .identifier
+            .as_str();
+        let production = match enrich.get(id){
+            Some(p) =>  p,
+            None => {
+                eprintln!("product_ID {product_id} has no Extra - idx {idx}");
+                is_good = false;
+                continue;
+            }
+        };
+        let production = production.map.get(&production_key);
+        let production = match production{
+            Some(e) => e.amount,
+            None => {
+                eprintln!("product_ID {product_id} has no Production - idx {idx}");
+                is_good = false;
+                continue;
+            }
+        };
+        let vs = network.nodes[*idx].trade_amount();
+        if production < vs {
+            let import = import_dir.nodes[*idx].trade_amount();
+            let frac = vs / production;
+            eprintln!("P < T  P: {production} E: {vs} I: {import} F: {frac} product_ID {product_id} - idx {idx}");
+            is_good = false;
+        }
+    }
+    if is_good{
+        eprintln!("Product {product_id} is good");
+    }
+    is_good
 }
