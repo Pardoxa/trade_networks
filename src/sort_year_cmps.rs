@@ -49,7 +49,10 @@ pub struct AverageSortOpt{
     /// Globbing for all the files. They need to be in a folder which is their item id
     glob: String,
     #[arg(long, short)]
-    item_id_map_file: Option<Utf8PathBuf>
+    item_id_map_file: Option<Utf8PathBuf>,
+    /// Reverse the order
+    #[arg(long, short)]
+    reverse: bool
 }
 
 pub fn sort_averages(opt: AverageSortOpt)
@@ -72,6 +75,9 @@ pub fn sort_averages(opt: AverageSortOpt)
         ).collect_vec();
 
     list.sort_unstable_by_key(|tuple| tuple.1);
+    if opt.reverse{
+        list.reverse();
+    }
     for entry in list{
         let name = if let Some(map) = &id_map {
             map.get(&entry.0).unwrap()
