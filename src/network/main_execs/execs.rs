@@ -1,7 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use crate::{parser::{parse_all_networks, country_map}, partition, network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}};
+use crate::{network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}, parser::{country_map, id_map, parse_all_networks}, partition};
 use fs_err::File;
 use {
     std::{
@@ -75,6 +75,130 @@ pub fn parse_networks(opt: ParseNetworkOpt)
     } else {
         bincode::serialize_into(buf, &networks)
             .expect(BINCODE_CREATION_ERROR);
+    }
+    
+}
+
+pub fn max_diff_reported_import_vs_reported_export(opt: ImportExportDiffOpts)
+{
+    println!("Parsing imports");
+    let import_networks = crate::parser::network_parser(
+        &opt.in_file, 
+        &opt.item_code, 
+        true,
+        ReadType::ImportQuantity
+    ).expect("unable to parse");
+
+    println!("Parsing exports");
+    let export_networks = crate::parser::network_parser(
+        &opt.in_file, 
+        &opt.item_code, 
+        true,
+        ReadType::ExportQuantity
+    ).expect("unable to parse");
+
+    let id_map = opt.country_file
+        .map(id_map);
+
+
+    'outer: for (import, export) in import_networks.into_iter().zip(export_networks)
+    {
+        assert!(import.direction.is_import());
+        assert!(export.direction.is_export());
+
+        let export_map: BTreeMap<_, _> = export.nodes
+            .iter()
+            .enumerate()
+            .map(
+                |(idx, node)|
+                {
+                    (node.identifier.as_str(), idx)
+                }
+            ).collect();
+
+        let mut diff_max = 0.0;
+        let mut import_amount = 0.0;
+        let mut respective_import_country_id = "";
+        let mut respective_export_country_id = "";
+        let mut export_amount = None;
+        for import_node in import.nodes.iter()
+        {
+            let import_country_id = import_node.identifier.as_str();
+            for import_edge in import_node.adj.iter(){
+                let export_country_id = import.nodes[import_edge.index].identifier.as_str();
+                
+                match export_map.get(export_country_id){
+                    None => {
+                        // Not even the country is found?
+                        let year = import.year;
+                        eprintln!("Y {year} Country missing! Maybe it did not report it's exports?");
+                        continue 'outer;
+                        
+                    },
+                    Some(export_index) => {
+                        let export_node = &export.nodes[*export_index];
+                        let test_id = export_node.identifier.as_str();
+                        assert_eq!(
+                            export_country_id,
+                            test_id
+                        );
+                        let mut success = false;
+                        // now I need to find the edge that corresponds to this id
+                        for export_edge in export_node.adj.iter(){
+                            let import_id = export.nodes[export_edge.index].identifier.as_str();
+                            let found =  import_id == import_country_id;
+                            if found {
+                                // check if this is really the correct edge
+                                let import_id = export.nodes[export_edge.index].identifier.as_str();
+                                assert_eq!(
+                                    import_country_id,
+                                    import_id
+                                );
+        
+                                let difference = (import_edge.amount - export_edge.amount).abs();
+                                if diff_max < difference{
+                                    diff_max = difference;
+                                    import_amount = import_edge.amount;
+                                    export_amount = Some(export_edge.amount);
+                                    respective_import_country_id = import_country_id;
+                                    respective_export_country_id = export_country_id;
+                                }
+                                success = true;
+                                break;
+                            }
+                        }
+
+                        if !success{
+                            // If the exporting country does not report the export, it is the same as if the reported export was 0
+                            let diff = import_edge.amount.abs();
+                            if diff > diff_max{
+                                diff_max = diff;
+                                export_amount = None;
+                                import_amount = import_edge.amount;
+                                respective_export_country_id = export_country_id;
+                                respective_import_country_id = import_country_id;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let unit = import.unit.as_str();
+        let year = import.year;
+        assert_eq!(year, export.year);
+        let (import_country, export_country) = match id_map.as_ref(){
+            None => ("".to_owned(), "".to_owned()),
+            Some(map) => {
+                let import = map.get(respective_import_country_id)
+                    .unwrap()
+                    .to_owned();
+                let export = map.get(respective_export_country_id)
+                    .unwrap()
+                    .to_owned();
+                (import, export)
+            }
+        };
+        println!("Y {year} Max Difference {diff_max} {unit}. Import: {import_amount} {import_country} Export: {export_amount:?} {export_country}");
     }
     
 }

@@ -77,6 +77,29 @@ pub struct ParseNetworkOpt{
 }
 
 #[derive(Parser, Debug)]
+pub struct ImportExportDiffOpts{
+    #[arg(long)]
+    /// Path to csv to read in
+    pub in_file: String,
+    
+    #[arg(long)]
+    /// Item code, e.g. 27 for Rice
+    pub item_code: String,
+
+    /// Which Info to parse for building the network
+    #[arg(long, value_enum, default_value_t = ReadType::ImportQuantity)]
+    pub read_type: ReadType,
+
+    #[arg(long, short)]
+    /// store it as json instead
+    pub json: bool,
+
+    #[arg(long, short)]
+    /// File for mapping country ids to countries
+    pub country_file: Option<String>
+}
+
+#[derive(Parser, Debug)]
 pub struct ParseAllNetworksOpt{
     #[arg(long)]
     /// Path to csv to read in
@@ -199,7 +222,9 @@ pub enum CmdChooser{
     TradeCount(main_execs::trade_count::TradeCountOptions),
     Tmp,
     /// Sort the averages and print out order
-    SortAverages(sort_year_cmps::AverageSortOpt)
+    SortAverages(sort_year_cmps::AverageSortOpt),
+    /// Print maximal difference between reported import and corresponding reported export 
+    ImportExportDiff(ImportExportDiffOpts)
 }
 
 #[derive(Debug, Clone, Parser)]
