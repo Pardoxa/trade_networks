@@ -457,7 +457,11 @@ pub struct OnlyNetworks{
 
     #[arg(short, long)]
     /// Print trade amount for top X
-    pub top: Option<NonZeroU32>
+    pub top: Option<NonZeroU32>,
+
+    /// Print infos of specific node. This is the identifier string
+    #[arg(short, long)]
+    pub ids: Vec<String>
 }
 
 

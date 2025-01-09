@@ -1443,7 +1443,7 @@ pub fn to_three_sets(file: &str, border_low: f64, border_high: f64) -> ThreeSets
 
 pub fn print_network_info(opt: OnlyNetworks)
 {
-    fn print_info(n: &Network, top: Option<NonZeroU32>)
+    fn print_info(n: &Network, top: Option<NonZeroU32>, identifier: &[String])
     {
         let without_unconnected = n.without_unconnected_nodes();
         println!(
@@ -1455,6 +1455,7 @@ pub fn print_network_info(opt: OnlyNetworks)
             without_unconnected.node_count()
         );
         if let Some(t) = top{
+            println!("TOP:");
             let mut list = without_unconnected
                 .nodes
                 .iter()
@@ -1479,6 +1480,22 @@ pub fn print_network_info(opt: OnlyNetworks)
                 println!();
             }
         }
+
+        if !identifier.is_empty()
+        {
+            println!("Identifier:");
+        }
+
+        'outer: for id in identifier{
+            for node in n.nodes.iter(){
+                if node.identifier.as_str() == id {
+                    node.print_infos(n);
+                    println!();
+                    continue 'outer;
+                } 
+            }
+            eprintln!("Could not find ID {id}");
+        }
         
     }
 
@@ -1487,18 +1504,18 @@ pub fn print_network_info(opt: OnlyNetworks)
     println!("Export:");
     if let Some(y) = opt.year{
         let network = networks.get_export_network_unchecked(y);
-        print_info(network, opt.top);
+        print_info(network, opt.top, &opt.ids);
     } else {
         let export = networks.export_networks_unchecked();
-        export.iter().for_each(|e| print_info(e, opt.top));
+        export.iter().for_each(|e| print_info(e, opt.top, &opt.ids));
     }
 
     println!("Import:");
     if let Some(y) = opt.year{
         let network = networks.get_import_network_unchecked(y);
-        print_info(network, opt.top);
+        print_info(network, opt.top, &opt.ids);
     } else {
         let import = networks.import_networks_unchecked();
-        import.iter().for_each(|i| print_info(i, opt.top));
+        import.iter().for_each(|i| print_info(i, opt.top, &opt.ids));
     }
 }
