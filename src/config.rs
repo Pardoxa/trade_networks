@@ -187,6 +187,8 @@ pub struct MultiShockOpt{
 pub enum CmdChooser{
     DegreeDist(DegreeDist),
     Enrichment(EnrichOpt),
+    /// Create json from bincode enrichment
+    EnrichmentToJson(EnrichmentToJson),
     MaxWeight(DegreeDist),
     Misc(MiscOpt),
     Out10(MiscOpt),
@@ -225,6 +227,17 @@ pub enum CmdChooser{
     SortAverages(sort_year_cmps::AverageSortOpt),
     /// Print maximal difference between reported import and corresponding reported export 
     ImportExportDiff(ImportExportDiffOpts)
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct EnrichmentToJson{
+    ///enrichment bincode file
+    #[arg(short, long)]
+    pub file: String,
+
+    /// Name of json output. ".json" will be added automatically
+    #[arg(short, long)]
+    pub out: String
 }
 
 #[derive(Debug, Clone, Parser)]

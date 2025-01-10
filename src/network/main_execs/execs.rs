@@ -569,6 +569,16 @@ pub fn enrich_to_bin(opt: ParseEnrichOpts){
 
 }
 
+pub fn enrichment_to_json(opt: EnrichmentToJson)
+{
+    let mut enrichment = LazyEnrichmentInfos::Filename(opt.file, None);
+    enrichment.assure_availability();
+    let enrichment = enrichment.enrichment_infos_unchecked();
+    let out = format!("{}.json", opt.out);
+    let out = create_buf(out);
+    serde_json::to_writer_pretty(out, enrichment).unwrap();
+}
+
 pub fn test_chooser(in_file: Utf8PathBuf, cmd: SubCommand){
     match cmd
     {
