@@ -1038,7 +1038,7 @@ pub fn random_cloud_shock_helper(
 
                 let mut norm = None;
 
-                let trading_norm_factor = (export_without_unconnected.node_count() as f64).recip();
+                let trading_norm_factor = (countries_where_country_count_is_applicable.len() as f64).recip();
                 
                 for (((interval, hits), sum), sum_sq) in iter {
                     let average = sum as f64 / hits as f64;
