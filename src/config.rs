@@ -474,7 +474,11 @@ pub struct OnlyNetworks{
 
     /// Print infos of specific node. This is the identifier string
     #[arg(short, long)]
-    pub ids: Vec<String>
+    pub ids: Vec<String>,
+
+    /// If you also want to know the production of the product
+    #[arg(short, long)]
+    pub enrichment: Option<String>
 }
 
 

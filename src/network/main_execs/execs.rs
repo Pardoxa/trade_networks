@@ -1453,8 +1453,35 @@ pub fn to_three_sets(file: &str, border_low: f64, border_high: f64) -> ThreeSets
 
 pub fn print_network_info(opt: OnlyNetworks)
 {
-    fn print_info(n: &Network, top: Option<NonZeroU32>, identifier: &[String])
+
+    let enriched = opt.enrichment
+        .map(
+            |filename|
+            {
+                let mut enrichment = LazyEnrichmentInfos::Filename(filename, None);
+                enrichment.assure_availability();
+                enrichment
+            }
+        );
+    
+
+    fn print_info(n: &Network, top: Option<NonZeroU32>, identifier: &[String], enriched: &Option<LazyEnrichmentInfos>)
     {
+
+        let print_enrichment = |year: i32, id: &str|
+        {
+            if let Some(enrichment) = enriched{
+                let production_idx = enrichment.extra_info_idmap_unchecked().get(PRODUCTION);
+                let info = enrichment
+                    .get_year_unchecked(year)
+                    .get(id);
+                if let Some(info) = info {
+                    let production = info.map.get(&production_idx);
+                    print!(" Production: {production:?}");
+                }
+            }
+        };
+
         let without_unconnected = n.without_unconnected_nodes();
         println!(
             "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}", 
@@ -1480,6 +1507,7 @@ pub fn print_network_info(opt: OnlyNetworks)
                     }
                 ).collect_vec();
             list.sort_unstable_by_key(|item| Reverse(item.0));
+            let mut top_trade_sum = 0.0;
             for (trade, id) in list.iter().take(t.get() as usize){
                 let idx = without_unconnected.get_index(id).unwrap();
                 let node = &without_unconnected.nodes[idx];
@@ -1487,7 +1515,12 @@ pub fn print_network_info(opt: OnlyNetworks)
                     "ID: {id}, trade_amount: {trade} "
                 );
                 node.print_infos(&without_unconnected);
+                top_trade_sum += node.trade_amount();
+                print_enrichment(n.year, id);
                 println!();
+            }
+            if top_trade_sum != 0.0 {
+                println!("Top trade sum: {top_trade_sum}");
             }
         }
 
@@ -1500,6 +1533,7 @@ pub fn print_network_info(opt: OnlyNetworks)
             for node in n.nodes.iter(){
                 if node.identifier.as_str() == id {
                     node.print_infos(n);
+                    print_enrichment(n.year, id);
                     println!();
                     continue 'outer;
                 } 
@@ -1514,18 +1548,18 @@ pub fn print_network_info(opt: OnlyNetworks)
     println!("Export:");
     if let Some(y) = opt.year{
         let network = networks.get_export_network_unchecked(y);
-        print_info(network, opt.top, &opt.ids);
+        print_info(network, opt.top, &opt.ids, &enriched);
     } else {
         let export = networks.export_networks_unchecked();
-        export.iter().for_each(|e| print_info(e, opt.top, &opt.ids));
+        export.iter().for_each(|e| print_info(e, opt.top, &opt.ids, &enriched));
     }
 
     println!("Import:");
     if let Some(y) = opt.year{
         let network = networks.get_import_network_unchecked(y);
-        print_info(network, opt.top, &opt.ids);
+        print_info(network, opt.top, &opt.ids, &enriched);
     } else {
         let import = networks.import_networks_unchecked();
-        import.iter().for_each(|i| print_info(i, opt.top, &opt.ids));
+        import.iter().for_each(|i| print_info(i, opt.top, &opt.ids, &enriched));
     }
 }
