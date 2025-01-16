@@ -193,7 +193,11 @@ pub struct MatchCalcAverage{
 
     /// Use the trading_countries normalized values? Default: Max normalized
     #[arg(long, short)]
-    trading_countries_norm: bool
+    trading_countries_norm: bool,
+
+    #[arg(long, short)]
+    /// Ignore nan entries for the averaging
+    ignore_nans: bool
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy, Default)]
@@ -269,9 +273,11 @@ pub fn calc_averages(opt: MatchCalcAverage)
             }
         ).unzip();
 
+    let mut nan_paths = BTreeSet::new();
+
     for path in iter{
         println!("Reading {path}");
-        open_as_unwrapped_lines_filter_comments(path)
+        open_as_unwrapped_lines_filter_comments(&path)
         .map(
             |line|
             {
@@ -286,18 +292,28 @@ pub fn calc_averages(opt: MatchCalcAverage)
                     mid_vec[idx],
                     "Mids need to match!"
                 );
-                if val.is_nan(){
+                let nan = val.is_nan();
+                if nan{
                     println!("NAN!");
+                    nan_paths.insert(path.as_str().to_owned());
                 }
-                sum[idx].push(
-                    match opt.how{
-                        AverageCalcOpt::Normal => val,
-                        AverageCalcOpt::Abs => val.abs()
-                    }
-                );
+                if !opt.ignore_nans || !nan{
+                    sum[idx].push(
+                        match opt.how{
+                            AverageCalcOpt::Normal => val,
+                            AverageCalcOpt::Abs => val.abs()
+                        }
+                    );
+                }
+                
             }
         )
     }
+
+    if !nan_paths.is_empty(){
+        dbg!(nan_paths);
+    }
+
     let header = [
         "mid",
         "average",
