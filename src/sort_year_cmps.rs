@@ -257,8 +257,13 @@ pub fn sort_compare_multiple_years(opt: SortCompareMultipleYears)
     let mut header = vec!["ID".to_string()];
 
     header.extend(
-        (opt.start_year..=opt.end_year)
-            .map(|year| year.to_string())
+        (opt.start_year..opt.end_year)
+            .map(
+                |year|
+                {
+                    format!("{year}_vs_{}", year + 1)
+                }
+            )
     );
     if opt.itemid_to_item_file.is_some(){
         header.push("humanreadable_ID".into());
