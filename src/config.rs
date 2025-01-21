@@ -200,6 +200,7 @@ pub enum CmdChooser{
     ParseAllEnrichments(ParseAllEnrichmentsOpt),
     Three(ThreeS),
     PrintNetworkInfos(OnlyNetworks),
+    CompareNetworkInfos(CompareNetworkInfos),
     Correlations(CorrelationOpts),
     Filter(FilterOpts),
     CompareEntries(CompareEntriesOpt),
@@ -483,6 +484,41 @@ pub struct OnlyNetworks{
     /// If you also want to add the country names instead of ids
     #[arg(short, long)]
     pub country_name_file: Option<Utf8PathBuf>
+}
+
+
+#[derive(Parser, Debug)]
+pub struct CompareNetworkInfos{
+    /// Networks file
+    pub in_file: Utf8PathBuf,
+
+    /// Year of which infos should be printed
+    #[arg(long)]
+    pub year1: i32,
+
+    /// Year of which infos should be printed
+    #[arg(long)]
+    pub year2: i32,
+
+    #[arg(short, long)]
+    /// Print trade amount for top X
+    pub top: Option<NonZeroU32>,
+
+    /// Print infos of specific node. This is the identifier string
+    #[arg(short, long)]
+    pub ids: Vec<String>,
+
+    /// If you also want to know the production of the product
+    #[arg(short, long)]
+    pub enrichment: Option<String>,
+
+    /// If you also want to add the country names instead of ids
+    #[arg(short, long)]
+    pub country_name_file: Option<Utf8PathBuf>,
+
+    /// Also print infos from adjacency list
+    #[arg(long)]
+    pub adj: bool
 }
 
 
