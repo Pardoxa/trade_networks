@@ -4,7 +4,9 @@ use{
     }, camino::Utf8PathBuf, net_ensembles::Graph, serde::{Deserialize, Serialize}, std::{
         collections::{BTreeMap, VecDeque}, fs::File, io::{BufReader, Write}, num::NonZeroU32, 
         path::Path
-    }, strum::EnumString
+    }, strum::EnumString,
+    ordered_float::OrderedFloat,
+    std::cmp::Reverse
 };
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, EnumString)]
@@ -76,6 +78,37 @@ impl Node {
             let other_id = &network.nodes[edge.index].identifier;
             print!(
                 "(idx: {}, id: {other_id}, amount: {})",
+                edge.index,
+                edge.amount
+            );
+        }
+        print!("]");
+    }
+
+    /// Panics if name does not exist in map
+    pub fn print_infos_with_country_names(
+        &self, 
+        network: &Network,
+        country_map: &BTreeMap<String, String>
+    )
+    {
+        let idx = network.get_index(&self.identifier).unwrap();
+        let list_len = self.adj.len();
+        let name = country_map.get(&self.identifier)
+            .unwrap();
+        print!(
+            "Node: name: {name} id: {} idx: {idx} list_len: {list_len} [", 
+            self.identifier
+        );
+        let mut edges = self.adj.clone();
+        
+        edges.sort_by_key(|edge| Reverse(OrderedFloat::from(edge.amount)));
+        for edge in edges{
+            let other_id = &network.nodes[edge.index].identifier;
+            let other_name = country_map.get(other_id)
+                .unwrap();
+            print!(
+                "(idx: {}, name: {other_name}, id: {other_id}, amount: {})",
                 edge.index,
                 edge.amount
             );

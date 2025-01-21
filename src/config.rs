@@ -478,7 +478,11 @@ pub struct OnlyNetworks{
 
     /// If you also want to know the production of the product
     #[arg(short, long)]
-    pub enrichment: Option<String>
+    pub enrichment: Option<String>,
+
+    /// If you also want to add the country names instead of ids
+    #[arg(short, long)]
+    pub country_name_file: Option<Utf8PathBuf>
 }
 
 
