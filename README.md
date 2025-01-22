@@ -316,3 +316,53 @@ The file _Y2000-Y2022_percent.dat
 * Column 1: 1-rho
 The others are more complex, so bear with me:
 * Column X: for the current disruption level, how many countries appear as severely affected in exactly X-1 years?
+
+This file can be used to measure s. For example if we want to generate output with the columns:
+1) rho
+2) s_4
+
+we can use:
+```bash
+awk '!/^#/ { sum=0; for(i=5; i<=24; i++) { sum+=$i } print 1-$1, sum }' _Y2000-Y2022_percent.dat
+```
+Note that awk is a well known program available for basically every Linux distribution
+What does this do? We sum the columns 5 until 24 (representing exactly 4 hits through exactly 23 hits) which gives us the number of countries that 
+appear in at least 4 of the years in question, i.e., we get s_4
+
+
+### sequential disruptions
+
+
+You also need to create a json file for the sequential disruptions.
+It is structured exactly the same as the one for the proportional disruptions
+with the only difference that now we do not have an "extra".
+sequential.json:
+```json
+{
+  "common": {
+    "enrich_file": "e15.bincode",
+    "network_file": "15.bincode",
+    "years": {
+      "start": 2000,
+      "end": 2022
+    },
+    "iterations": 100000,
+    "item_code": "15",
+    "top": 5,
+    "unstable_country_threshold": 0.7,
+    "original_avail_filter": 0.0
+  },
+  "extra": null
+}
+```
+
+The rest is also quite similar:
+```bash
+trade_networks multi-shocks -w whole-countries -g -q -c -j sequential.json 
+```
+
+This creates the files:
+_Y2000_vs_Y2001_Th0.7.dat etc
+and _Y2000-Y2022_country_count.dat
+
+Which are the same as for the proportional disruptions
