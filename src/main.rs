@@ -52,6 +52,8 @@ fn main() {
                 opt.compare_successive_years
             )
         },
+        CmdChooser::PrintNetworkInfos(opt) => print_network_info(opt),
+        CmdChooser::CompareNetworkInfos(opt) => compare_network_info(opt),
         CmdChooser::ImportExportDiff(opt) => max_diff_reported_import_vs_reported_export(opt),
         CmdChooser::DegreeDist(opt) => degree_dists(opt),
         CmdChooser::MaxWeight(opt) => max_weight(opt),
@@ -61,8 +63,6 @@ fn main() {
         CmdChooser::EnrichmentToJson(opt) => enrichment_to_json(opt),
         CmdChooser::Tests(t) => test_chooser(t.in_file, t.command),
         CmdChooser::Three(t) => three_set_exec(t),
-        CmdChooser::PrintNetworkInfos(opt) => print_network_info(opt),
-        CmdChooser::CompareNetworkInfos(opt) => compare_network_info(opt),
         CmdChooser::Correlations(opt) => correlations(opt),
         CmdChooser::Filter(filter_opts) => filter_files(filter_opts),
         CmdChooser::ParseBeef(beef_opt) => crate::network::main_execs::parse_beef_network(beef_opt),

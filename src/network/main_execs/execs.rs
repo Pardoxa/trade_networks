@@ -1624,6 +1624,14 @@ pub fn print_network_info(opt: OnlyNetworks)
 }
 
 
+fn get_node<'a>(network: &'a Network, id: &str) -> Option<&'a Node>
+{
+    network.nodes
+        .iter()
+        .find(|&node| node.identifier.as_str() == id)
+}
+
+
 pub fn compare_network_info(opt: CompareNetworkInfos)
 {
 
@@ -1715,6 +1723,114 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
             without_unconnected_1.node_count()
         );
 
+        let print_country_name = |id: &str, extra: &str|
+        {
+            if let Some(c_map) = country_id_map{
+                let country = c_map.get(id).unwrap();
+                print!("{country}{extra}");
+            }
+        };
+
+        let compare_years = |id: &str| -> (f64, f64)
+        {
+            let node_y1 = get_node(&without_unconnected_1, id);
+            let node_y2 = get_node(&without_unconnected_2, id);
+            print_country_name(id, " -> ");
+            print_enrichment(id);
+            match (node_y1, node_y2)
+            {
+                (None, None) => {
+                    println!("Id {id} missing!");
+                    (0., 0.)
+                },
+                (Some(node), None) => {
+                    println!("Id {id} Missing1!");
+                    (node.trade_amount(), 0.)
+                },
+                (None, Some(node)) => {
+                    println!("Id {id} Missing2!");
+                    (0., node.trade_amount())
+                },
+                (Some(node_y1), Some(node_y2)) => {
+                    let diff = node_y1.trade_amount() - node_y2.trade_amount();
+                    println!("ID {id} total trade Y1-Y2: {diff}");
+
+                    if adj{
+                        println!("ADJ: Y1-Y2");
+                        let mut y1_adj = node_y1.adj.clone();
+                        y1_adj.sort_by_key(|edge| Reverse(OrderedFloat(edge.amount)));
+        
+                        // set of edges from Y2:
+                        let y2_adj_set: BTreeSet<_> = node_y2.adj
+                            .iter()
+                            .map(
+                                |edge|
+                                {
+                                    without_unconnected_2.nodes[edge.index]
+                                        .identifier
+                                        .as_str()
+                                }
+                            ).collect();
+        
+                        // set of edges y1
+                        let mut y1_adj_set = BTreeSet::new();
+                        for edge in y1_adj{
+                            let id = without_unconnected_1.nodes[edge.index]
+                                .identifier
+                                .as_str();
+                            // To later compare if we have covered all edges of the other year
+                            y1_adj_set.insert(id);
+        
+                            let mut y2_edge = None;
+                            // now try to find the same edge in the other list
+                            for other_edge in node_y2.adj.iter(){
+                                let other_id = without_unconnected_2
+                                    .nodes[other_edge.index]
+                                    .identifier
+                                    .as_str();
+                                if other_id == id {
+                                    // We found it :)
+                                    y2_edge = Some(other_edge);
+                                    break;
+                                }
+                            }
+                            print!("\t{id} ");
+                            print_country_name(id, " -> ");
+                            match y2_edge{
+                                Some(y2_edge) => {
+                                    let diff = edge.amount - y2_edge.amount;
+                                    print!("Y1-Y2: {diff}");
+                                },
+                                None => print!("Incomplete1")
+                            }
+                            println!();
+                        }
+        
+                        for &missing in y2_adj_set.difference(&y1_adj_set)
+                        {
+                            let mut found = false;
+                            for other_edge in node_y2.adj.iter(){
+                                let other_id = without_unconnected_2
+                                    .nodes[other_edge.index]
+                                    .identifier
+                                    .as_str();
+                                found = missing == other_id;
+                                if found{
+                                    print!("\t{missing} ");
+                                    print_country_name(missing, " -> ");
+                                    println!("Incomplete2");
+                                    break;
+                                }
+                            }
+                            assert!(found);
+                        }
+                    }
+
+                    (node_y1.trade_amount(), node_y2.trade_amount())
+                }
+            }
+        };
+
         if let Some(t) = top{
             println!("TOP year {}:", n1.year);
             let mut list = without_unconnected_1
@@ -1733,100 +1849,10 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
             list.sort_unstable_by_key(|item| Reverse(item.0));
             let mut top_trade_sum_y1 = 0.0_f64;
             let mut top_trade_sum_y2 = 0.0_f64;
-            for (trade, id) in list.iter().take(t.get() as usize){
-               
-                if let Some(c_map) = country_id_map{
-                    let country = c_map.get(*id).unwrap();
-                    print!("{country} ");
-                }
-                
-                let idx_y2 = without_unconnected_2.get_index(id).unwrap();
-                let node_y2 = &without_unconnected_2.nodes[idx_y2];
-                let trade_y2 = node_y2.trade_amount();
-                top_trade_sum_y1 += trade.into_inner();
-                top_trade_sum_y2 += trade_y2;
-                let diff = trade - trade_y2;
-                print!(
-                    "ID: {id}, trade Y1-Y2: {diff} "
-                );
-                print_enrichment(id);
-                println!();
-                if adj{
-                    println!("ADJ: Y1-Y2");
-                    let idx_y1 = without_unconnected_1.get_index(id).unwrap();
-                    let node_y1 = &without_unconnected_1.nodes[idx_y1];
-                    let mut y1_adj = node_y1.adj.clone();
-                    y1_adj.sort_by_key(|edge| Reverse(OrderedFloat(edge.amount)));
-
-                    // set of edges from Y2:
-                    let y2_adj_set: BTreeSet<_> = node_y2.adj
-                        .iter()
-                        .map(
-                            |edge|
-                            {
-                                without_unconnected_2.nodes[edge.index]
-                                    .identifier
-                                    .as_str()
-                            }
-                        ).collect();
-
-                    // set of edges y1
-                    let mut y1_adj_set = BTreeSet::new();
-                    for edge in y1_adj{
-                        let id = without_unconnected_1.nodes[edge.index]
-                            .identifier
-                            .as_str();
-                        // To later compare if we have covered all edges of the other year
-                        y1_adj_set.insert(id);
-
-                        let mut y2_edge = None;
-                        // now try to find the same edge in the other list
-                        for other_edge in node_y2.adj.iter(){
-                            let other_id = without_unconnected_2
-                                .nodes[other_edge.index]
-                                .identifier
-                                .as_str();
-                            if other_id == id {
-                                // We found it :)
-                                y2_edge = Some(other_edge);
-                                break;
-                            }
-                        }
-                        if let Some(c_map) = country_id_map{
-                            let name = c_map.get(id).unwrap();
-                            print!("\t{name} -> ");
-                        }
-                        match y2_edge{
-                            Some(y2_edge) => {
-                                let diff = edge.amount - y2_edge.amount;
-                                print!("{diff}");
-                            },
-                            None => print!("Incomplete1")
-                        }
-                        println!();
-                    }
-
-                    for &missing in y2_adj_set.difference(&y1_adj_set)
-                    {
-                        let mut found = false;
-                        for other_edge in node_y2.adj.iter(){
-                            let other_id = without_unconnected_2
-                                .nodes[other_edge.index]
-                                .identifier
-                                .as_str();
-                            found = missing == other_id;
-                            if found{
-                                if let Some(c_map) = country_id_map{
-                                    let name = c_map.get(missing).unwrap();
-                                    print!("\t{name} -> ");
-                                }
-                                println!("Incomplete2");
-                                break;
-                            }
-                        }
-                        assert!(found);
-                    }
-                }
+            for (_trade, id) in list.iter().take(t.get() as usize){
+                let (y1, y2) = compare_years(id);
+                top_trade_sum_y1 += y1;
+                top_trade_sum_y2 += y2;
                 
             }
             if top_trade_sum_y1 != 0.0 || top_trade_sum_y2 != 0.0 {
@@ -1840,21 +1866,15 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
         if !identifier.is_empty()
         {
             println!("Identifier:");
+            identifier.iter()
+                .for_each(
+                    |id| {
+                        let _ = compare_years(id);
+                    }
+                );
         }
 
-        #[allow(clippy::never_loop)]
-        for _id in identifier{
-            unimplemented!()
-            //for node in n.nodes.iter(){
-            //    if node.identifier.as_str() == id {
-            //        print_infos(node, n);
-            //        print_enrichment(n.year, id);
-            //        println!();
-            //        continue 'outer;
-            //    } 
-            //}
-            //eprintln!("Could not find ID {id}");
-        }
+
         
     }
 
@@ -1864,7 +1884,7 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
     let mut networks = LazyNetworks::Filename(opt.in_file);
     networks.assure_availability();
 
-    println!("Export:");
+    println!("Export: In the following we compare exports of two different years");
     compare_infos(
         networks.get_export_network_unchecked(opt.year1),
         networks.get_export_network_unchecked(opt.year2),
@@ -1875,8 +1895,7 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
         opt.adj
     );
 
-
-    println!("Import:");
+    println!("\nImport: In the following we compare Imports of two different years");
     compare_infos(
         networks.get_import_network_unchecked(opt.year1),
         networks.get_import_network_unchecked(opt.year2),

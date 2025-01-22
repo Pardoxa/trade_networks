@@ -206,6 +206,10 @@ pub enum CmdChooser{
     SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears),
     /// Used for proportional and sequential disruptions. See Readme.md as this does a lot of stuff
     MultiShocks(MultiShockOpt),
+    /// Helpful to get a feeling for specific networks
+    PrintNetworkInfos(OnlyNetworks),
+    /// To understand the difference between certain years
+    CompareNetworkInfos(CompareNetworkInfos),
     DegreeDist(DegreeDist),
     Enrichment(EnrichOpt),
     MaxWeight(DegreeDist),
@@ -214,8 +218,6 @@ pub enum CmdChooser{
     ParseBeef(BeefParser),
     Tests(Tests),
     Three(ThreeS),
-    PrintNetworkInfos(OnlyNetworks),
-    CompareNetworkInfos(CompareNetworkInfos),
     Correlations(CorrelationOpts),
     Filter(FilterOpts),
     CompareEntries(CompareEntriesOpt),

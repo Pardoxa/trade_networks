@@ -366,3 +366,21 @@ _Y2000_vs_Y2001_Th0.7.dat etc
 and _Y2000-Y2022_country_count.dat
 
 Which are the same as for the proportional disruptions
+
+
+## Other helpful stuff
+
+To get a feeling for specific networks (for example wheat, i.e., item 15) you can use
+```bash 
+trade_networks print-network-infos 15.bincode
+```
+Use "--help" to get more options.
+You can use this to get infos about a specific country in a specific year, to print the top exporters and importers 
+of a specific year etc.
+
+If you want to compare the trade of two different years, have a look at:
+```bash
+trade_networks compare-network-infos 15.bincode -t 2 --year1 2013 --year2 2014 -c Trade_DetailedTradeMatrix_E_AreaCodes.csv --adj -i 200 -e e15.bincode
+```
+This will print the difference in trading amounts, both the total for the top exporters and for the ids you specify,
+as well as for the edges, if you use the "--adj" option
