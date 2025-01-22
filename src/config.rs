@@ -182,9 +182,18 @@ pub struct MultiShockOpt{
 
 /// Created by Yannick Feld
 /// Program to read in Trade networks and do some data processing
+/// It reads in the data from the FAO - note: You need to change the encoding to utf8 first
 #[derive(Parser)]
 #[command(author, version, about)]
 pub enum CmdChooser{
+    /// PARSING: Read in the networks and create bincode files for all contained items.
+    ParseAllNetworks(ParseAllNetworksOpt),
+    /// PARSING: Read in the networks and create bincode file for specified item
+    ParseNetworks(ParseNetworkOpt),
+    /// PARSING: Read in Production data and create bincode files for all contained items
+    ParseAllEnrichments(ParseAllEnrichmentsOpt),
+    /// PARSING: Read in Production data and create bincode file for specified items
+    ParseEnrichment(ParseEnrichOpts),
     DegreeDist(DegreeDist),
     Enrichment(EnrichOpt),
     /// Create json from bincode enrichment
@@ -192,12 +201,8 @@ pub enum CmdChooser{
     MaxWeight(DegreeDist),
     Misc(MiscOpt),
     Out10(MiscOpt),
-    ParseNetworks(ParseNetworkOpt),
-    ParseAllNetworks(ParseAllNetworksOpt),
     ParseBeef(BeefParser),
     Tests(Tests),
-    ParseEnrichment(ParseEnrichOpts),
-    ParseAllEnrichments(ParseAllEnrichmentsOpt),
     Three(ThreeS),
     PrintNetworkInfos(OnlyNetworks),
     CompareNetworkInfos(CompareNetworkInfos),
@@ -223,7 +228,6 @@ pub enum CmdChooser{
     SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears),
     /// Get a list of how many countries trade in the respective years
     TradeCount(main_execs::trade_count::TradeCountOptions),
-    Tmp,
     /// Sort the averages and print out order
     SortAverages(sort_year_cmps::AverageSortOpt),
     /// Print maximal difference between reported import and corresponding reported export 
