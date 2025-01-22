@@ -92,3 +92,96 @@ trade_networks parse-enrichment -e PATH/TO/Production_Crops_Livestock_E_All_Data
 ```
 instead. 
 
+If you want to get a feel for the data, you may want to convert the bincode file to a json file via: 
+```bash
+trade_networks enrichment-to-json --file e15.bincode --item-code 15 
+```
+which will create a file called 15.json that is human readable.
+
+## Measuring
+
+### Random Disruptions
+
+#### Calculating Averages
+
+To measure random disruptions use:
+```bash
+trade_networks shock-cloud-all --threads 24 --json config.json -q
+```
+
+Adjust the number of threads to whatever many threads make sense for your computer.
+The file config.json contains the parameter for the random disruptions
+```json
+{
+    "enrich_glob": "e*.bincode",
+    "network_glob": "*bincode",
+    "years": {
+        "start": 2018,
+        "end": 2022
+    },
+    "iterations": 1300,
+    "top": 3,
+    "unstable_country_threshold": 0.7,
+    "original_avail_filter": 1e-9,
+    "cloud_steps": 100,
+    "cloud_m": 8000,
+    "seed": 1824793,
+    "reducing_factor": 0.1,
+    "hist_bins": 100,
+    "id_file": "Trade_DetailedTradeMatrix_E_ItemCodes.csv"
+}
+```
+
+The parameters:
+* "enrich_glob" specifies a globbing for the files that contain the Production data
+* "network_glob" specifies a globbing for the files that contain the network data
+* "id_file" the item codes file you downloaded earlier
+* "top" how many top exporters you want to disturb
+* "iterations" how many iterations to perform until we consider our simulation to be converged
+* "unstable_country_threshold" - theta. I.e., the threshold for counting countries as severely affected
+* "original_avail_filter" - we ignore countries that have less than this amount of product available to themselves before the shocks
+* "cloud_steps": how many rho do we target? I think it makes sense to set this equal to "hist_bins"
+* "cloud_m": How many samples per cloud_step
+* "seed": seed for the rng
+* "reducing_factor": Did something at some point, but, as far as I can tell, it is only used for naming the output file at this point.
+* "hist_bins" Number of bins for the averaging
+* "years": specify the years you are interested in
+
+The result will be files like:
+_Y2020_Th0.7_R0.1.dat
+Which contains all samples, i.e., the first column is 1-rho and the second column is 
+the number of severely affected countries for this sample. 
+(Clearly all samples with rho=0 or rho=1 have the same number of severely affected countries)
+
+Additionally the result of this will be files like "_Y2019_Th0.7_R0.1.average" - they will appear in folders corresponding to the item code.
+The files contain the following columns:
+1) interval_left: left border of 1-rho 
+2) interval_right: right border of 1-rho -> specifies the rho range we averaged over
+3) hits: how many samples we had in the range
+4) average The average number of severely affected countries
+5) variance: corresponding variance 
+6) average_normed_by_max: column 4 divided by the maximum of column 4 
+7) average_normed_by_trading_countries: column 4 divided by N (number of countries that trade in the item, fulfill the "original_avail_filter" and are not top exporters)
+
+
+
+#### Yearly Differences
+
+Let's say you want to compare the results of two years with one another.
+Assuming you just did the average calculation above, you should have a lot of folders named after the item codes and 
+in these folders there are the ".average" files. 
+To now process all of these at once, you can do the following, where you specify the years you are interested in
+```bash
+trade_networks shock-cloud-cmp-years '*/*2020*.average' '*/*2021*.average'
+```
+This gives you a file called something like Item51_2020_vs_2021.dat 
+that contains the columns:
+* total_export_fraction (of the top exporters)
+* average_normed_by_max of Y1 minus average_normed_by_max of Y2 (see column 6 of previous section)
+
+If instead you want to compare the country normed data, i.e., use column 7 of previous section instead, use the "-n" option:
+```bash
+trade_networks shock-cloud-cmp-years '*/*2020*.average' '*/*2021*.average' -n
+```
+The file will be called something like: Country_normed_Item51_2020_vs_2021.dat
+

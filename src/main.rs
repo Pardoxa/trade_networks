@@ -1,4 +1,3 @@
-use camino::Utf8PathBuf;
 use clap::Parser;
 
 mod parser;
@@ -24,6 +23,19 @@ fn main() {
     match option{
         CmdChooser::ParseNetworks(opt) => parse_networks(opt),
         CmdChooser::ParseAllNetworks(opt) => to_binary_all(opt),
+        CmdChooser::ParseEnrichment(o) => enrich_to_bin(o),
+        CmdChooser::ParseAllEnrichments(opt) => parse_all_extras(opt.in_files, opt.only_unit),
+        CmdChooser::ShockCloudAll(opt) => {
+            main_execs::all_random_cloud_shocks(
+                opt.json,
+                &opt.out_stub,
+                opt.quiet,
+                opt.threads
+            )
+        },
+        CmdChooser::ShockCloudCmpYears(opt) => {
+            main_execs::match_maker::make_matches(&opt)
+        },
         CmdChooser::ImportExportDiff(opt) => max_diff_reported_import_vs_reported_export(opt),
         CmdChooser::DegreeDist(opt) => degree_dists(opt),
         CmdChooser::MaxWeight(opt) => max_weight(opt),
@@ -32,9 +44,7 @@ fn main() {
         CmdChooser::Enrichment(opt) => enrich(opt),
         CmdChooser::EnrichmentToJson(opt) => enrichment_to_json(opt),
         CmdChooser::Tests(t) => test_chooser(t.in_file, t.command),
-        CmdChooser::ParseEnrichment(o) => enrich_to_bin(o),
         CmdChooser::Three(t) => three_set_exec(t),
-        CmdChooser::ParseAllEnrichments(opt) => parse_all_extras(opt.in_files, opt.only_unit),
         CmdChooser::PrintNetworkInfos(opt) => print_network_info(opt),
         CmdChooser::CompareNetworkInfos(opt) => compare_network_info(opt),
         CmdChooser::Correlations(opt) => correlations(opt),
@@ -62,17 +72,6 @@ fn main() {
                 &opt.out_stub,
                 opt.quiet
             )
-        },
-        CmdChooser::ShockCloudAll(opt) => {
-            main_execs::all_random_cloud_shocks(
-                opt.json,
-                &opt.out_stub,
-                opt.quiet,
-                opt.threads
-            )
-        },
-        CmdChooser::ShockCloudCmpYears(opt) => {
-            main_execs::match_maker::make_matches(&opt)
         },
         CmdChooser::ShockCloudCalcAverages(opt) => {
             main_execs::match_maker::calc_averages(opt)

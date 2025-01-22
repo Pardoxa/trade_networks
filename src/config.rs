@@ -194,6 +194,8 @@ pub enum CmdChooser{
     ParseAllEnrichments(ParseAllEnrichmentsOpt),
     /// PARSING: Read in Production data and create bincode file for specified items
     ParseEnrichment(ParseEnrichOpts),
+    /// Do random disruptions for all items specified by globbing
+    ShockCloudAll(ShockCloudAllCmdOpt),
     DegreeDist(DegreeDist),
     Enrichment(EnrichOpt),
     /// Create json from bincode enrichment
@@ -215,7 +217,6 @@ pub enum CmdChooser{
     CompareGroupsCommandCreator(CompGroupComCreOpt),
     MultiShocks(MultiShockOpt),
     ShockCloud(ShockCloudCmdOpt),
-    ShockCloudAll(ShockCloudAllCmdOpt),
     /// Compare averages of different years
     ShockCloudCmpYears(MatchMakerOpts),
     ShockCloudCalcAverages(MatchCalcAverage),
@@ -240,9 +241,9 @@ pub struct EnrichmentToJson{
     #[arg(short, long)]
     pub file: String,
 
-    /// Name of json output. ".json" will be added automatically
+    /// Item code of the enrichment you want to parse
     #[arg(short, long)]
-    pub out: String
+    pub item_code: String 
 }
 
 #[derive(Debug, Clone, Parser)]
