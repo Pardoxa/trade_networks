@@ -36,6 +36,12 @@ fn main() {
         CmdChooser::ShockCloudCmpYears(opt) => {
             main_execs::match_maker::make_matches(&opt)
         },
+        CmdChooser::ShockCloudCalcAverages(opt) => {
+            main_execs::match_maker::calc_averages(opt)
+        },
+        CmdChooser::SortCompMultiYears(opt) => {
+            sort_year_cmps::sort_compare_multiple_years(opt);
+        },
         CmdChooser::ImportExportDiff(opt) => max_diff_reported_import_vs_reported_export(opt),
         CmdChooser::DegreeDist(opt) => degree_dists(opt),
         CmdChooser::MaxWeight(opt) => max_weight(opt),
@@ -73,9 +79,6 @@ fn main() {
                 opt.quiet
             )
         },
-        CmdChooser::ShockCloudCalcAverages(opt) => {
-            main_execs::match_maker::calc_averages(opt)
-        },
         CmdChooser::ShockCloudDispersion(opt) => {
             main_execs::av_analyzer::analyze(opt)
         },
@@ -84,9 +87,6 @@ fn main() {
         },
         CmdChooser::SortYearComp(comp) => {
             sort_year_cmps::sorting_stuff(comp);
-        },
-        CmdChooser::SortCompMultiYears(opt) => {
-            sort_year_cmps::sort_compare_multiple_years(opt);
         },
         CmdChooser::TradeCount(opt) => trade_count::trade_count(opt),
         CmdChooser::SortAverages(opt) => {

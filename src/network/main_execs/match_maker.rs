@@ -175,6 +175,7 @@ impl Matched{
     } 
 }
 
+/// Calculate Averages
 #[derive(Parser)]
 pub struct MatchCalcAverage{
     /// Glob to files to compare

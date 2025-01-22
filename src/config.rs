@@ -194,12 +194,18 @@ pub enum CmdChooser{
     ParseAllEnrichments(ParseAllEnrichmentsOpt),
     /// PARSING: Read in Production data and create bincode file for specified items
     ParseEnrichment(ParseEnrichOpts),
-    /// Do random disruptions for all items specified by globbing
-    ShockCloudAll(ShockCloudAllCmdOpt),
-    DegreeDist(DegreeDist),
-    Enrichment(EnrichOpt),
     /// Create json from bincode enrichment
     EnrichmentToJson(EnrichmentToJson),
+    /// Do random disruptions for all items specified by globbing
+    ShockCloudAll(ShockCloudAllCmdOpt),
+    /// Compare averages of different years to one another (see README.md)
+    ShockCloudCmpYears(MatchMakerOpts),
+    /// Calculate averages. See Readme.md
+    ShockCloudCalcAverages(MatchCalcAverage),
+    /// Compare multiple years in sequential order. You need to be in a folder with subfolders where each subfolder represents an item
+    SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears),
+    DegreeDist(DegreeDist),
+    Enrichment(EnrichOpt),
     MaxWeight(DegreeDist),
     Misc(MiscOpt),
     Out10(MiscOpt),
@@ -217,16 +223,11 @@ pub enum CmdChooser{
     CompareGroupsCommandCreator(CompGroupComCreOpt),
     MultiShocks(MultiShockOpt),
     ShockCloud(ShockCloudCmdOpt),
-    /// Compare averages of different years
-    ShockCloudCmpYears(MatchMakerOpts),
-    ShockCloudCalcAverages(MatchCalcAverage),
     ShockCloudDispersion(network::main_execs::av_analyzer::AnalyzerOpts),
     /// Create shadow plot
     ShockCloudShadow(ShockCloudShadoOpt),
     /// Compare years with one another. You need to be in a folder with subfolders where each subfolder represents an item
     SortYearComp(sort_year_cmps::Comparison),
-    /// Compare multiple years in sequential order. You need to be in a folder with subfolders where each subfolder represents an item
-    SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears),
     /// Get a list of how many countries trade in the respective years
     TradeCount(main_execs::trade_count::TradeCountOptions),
     /// Sort the averages and print out order

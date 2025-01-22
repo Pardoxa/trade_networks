@@ -188,6 +188,7 @@ pub struct SortCompareMultipleYears
     itemid_to_item_file: Option<Utf8PathBuf>,
 
     #[arg(long, short)]
+    /// How should we do the comparison?
     how: How,
 
     /// Reverse the order
