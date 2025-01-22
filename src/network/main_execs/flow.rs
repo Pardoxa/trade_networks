@@ -2643,39 +2643,6 @@ where R: Rng
         ).collect_vec()
 }
 
-pub fn renormalize(
-    file: &Utf8Path,
-    network: &mut LazyNetworks
-)
-{
-    let name= file.file_name().unwrap();
-    let year = &name[2..6];
-    let year: i32 = year.parse().unwrap();
-
-    network.assure_availability();
-    let trading = network.get_import_network_unchecked(year)
-        .list_of_trading_nodes()
-        .len();
-    println!("{year} {trading}");
-
-    let norm_factor = (trading as f64).recip();
-
-    let _data = open_as_unwrapped_lines_filter_comments(name)
-        .map(
-            |line|
-            {
-                let mut iter = line.split_ascii_whitespace();
-                let rho: f64 = iter.next().unwrap().parse().unwrap();
-                let mut country_count: f64 = iter.next().unwrap().parse().unwrap();
-                country_count *= norm_factor;
-                (rho, country_count)
-            }
-        ).collect_vec();
-    
-    // THIS FUNCTION IS INCOMPLETE!
-    panic!("THIS FUNCTION WAS NEVER FINISHED!")
-}
-
 pub fn check_quick_and_dirty(
     top: &[usize], 
     network: &Network, 

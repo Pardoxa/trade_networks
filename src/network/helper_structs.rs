@@ -41,7 +41,7 @@ impl ComponentChoice{
     }
 }
 
-
+#[allow(dead_code)]
 pub struct LargestComponents{
     pub ids: Vec<isize>,
     pub members_of_largest_component: Vec<usize>,
