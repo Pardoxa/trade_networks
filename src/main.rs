@@ -42,6 +42,16 @@ fn main() {
         CmdChooser::SortCompMultiYears(opt) => {
             sort_year_cmps::sort_compare_multiple_years(opt);
         },
+        CmdChooser::MultiShocks(opt) => {
+            measure_multi_shock(
+                opt.json,
+                opt.which, 
+                &opt.out_stub,
+                opt.quiet,
+                opt.group_files,
+                opt.compare_successive_years
+            )
+        },
         CmdChooser::ImportExportDiff(opt) => max_diff_reported_import_vs_reported_export(opt),
         CmdChooser::DegreeDist(opt) => degree_dists(opt),
         CmdChooser::MaxWeight(opt) => max_weight(opt),
@@ -61,16 +71,6 @@ fn main() {
             group_cmp::compare_groups(opt);
         },
         CmdChooser::CompareGroupsCommandCreator(opt) => group_cmp::command_creator(opt),
-        CmdChooser::MultiShocks(opt) => {
-            measure_multi_shock(
-                opt.json,
-                opt.which, 
-                &opt.out_stub,
-                opt.quiet,
-                opt.group_files,
-                opt.compare_successive_years
-            )
-        },
         CmdChooser::CompareThGroups(opt) => group_cmp::compare_th_exec(opt),
         CmdChooser::ShockCloud(opt) => {
             main_execs::random_cloud_shock(

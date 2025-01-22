@@ -158,18 +158,25 @@ pub fn compare_multiple(
     name: &Path
 )
 {
+    // Outer vector is vector over years
+    // Inner vector is vector over different disruption levels
     let set_infos = paths
         .iter()
         .copied()
         .map(read_set_infos)
         .collect_vec();
 
+    // check that all years have the same number of disruption levels
     let equal_len = set_infos.iter()
         .tuple_windows()
         .all(|(a,b)| a.len() == b.len());
 
-    assert!(equal_len);
+    assert!(
+        equal_len,
+        "You are trying to compare vectors of sets - but the vectors are of different lengths"
+    );
 
+    // Since we just asserted that all Vectors have the same len, we might as well read the first one
     let len = set_infos[0].len();
 
     let mut header = vec![x.str().to_owned(), "1hit".to_owned()];
@@ -181,12 +188,16 @@ pub fn compare_multiple(
     let mut writer = create_buf_with_command_and_version_and_header(name, header);
 
 
+    // iterate over number of disruption levels
     for i in 0..len
     {
         let mut map = BTreeMap::new();
+        // iterate over all years
         for set_info in set_infos.iter()
         { 
+            // get set of current disruption level
             let set = &set_info[i].set;
+            // iterate over the set and increment counter for the country ids of severely affected countries
             for &val in set.iter(){
                 map.entry(val)
                     .and_modify(|count| *count += 1)

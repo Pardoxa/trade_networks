@@ -110,7 +110,7 @@ trade_networks shock-cloud-all --threads 24 --json config.json -q
 ```
 
 Adjust the number of threads to whatever many threads make sense for your computer.
-The file config.json contains the parameter for the random disruptions
+The file config.json contains the parameter for the random disruptions:
 ```json
 {
     "enrich_glob": "e*.bincode",
@@ -234,3 +234,85 @@ Resulting file contains all items sorted by the G value of 2018 vs 2019. Columns
 
 The command also creates the files CN_CMP_res_2018_2019_AbsSumIgnoreNan.dat etc.
 In there we have a sorted list of G values and the corresponding item codes and names.
+
+
+### Percentage disruptions
+
+If you want to have proportional disruptions, we have to set the 
+parameters for that in a json file, e.g., percentage.json:
+```json
+{
+  "common": {
+    "enrich_file": "e15.bincode",
+    "network_file": "15.bincode",
+    "years": {
+      "start": 2000,
+      "end": 2022
+    },
+    "iterations": 10000,
+    "item_code": "15",
+    "top": 5,
+    "unstable_country_threshold": 0.7,
+    "original_avail_filter": 0.0
+  },
+  "extra": {
+    "start": 0.0,
+    "end": 1.0,
+    "amount": 100
+  }
+}
+```
+
+The parameters:
+* "enrich_file" the bincode file of the relevant production data
+* "network_file" the bincode file of the relevant network data
+* "years": Simulate from year start to year end
+* iterations: How many iterations for the system to converge
+* item code: The item code of the item in question. 
+* top: number of top exporters to disturb
+* "unstable_country_threshold": theta from the paper
+* "original_avail_filter": 0.0 - We exclude countries that, without disruption, have a negative product availability from the severely affected country count
+* extra->start: starting value of 1-rho
+* extra->end: final value of 1-rho
+* amount: Number of samples between start and end
+
+Now the program is called via:
+```bash
+trade_networks multi-shocks -w percentages -g -q -c -j percentage.json
+```
+Parameters:
+* "-w percentages": Use the percentage disturbance
+* "-g" Additionally output group files
+* "-q" Non verbose output preferred
+* "-c" Automatically compare successive years and output result
+* "-j percentage.json": Specify the file that contains our additional parameters
+
+Output of this command:
+Files like: _Y2000_Th0.7_percent.dat 
+Containing columns:
+1) number of disrupting countries (in this case always 5)
+2) disruption percentage (1-rho)
+3) number of severely affected countries
+
+Files like _Y2000_Th0.7_percent.group
+
+This file contains the ids of the countries that are severely affected in the respective bins of the previous files.
+Structure:
+§ {Number of disturbed countries; In this example always 5} {1-rho}
+id1
+id2
+…
+§{Number of disturbed countries; In this example always 5} {1-rho}
+etc.
+
+Files like _Y2000_vs_2001_Th0.7.dat
+Containing columns:
+1) 1-rho of year 1
+2) 1-rho of year 2 (should be, within numerical precision, equal to rho of year 1)
+3) Number of countries severely affected in both years
+4) number of countries that are severely affected in at least one of the years
+
+The file _Y2000-Y2022_percent.dat
+* Column 1: 1-rho
+The others are more complex, so bear with me:
+* Column X: for the current disruption level, how many countries appear as severely affected in exactly X-1 years?

@@ -204,6 +204,8 @@ pub enum CmdChooser{
     ShockCloudCalcAverages(MatchCalcAverage),
     /// Compare multiple years in sequential order. You need to be in a folder with subfolders where each subfolder represents an item
     SortCompMultiYears(sort_year_cmps::SortCompareMultipleYears),
+    /// Used for proportional and sequential disruptions. See Readme.md as this does a lot of stuff
+    MultiShocks(MultiShockOpt),
     DegreeDist(DegreeDist),
     Enrichment(EnrichOpt),
     MaxWeight(DegreeDist),
@@ -221,7 +223,6 @@ pub enum CmdChooser{
     CompareThGroups(GroupCompMultiOpts),
     /// Create commands to use with compare groups, used to automate stuff
     CompareGroupsCommandCreator(CompGroupComCreOpt),
-    MultiShocks(MultiShockOpt),
     ShockCloud(ShockCloudCmdOpt),
     ShockCloudDispersion(network::main_execs::av_analyzer::AnalyzerOpts),
     /// Create shadow plot
