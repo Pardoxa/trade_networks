@@ -1,4 +1,5 @@
 use camino::{Utf8Path, Utf8PathBuf};
+use enriched_digraph::ExtraInfo;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use crate::{network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}, parser::{country_map, id_map, parse_all_networks}, partition};
@@ -6,7 +7,7 @@ use fs_err::File;
 use {
     std::{
         io::{BufWriter, Write, BufRead},
-        collections::{BTreeSet, BTreeMap}, 
+        collections::{BTreeSet, BTreeMap},
         fmt::Display,
         f64::consts::TAU,
         path::Path,
@@ -62,8 +63,8 @@ pub fn parse_beef_network(opt: BeefParser)
 pub fn parse_networks(opt: ParseNetworkOpt)
 {
     let networks = crate::parser::network_parser(
-        &opt.in_file, 
-        &opt.item_code, 
+        &opt.in_file,
+        &opt.item_code,
         false,
         opt.read_type
     ).expect("unable to parse");
@@ -76,23 +77,23 @@ pub fn parse_networks(opt: ParseNetworkOpt)
         bincode::serialize_into(buf, &networks)
             .expect(BINCODE_CREATION_ERROR);
     }
-    
+
 }
 
 pub fn max_diff_reported_import_vs_reported_export(opt: ImportExportDiffOpts)
 {
     println!("Parsing imports");
     let import_networks = crate::parser::network_parser(
-        &opt.in_file, 
-        &opt.item_code, 
+        &opt.in_file,
+        &opt.item_code,
         true,
         ReadType::ImportQuantity
     ).expect("unable to parse");
 
     println!("Parsing exports");
     let export_networks = crate::parser::network_parser(
-        &opt.in_file, 
-        &opt.item_code, 
+        &opt.in_file,
+        &opt.item_code,
         true,
         ReadType::ExportQuantity
     ).expect("unable to parse");
@@ -126,14 +127,14 @@ pub fn max_diff_reported_import_vs_reported_export(opt: ImportExportDiffOpts)
             let import_country_id = import_node.identifier.as_str();
             for import_edge in import_node.adj.iter(){
                 let export_country_id = import.nodes[import_edge.index].identifier.as_str();
-                
+
                 match export_map.get(export_country_id){
                     None => {
                         // Not even the country is found?
                         let year = import.year;
                         eprintln!("Y {year} Country missing! Maybe it did not report it's exports?");
                         continue 'outer;
-                        
+
                     },
                     Some(export_index) => {
                         let export_node = &export.nodes[*export_index];
@@ -154,7 +155,7 @@ pub fn max_diff_reported_import_vs_reported_export(opt: ImportExportDiffOpts)
                                     import_country_id,
                                     import_id
                                 );
-        
+
                                 let difference = (import_edge.amount - export_edge.amount).abs();
                                 if diff_max < difference{
                                     diff_max = difference;
@@ -200,7 +201,7 @@ pub fn max_diff_reported_import_vs_reported_export(opt: ImportExportDiffOpts)
         };
         println!("Y {year} Max Difference {diff_max} {unit}. Import: {import_amount} {import_country} Export: {export_amount:?} {export_country}");
     }
-    
+
 }
 
 pub fn to_binary_all(opt: ParseAllNetworksOpt)
@@ -210,9 +211,9 @@ pub fn to_binary_all(opt: ParseAllNetworksOpt)
     println!("Found {} item codes", all.len());
 
     if opt.seperate_output {
-        
+
         for (item_code, networks) in all.into_iter(){
-            
+
             let output_name = format!("{item_code}.bincode");
             let buf = create_buf(output_name);
             bincode::serialize_into(buf, &networks)
@@ -225,9 +226,9 @@ pub fn to_binary_all(opt: ParseAllNetworksOpt)
         bincode::serialize_into(buf, &all)
                 .expect(BINCODE_CREATION_ERROR);
     }
-    
 
-    
+
+
 }
 
 pub fn max_weight(opt: DegreeDist)
@@ -301,12 +302,12 @@ fn degree_dists_helper(networks: &[Network], out: &str)
                 network.nodes.iter().map(|node| node.adj.len())
             }
         ).max().unwrap();
-    
+
     let mul = (max_degree+1).next_multiple_of(2) - 1;
     let hist = HistUsize::new_inclusive(0, mul, (mul+1)/2)
         .unwrap();
     //let hist = HistUsizeFast::new_inclusive(0, max_degree).unwrap();
-        
+
     let mut hists: Vec<_> = (0..networks.len()).map(|_| hist.clone()).collect();
 
     networks.iter()
@@ -360,7 +361,7 @@ pub fn export_out_comp(opt: MiscOpt)
 
     for (id, n) in networks.iter().enumerate()
     {
-        
+
         let mut digraph = n.without_unconnected_nodes();
         if digraph.node_count() < 10 {
             continue;
@@ -422,7 +423,7 @@ pub fn misc(opt: MiscOpt)
         networks.iter_mut()
             .for_each(|n| *n = n.effective_trade_only());
     }
-    
+
 
     for (id, current_n) in networks.iter().enumerate()
     {
@@ -444,8 +445,8 @@ pub fn misc(opt: MiscOpt)
 
         let trading_nodes = no_unconnected_exporting.node_count();
         res_map.insert("trading_nodes", Box::new(trading_nodes));
-        
-        
+
+
         let node_count = exporting.nodes_with_non_empty_adj();
         res_map.insert("exporting_nodes", Box::new(node_count));
         let importing_nodes = importing.nodes_with_non_empty_adj();
@@ -455,7 +456,7 @@ pub fn misc(opt: MiscOpt)
 
         let component = largest_connected_component(&no_unconnected_exporting);
 
-        let largest_component_percent = 
+        let largest_component_percent =
             component.size_of_largest_component as f64 / no_unconnected_exporting.node_count() as f64;
         res_map.insert("largest_connected_component_percent", Box::new(largest_component_percent));
         res_map.insert("connected_component_count", Box::new(component.num_components));
@@ -463,20 +464,20 @@ pub fn misc(opt: MiscOpt)
         let largest_connected_component = no_unconnected_exporting
             .filtered_network(component.members_of_largest_component.iter());
         res_map.insert("largest_component", Box::new(component.size_of_largest_component));
-        
+
         let giant_comp_edge_count = largest_connected_component.edge_count();
         res_map.insert("largest_connected_component_edges", Box::new(giant_comp_edge_count));
 
         let out_size = exporting.largest_out_component(ComponentChoice::IncludingSelf);
         res_map.insert("largest_exporting_out_comp", Box::new(out_size));
 
-        
+
         let in_size = importing.largest_out_component(ComponentChoice::IncludingSelf);
         res_map.insert("largest_importing_out_comp", Box::new(in_size));
 
         let scc_components = no_unconnected_exporting.scc_recursive();
         res_map.insert("num_scc", Box::new(scc_components.len()));
-        
+
         let mut check = vec![false; no_unconnected_exporting.node_count()];
         for &i in scc_components.iter().flat_map(|e| e.iter())
         {
@@ -523,12 +524,12 @@ pub fn misc(opt: MiscOpt)
 
 pub fn enrich(opt: EnrichOpt){
     let enrichments = crate::parser::parse_extra(
-        &opt.enrich_file, 
+        &opt.enrich_file,
         &opt.item_code
     );
     let networks = read_networks(&opt.bin_file);
     let enriched = crate::network::enriched_digraph::enrich_networks(
-        &networks, 
+        &networks,
         enrichments
     );
     let buf_writer = create_buf(opt.out);
@@ -546,11 +547,11 @@ pub fn enrich_to_bin(opt: ParseEnrichOpts){
     let mut enrichments: Vec<_> = opt.enrich_files
         .iter()
         .map(
-            |s| 
+            |s|
             {
                 println!("parsing {s}");
                 crate::parser::parse_extra(s, &item_code)
-            }   
+            }
         )
         .collect();
     let mut fused = enrichments.pop().unwrap();
@@ -575,7 +576,7 @@ pub fn enrichment_to_json(opt: EnrichmentToJson)
     let mut enrichment = LazyEnrichmentInfos::Filename(opt.file, Some(opt.item_code));
     enrichment.assure_availability();
     let enrichment = enrichment.enrichment_infos_unchecked();
-    
+
     let buf = create_buf(out);
     serde_json::to_writer_pretty(buf, enrichment).unwrap();
 }
@@ -623,7 +624,7 @@ fn calc_cor_weights(in_file: Utf8PathBuf, opt: CalcWeights)
         .as_ref()
         .map(|e| e.extra_info_idmap_unchecked().get(PRODUCTION))
         .unwrap_or_default();
-    
+
     if let Some(enrichment) = enrichment.as_ref()
     {
         let items_e = enrichment.get_item_codes_unchecked();
@@ -662,7 +663,7 @@ fn calc_cor_weights(in_file: Utf8PathBuf, opt: CalcWeights)
         let mut total_import = node.trade_amount();
 
         let mut p = enriched_year
-            .and_then(|e| 
+            .and_then(|e|
                 e.get(&node.identifier)
                     .and_then(|extra| extra.map.get(&production_id).cloned())
             );
@@ -684,7 +685,7 @@ fn calc_cor_weights(in_file: Utf8PathBuf, opt: CalcWeights)
                 }
             }
         }
-        
+
         write!(buf, "{} {}", node.identifier, total_import).unwrap();
         match p {
             None => writeln!(buf),
@@ -740,7 +741,7 @@ where P: AsRef<Utf8Path>
         total_head.push(c_n);
     }
 
-    let write_id_or_newline = |id: &str, buf: &mut BufWriter<File>| 
+    let write_id_or_newline = |id: &str, buf: &mut BufWriter<File>|
     {
         match &map {
             Some(country_map) => {
@@ -788,7 +789,7 @@ where P: AsRef<Utf8Path>
             let running_relative = running_sum / total;
             let import_frac = e.1/e.0;
             write!(
-                buf, 
+                buf,
                 "{index} {} {:e} {relative_export:e} {running_sum:e} {running_relative:e} {} {} {import_frac}",
                 e.3,
                 e.0,
@@ -798,7 +799,7 @@ where P: AsRef<Utf8Path>
             write_id_or_newline(e.3, &mut buf);
         }
     };
-    
+
 
     let write_output = |name_addition, network: &Network|
     {
@@ -824,12 +825,12 @@ where P: AsRef<Utf8Path>
             let relative = amount / total;
             let id = node.identifier.as_str();
             write!(
-                buf, 
+                buf,
                 "{order_index} {id} {amount} {relative} {running_sum} {running_relative}"
             ).unwrap();
             write_id_or_newline(id, &mut buf);
         }
-        
+
     };
 
     let mut lazy = LazyNetworks::Filename(in_file.to_owned());
@@ -859,7 +860,7 @@ where P: AsRef<Utf8Path>
             .for_each(|(import, export)| total_trade_volume(import, export));
 
     }
-    
+
 }
 
 
@@ -907,13 +908,13 @@ pub fn out_comparison(in_file: Utf8PathBuf, cmd: OutOpt){
             |&(index, _)|
             {
                 let comps = network.out_component(
-                    index, 
+                    index,
                     ComponentChoice::IncludingSelf
                 );
                 BTreeSet::from_iter(comps)
             }
         ).collect();
-    
+
     let mut buf = create_buf_with_command_and_version(&cmd.out);
 
     let matrix: Vec<Vec<_>> = sets.iter()
@@ -969,7 +970,7 @@ pub fn first_layer_overlap<P>(in_file: P, cmd: FirstLayerOpt)
                     .collect()
             }
         ).collect();
-        
+
 
 
     let overlap_name = format!("layer_overlap_{}", cmd.out);
@@ -1028,20 +1029,20 @@ pub fn first_layer_overlap<P>(in_file: P, cmd: FirstLayerOpt)
                 .expect("unable to create graph file");
             let buf2 = BufWriter::new(file);
             graphviz_one_layer(
-                &network, 
-                buf2, 
-                *idx, 
+                &network,
+                buf2,
+                *idx,
                 &extra.map
             ).unwrap();
         }
-        
+
     }
 
 }
 
 pub fn graphviz_one_layer<'a, W>(
-    net: &'a Network, 
-    mut w: W, 
+    net: &'a Network,
+    mut w: W,
     parent: usize,
     map: &'a Option<BTreeMap<String, String>>
 ) -> std::io::Result<()>
@@ -1071,7 +1072,7 @@ where W: Write
         writeln!(w, "\"{}\"", map(&other_node.identifier))?;
     }
 
-    
+
     let parend_id = map(&parent_node.identifier);
     let mut edge_max: f64 = 0.0;
     for e in parent_node.adj.iter(){
@@ -1086,16 +1087,16 @@ where W: Write
         let green = u8::MAX - (255.0 * 10.0 * we).min(255.0) as u8;
         let blue = u8::MAX - (255.0 * 100.0 * we).min(255.0) as u8;
         writeln!(
-            w, 
-            "\"{}\" -> \"{}\" [color=\"#{:02X}{:02X}{:02X}\"]", 
-            parend_id, 
+            w,
+            "\"{}\" -> \"{}\" [color=\"#{:02X}{:02X}{:02X}\"]",
+            parend_id,
             map(&net.nodes[e.index].identifier),
             red,
             green,
             blue
         )?;
     }
-    
+
     writeln!(w, "}}")
 }
 
@@ -1123,15 +1124,15 @@ pub fn flow_of_top_first_layer<P: AsRef<Path>>(in_file: P, opt: FirstLayerOpt)
         .map(parser::country_map);
 
     flow_of_top_first_layer_helper(
-        &network, 
-        &ordering[0..opt.top.get()], 
+        &network,
+        &ordering[0..opt.top.get()],
         buf,
         &map
     ).unwrap();
 }
 
 fn flow_of_top_first_layer_helper<'a, W>(
-    net: &'a Network, 
+    net: &'a Network,
     parents: &[(usize, f64)],
     mut w: W,
     map: &'a Option<BTreeMap<String, String>>
@@ -1181,13 +1182,13 @@ where W: Write
         let hue = 1.0 / layer.len() as f64 * i as f64;
         let parent_node = &net.nodes[*parent];
         writeln!(
-            w, 
-            "\"{}\" [fillcolor=\"{},1.0,0.7\", style=filled]", 
+            w,
+            "\"{}\" [fillcolor=\"{},1.0,0.7\", style=filled]",
             map(&parent_node.identifier),
             hue
         )?;
     }
-    
+
     let colors: Vec<_> = (0..layer.len())
         .map(
             |i|
@@ -1210,8 +1211,8 @@ where W: Write
         let c = colors[count-1];
         let other_node = &net.nodes[*e];
         writeln!(
-            w, 
-            "\"{}\" [fillcolor=\"#{:02x}{:02x}{:02x}\", style=filled]", 
+            w,
+            "\"{}\" [fillcolor=\"#{:02x}{:02x}{:02x}\", style=filled]",
             map(&other_node.identifier),
             c,
             c,
@@ -1231,15 +1232,15 @@ where W: Write
             }
 
             writeln!(
-                w, 
-                "\"{}\" -> \"{}\" [color=\"{},1.0,0.7\"]", 
-                parend_id, 
+                w,
+                "\"{}\" -> \"{}\" [color=\"{},1.0,0.7\"]",
+                parend_id,
                 map(&net.nodes[e.index].identifier),
                 hue
             )?;
         }
     }
-    
+
     let mut max_amount = 0.0;
     for amount in other_nodes.iter().map(|e| e.1){
         max_amount = amount.max(max_amount);
@@ -1250,11 +1251,11 @@ where W: Write
 
     for item in other_nodes.iter(){
         let r = (1.1 - item.1 / max_amount) / 1.1;
-        
+
         writeln!(buf, "{r} {}", item.2).unwrap();
     }
-    
-    
+
+
     writeln!(w, "}}")
 }
 
@@ -1279,12 +1280,12 @@ pub fn three_set_exec(opt: ThreeS)
     let mut var_buf = create_buf_with_command_and_version(name_var);
     let mut av_buf = create_buf_with_command_and_version(name_av);
     write!(buf, "#").unwrap();
-    
+
     for f in opt.files.iter()
     {
         write!(buf, " s:{f}").unwrap();
     }
-    
+
     let h = if map.is_some(){
         " country_name"
     } else {
@@ -1313,7 +1314,7 @@ pub fn three_set_exec(opt: ThreeS)
         let mut middle = 0;
         let mut high = 0;
         let mut deltas = Vec::new();
-        
+
         for s in sets.iter() {
             let mut delta = f64::NAN;
             let mut t = 0;
@@ -1399,7 +1400,7 @@ pub fn three_set_exec(opt: ThreeS)
 
         let total = l.low + l.middle + l.high;
         write!(
-            buf, 
+            buf,
             "{} {} {} {total} {}",
             l.low,
             l.middle,
@@ -1409,7 +1410,7 @@ pub fn three_set_exec(opt: ThreeS)
         country_name_new_line(&mut buf, l.c_idx);
     }
 
-    
+
 }
 
 #[derive(Default)]
@@ -1465,12 +1466,12 @@ pub fn print_network_info(opt: OnlyNetworks)
             }
         );
 
-    
+
 
     fn print_info(
-        n: &Network, 
-        top: Option<NonZeroU32>, 
-        identifier: &[String], 
+        n: &Network,
+        top: Option<NonZeroU32>,
+        identifier: &[String],
         enriched: &Option<LazyEnrichmentInfos>,
         country_id_map: Option<&BTreeMap<String, String>>
     )
@@ -1483,7 +1484,7 @@ pub fn print_network_info(opt: OnlyNetworks)
                     node.print_infos(network);
                 },
                 Some(map) => {
-                    node.print_infos_with_country_names(network, map); 
+                    node.print_infos_with_country_names(network, map);
                 }
             }
         };
@@ -1504,9 +1505,9 @@ pub fn print_network_info(opt: OnlyNetworks)
 
         let without_unconnected = n.without_unconnected_nodes();
         println!(
-            "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}", 
-            n.unit, 
-            n.data_origin, 
+            "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}",
+            n.unit,
+            n.data_origin,
             n.year,
             n.direction,
             without_unconnected.node_count()
@@ -1560,11 +1561,11 @@ pub fn print_network_info(opt: OnlyNetworks)
                     print_enrichment(n.year, id);
                     println!();
                     continue 'outer;
-                } 
+                }
             }
             eprintln!("Could not find ID {id}");
         }
-        
+
     }
 
     let country_id_map = opt.country_name_file
@@ -1576,9 +1577,9 @@ pub fn print_network_info(opt: OnlyNetworks)
     if let Some(y) = opt.year{
         let network = networks.get_export_network_unchecked(y);
         print_info(
-            network, 
-            opt.top, 
-            &opt.ids, 
+            network,
+            opt.top,
+            &opt.ids,
             &enriched,
             country_id_map.as_ref()
         );
@@ -1586,11 +1587,11 @@ pub fn print_network_info(opt: OnlyNetworks)
         let export = networks.export_networks_unchecked();
         export.iter()
             .for_each(
-                |e| 
+                |e|
                 print_info(
-                    e, 
-                    opt.top, 
-                    &opt.ids, 
+                    e,
+                    opt.top,
+                    &opt.ids,
                     &enriched,
                     country_id_map.as_ref()
                 )
@@ -1601,9 +1602,9 @@ pub fn print_network_info(opt: OnlyNetworks)
     if let Some(y) = opt.year{
         let network = networks.get_import_network_unchecked(y);
         print_info(
-            network, 
-            opt.top, 
-            &opt.ids, 
+            network,
+            opt.top,
+            &opt.ids,
             &enriched,
             country_id_map.as_ref()
         );
@@ -1611,11 +1612,11 @@ pub fn print_network_info(opt: OnlyNetworks)
         let import = networks.import_networks_unchecked();
         import.iter()
             .for_each(
-                |i| 
+                |i|
                 print_info(
-                    i, 
-                    opt.top, 
-                    &opt.ids, 
+                    i,
+                    opt.top,
+                    &opt.ids,
                     &enriched,
                     country_id_map.as_ref()
                 )
@@ -1645,13 +1646,13 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
             }
         );
 
-    
+
 
     fn compare_infos(
         n1: &Network,
         n2: &Network,
-        top: Option<NonZeroU32>, 
-        identifier: &[String], 
+        top: Option<NonZeroU32>,
+        identifier: &[String],
         enriched: &Option<LazyEnrichmentInfos>,
         country_id_map: Option<&BTreeMap<String, String>>,
         adj: bool
@@ -1672,10 +1673,26 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
             }
         };
 
+        let calc_total_production = |network: &Network, enrichment: &BTreeMap<_, ExtraInfo>| -> f64
+        {
+            let mut total = 0.0;
+            for node in network.nodes.iter(){
+                let id = &node.identifier;
+                if let Some(extra) = enrichment
+                    .get(id)
+                    .and_then(
+                        |info| info.map.get(&enrichment_production_id)
+                    ){
+                    total += extra.amount
+                }
+            }
+            total
+        };
+
         let print_enrichment = |id: &str|
         {
             if let Some((enrichment_y1, enrichment_y2)) = enrichment{
-                
+
                 let info_y1 = enrichment_y1
                     .get(id)
                     .and_then(
@@ -1700,14 +1717,15 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
                         print!("Missing")
                     }
                 }
+                print!(" ")
             }
         };
 
         let without_unconnected_1 = n1.without_unconnected_nodes();
         println!(
-            "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}", 
-            n1.unit, 
-            n1.data_origin, 
+            "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}",
+            n1.unit,
+            n1.data_origin,
             n1.year,
             n1.direction,
             without_unconnected_1.node_count()
@@ -1715,9 +1733,9 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
 
         let without_unconnected_2 = n2.without_unconnected_nodes();
         println!(
-            "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}", 
-            n2.unit, 
-            n2.data_origin, 
+            "Unit: {} DataOrigin {:?} Year {} Direction {:?} #TradingNodes: {}",
+            n2.unit,
+            n2.data_origin,
             n2.year,
             n2.direction,
             without_unconnected_1.node_count()
@@ -1759,7 +1777,7 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
                         println!("ADJ: Y1-Y2");
                         let mut y1_adj = node_y1.adj.clone();
                         y1_adj.sort_by_key(|edge| Reverse(OrderedFloat(edge.amount)));
-        
+
                         // set of edges from Y2:
                         let y2_adj_set: BTreeSet<_> = node_y2.adj
                             .iter()
@@ -1771,7 +1789,7 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
                                         .as_str()
                                 }
                             ).collect();
-        
+
                         // set of edges y1
                         let mut y1_adj_set = BTreeSet::new();
                         for edge in y1_adj{
@@ -1780,7 +1798,7 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
                                 .as_str();
                             // To later compare if we have covered all edges of the other year
                             y1_adj_set.insert(id);
-        
+
                             let mut y2_edge = None;
                             // now try to find the same edge in the other list
                             for other_edge in node_y2.adj.iter(){
@@ -1805,7 +1823,7 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
                             }
                             println!();
                         }
-        
+
                         for &missing in y2_adj_set.difference(&y1_adj_set)
                         {
                             let mut found = false;
@@ -1831,8 +1849,22 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
             }
         };
 
+        // also calculate total production
+        if let Some((enrichment_y1, enrichment_y2)) = enrichment{
+            let total_y1 = calc_total_production(&without_unconnected_1, enrichment_y1);
+            let total_y2 = calc_total_production(&without_unconnected_2, enrichment_y2);
+
+            let diff = total_y1 - total_y2;
+            let div = total_y1 / total_y2;
+            println!(
+                "Total Production Y{} {total_y1} - Y{} {total_y2} = {diff}\n Y1/Y2 = {div}",
+                without_unconnected_1.year,
+                without_unconnected_2.year
+            );
+        }
+
         if let Some(t) = top{
-            println!("TOP year {}:", n1.year);
+            println!("Sorting TOP according to year {}:", n1.year);
             let mut list = without_unconnected_1
                 .nodes
                 .iter()
@@ -1853,11 +1885,12 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
                 let (y1, y2) = compare_years(id);
                 top_trade_sum_y1 += y1;
                 top_trade_sum_y2 += y2;
-                
+
             }
+
             if top_trade_sum_y1 != 0.0 || top_trade_sum_y2 != 0.0 {
                 println!(
-                    "Top trade sum. Y1 {top_trade_sum_y1} Y2 {top_trade_sum_y2} Y1-Y2 {}", 
+                    "Top trade sum. Y1 {top_trade_sum_y1} Y2 {top_trade_sum_y2} Y1-Y2 {}",
                     top_trade_sum_y1 - top_trade_sum_y2
                 );
             }
@@ -1875,7 +1908,7 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
         }
 
 
-        
+
     }
 
     let country_id_map = opt.country_name_file
@@ -1905,5 +1938,5 @@ pub fn compare_network_info(opt: CompareNetworkInfos)
         country_id_map.as_ref(),
         opt.adj
     );
-    
+
 }
