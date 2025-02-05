@@ -1496,9 +1496,12 @@ pub fn print_network_info(opt: OnlyNetworks)
                 let info = enrichment
                     .get_year_unchecked(year)
                     .get(id);
-                if let Some(info) = info {
-                    let production = info.map.get(&production_idx);
-                    print!(" Production: {production:?}");
+                match info {
+                    Some(info) => {
+                        let production = info.map.get(&production_idx);
+                        print!(" Production: {production:?}");
+                    },
+                    None => print!(" Production: NoData")
                 }
             }
         };
