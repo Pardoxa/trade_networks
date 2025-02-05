@@ -1516,7 +1516,6 @@ pub fn print_network_info(opt: OnlyNetworks)
             without_unconnected.node_count()
         );
         if let Some(t) = top{
-            println!("TOP:");
             let mut list = without_unconnected
                 .nodes
                 .iter()
@@ -1525,12 +1524,24 @@ pub fn print_network_info(opt: OnlyNetworks)
                     {
                         (
                             OrderedFloat(n.trade_amount()),
-                            &n.identifier
+                            n.identifier.as_str()
                         )
-
                     }
                 ).collect_vec();
             list.sort_unstable_by_key(|item| Reverse(item.0));
+
+            //first just print list out
+            print!("TOP countries: ");
+            for (_, id) in list.iter().take(t.get() as usize)
+            {
+                print!(" ID {id} ");
+                if let Some(c_map) = country_id_map{
+                    let country = c_map.get(*id).unwrap();
+                    print!("{country} ");
+                }
+            }
+            println!();
+
             let mut top_trade_sum = 0.0;
             for (trade, id) in list.iter().take(t.get() as usize){
                 let idx = without_unconnected.get_index(id).unwrap();
