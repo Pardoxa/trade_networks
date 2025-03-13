@@ -1467,11 +1467,11 @@ pub fn print_network_info(opt: OnlyNetworks)
             }
         );
 
-    fn to_file_helper(
+    fn to_file_helper<D: Display>(
         opt: &OnlyNetworks,
         year: i32,
         name_extra: &str,
-        list: &[(OrderedFloat<f64>, &str)],
+        list: &[(D, &str)],
         country_id_map: &Option<BTreeMap<String, String>>
     )
     {
@@ -1639,6 +1639,17 @@ pub fn print_network_info(opt: OnlyNetworks)
     // production
     let production_to_file = |network: &Network|
     {
+        struct Storage {
+            production_amount: OrderedFloat<f64>,
+            export: f64
+        }
+
+        impl Display for Storage{
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{} {}", self.production_amount, self.export)
+            }
+        }
+
         if let (Some(enrichment), true) = (&enriched, opt.out.is_some()) {
 
             // now create list
@@ -1660,7 +1671,10 @@ pub fn print_network_info(opt: OnlyNetworks)
                                     |extra|
                                     {
                                         (
-                                            OrderedFloat(extra.amount),
+                                            Storage{
+                                                production_amount: OrderedFloat(extra.amount),
+                                                export: n.trade_amount()
+                                            },
                                             id
                                         )
                                     }
@@ -1671,7 +1685,7 @@ pub fn print_network_info(opt: OnlyNetworks)
                     }
                 ).collect_vec();
             // sort list
-            list.sort_unstable_by_key(|item| Reverse(item.0));
+            list.sort_unstable_by_key(|item| Reverse(item.0.production_amount));
             to_file_helper(
                 &opt,
                 network.year,
