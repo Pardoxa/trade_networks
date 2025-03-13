@@ -16,7 +16,7 @@ pub struct ParseEnrichOpts{
     #[arg(short, long)]
     /// Name of output
     pub out: String,
-    
+
     #[arg(short, long, required(true))]
     /// Path to csv containing enrichment data
     pub enrich_files: Vec<String>,
@@ -50,7 +50,7 @@ pub struct ToCountryBinOpt{
     #[arg(short, long)]
     /// Name of output
     pub out: String,
-    
+
 }
 
 #[derive(Parser, Debug)]
@@ -62,7 +62,7 @@ pub struct ParseNetworkOpt{
     #[arg(short, long)]
     /// Name of output
     pub out: String,
-    
+
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
     pub item_code: String,
@@ -81,7 +81,7 @@ pub struct ImportExportDiffOpts{
     #[arg(long)]
     /// Path to csv to read in
     pub in_file: String,
-    
+
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
     pub item_code: String,
@@ -121,7 +121,7 @@ pub struct ParseAllEnrichmentsOpt{
     pub in_files: Vec<String>,
 
     /// Only consider specified unit, disregard all other entries.
-    /// Can be used to get infos of items that are in the database with 
+    /// Can be used to get infos of items that are in the database with
     /// different units
     #[arg(long, short)]
     pub only_unit: Option<String>
@@ -137,7 +137,7 @@ pub struct EnrichOpt{
     #[arg(short, long)]
     /// Name of output
     pub out: String,
-    
+
     #[arg(short, long)]
     /// Path to csv containing enrichment data
     pub enrich_file: String,
@@ -152,7 +152,7 @@ pub struct EnrichOpt{
 }
 
 #[derive(Parser)]
-/// Shock multiple countries at once and count how many countries 
+/// Shock multiple countries at once and count how many countries
 /// still have enough product, i.e., above a certain threshold
 pub struct MultiShockOpt{
     #[arg(long, short)]
@@ -235,7 +235,7 @@ pub enum CmdChooser{
     TradeCount(main_execs::trade_count::TradeCountOptions),
     /// Sort the averages and print out order
     SortAverages(sort_year_cmps::AverageSortOpt),
-    /// Print maximal difference between reported import and corresponding reported export 
+    /// Print maximal difference between reported import and corresponding reported export
     ImportExportDiff(ImportExportDiffOpts)
 }
 
@@ -247,7 +247,7 @@ pub struct EnrichmentToJson{
 
     /// Item code of the enrichment you want to parse
     #[arg(short, long)]
-    pub item_code: String 
+    pub item_code: String
 }
 
 #[derive(Debug, Clone, Parser)]
@@ -428,7 +428,7 @@ impl Comments{
         matches!(self, Self::Keep)
     }
 
-    pub fn is_none(self) -> bool 
+    pub fn is_none(self) -> bool
     {
         matches!(self, Self::None)
     }
@@ -448,7 +448,7 @@ pub struct FilterOpts
 
     /// Which col of the other_file contains the information on which to filter?
     pub other_col: usize,
-    
+
     /// Do you want to keep or remove the specified entries?
     #[arg(value_enum, short, long, default_value_t=HowToFilter::Retain)]
     pub filter_opt: HowToFilter,
@@ -457,14 +457,14 @@ pub struct FilterOpts
     #[arg(value_enum, short, long, default_value_t=Comments::Keep)]
     pub comments: Comments,
 
-    /// Output file to create. If not given, the output will be written 
+    /// Output file to create. If not given, the output will be written
     /// to the terminal instead. This is overwritten by the 'glob' option
     #[arg(long, short, conflicts_with = "glob")]
     pub out: Option<PathBuf>,
 
-    /// Use globbing to filter multiple files. "other_file" will be treaded 
+    /// Use globbing to filter multiple files. "other_file" will be treaded
     /// as globbing and output files will be created by appending .filter to
-    /// old filenames. 
+    /// old filenames.
     #[arg(long, short, conflicts_with = "out")]
     pub glob: bool
 }
@@ -492,7 +492,11 @@ pub struct OnlyNetworks{
 
     /// If you also want to add the country names instead of ids
     #[arg(short, long)]
-    pub country_name_file: Option<Utf8PathBuf>
+    pub country_name_file: Option<Utf8PathBuf>,
+
+    /// Also output sorted list of exports and imports
+    #[arg(short, long)]
+    pub out: Option<String>
 }
 
 
@@ -639,7 +643,7 @@ pub struct BeefMap {
 
 #[derive(Parser, Debug)]
 pub struct OrderedTradeVolue
-{    
+{
     /// For creating output names
     pub output_stub: String,
 
@@ -647,7 +651,7 @@ pub struct OrderedTradeVolue
     #[arg(long, short)]
     pub year: Option<i32>,
 
-    /// If you do not want the ID numbers but the names instead you can 
+    /// If you do not want the ID numbers but the names instead you can
     /// provide the mapping file
     #[arg(long, short)]
     pub country_name_file: Option<PathBuf>,
@@ -668,7 +672,7 @@ pub struct CountryCountOpt{
     #[arg(short, long)]
     /// Name of output
     pub out: String,
-    
+
 }
 
 #[derive(Parser, Debug)]
@@ -688,11 +692,11 @@ pub struct ShockOpts{
 
     /// Iterations
     #[arg(short, long)]
-    pub iterations: usize,    
+    pub iterations: usize,
 
     /// fraction of old exports that are still exported
     #[arg(short, long)]
-    pub export: f64,  
+    pub export: f64,
 }
 
 #[derive(Parser, Debug)]
@@ -715,11 +719,11 @@ pub struct ShockAvailOpts{
 
     /// Iterations
     #[arg(short, long)]
-    pub iterations: usize,    
+    pub iterations: usize,
 
     /// fraction of old exports that are still exported
     #[arg(long)]
-    pub export: f64,  
+    pub export: f64,
 
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
@@ -741,11 +745,11 @@ pub struct ShockDistOpts{
 
     /// Iterations
     #[arg(short, long)]
-    pub iterations: usize,    
+    pub iterations: usize,
 
     /// fraction of old exports that are still exported
     #[arg(short, long, required(true))]
-    pub export: Vec<f64>,  
+    pub export: Vec<f64>,
 
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
@@ -775,19 +779,19 @@ pub struct XOpts{
 
     /// Iterations
     #[arg(short, long)]
-    pub iterations: usize,    
+    pub iterations: usize,
 
     /// fraction of old exports that are still exported
     #[arg(long, default_value_t=0.0)]
-    pub export_start: f64,  
+    pub export_start: f64,
 
     /// fraction of old exports that are still exported
     #[arg(long, default_value_t=1.0)]
-    pub export_end: f64,  
+    pub export_end: f64,
 
     /// fraction of old exports that are still exported
     #[arg(long, value_parser = clap::value_parser!(u32).range(2..))]
-    pub export_samples: u32,  
+    pub export_samples: u32,
 
     #[arg(long)]
     /// Item code, e.g. 27 for Rice
@@ -806,7 +810,7 @@ pub struct XOpts{
     pub distributions: bool,
 
     /// A negative total for a country will result in NaN or Inf
-    /// for this specific country. All other countries will still be 
+    /// for this specific country. All other countries will still be
     /// calculated as usual
     #[arg(long)]
     pub forbid_negative_total: bool,
@@ -915,7 +919,7 @@ impl CountryChooser{
             Self::TopRef(t) =>
             {
                 (0..t.top.get())
-                    .map(|i| 
+                    .map(|i|
                         TopSpecifier::RankRef(
                             TopSpecifierHelper { focus: i, reference: t.top.get() - 1 }
                         )
@@ -1139,7 +1143,7 @@ impl JsonOrGlob{
                     .collect();
 
                 inputs.sort_by_cached_key(|input| input.plot_name.clone());
-                
+
                 CorrelationMeasurement{
                     inputs,
                     output_stub: glob.out

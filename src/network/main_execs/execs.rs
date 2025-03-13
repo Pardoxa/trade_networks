@@ -1457,6 +1457,7 @@ pub fn print_network_info(opt: OnlyNetworks)
 {
 
     let enriched = opt.enrichment
+        .clone()
         .map(
             |filename|
             {
@@ -1466,6 +1467,39 @@ pub fn print_network_info(opt: OnlyNetworks)
             }
         );
 
+    fn to_file_helper(
+        opt: &OnlyNetworks,
+        year: i32,
+        name_extra: &str,
+        list: &[(OrderedFloat<f64>, &str)],
+        country_id_map: &Option<BTreeMap<String, String>>
+    )
+    {
+        if let Some(name) = opt.out.as_ref()
+        {
+            let output_name = format!("{name}_{name_extra}_y{}.dat", year);
+            let mut header = vec![
+                "Country_ID",
+                "amount",
+            ];
+            if country_id_map.is_some(){
+                header.push("Country_name");
+            }
+            let mut buf = create_buf_with_command_and_version_and_header(output_name, header);
+
+            for (amount, id) in list.iter()
+            {
+                write!(buf, "{id} {amount}").unwrap();
+                if let Some(map) = country_id_map
+                {
+                    let country = map.get(*id)
+                        .expect("Can't find country in map");
+                    write!(buf, " {country}").unwrap();
+                }
+                writeln!(buf).unwrap();
+            }
+        }
+    }
 
 
     fn print_info(
@@ -1473,7 +1507,8 @@ pub fn print_network_info(opt: OnlyNetworks)
         top: Option<NonZeroU32>,
         identifier: &[String],
         enriched: &Option<LazyEnrichmentInfos>,
-        country_id_map: Option<&BTreeMap<String, String>>
+        opt: &OnlyNetworks,
+        country_id_map: &Option<BTreeMap<String, String>>,
     )
     {
 
@@ -1515,21 +1550,34 @@ pub fn print_network_info(opt: OnlyNetworks)
             n.direction,
             without_unconnected.node_count()
         );
-        if let Some(t) = top{
-            let mut list = without_unconnected
-                .nodes
-                .iter()
-                .map(
-                    |n|
-                    {
-                        (
-                            OrderedFloat(n.trade_amount()),
-                            n.identifier.as_str()
-                        )
-                    }
-                ).collect_vec();
-            list.sort_unstable_by_key(|item| Reverse(item.0));
 
+        let mut list = without_unconnected
+            .nodes
+            .iter()
+            .map(
+                |n|
+                {
+                    (
+                        OrderedFloat(n.trade_amount()),
+                        n.identifier.as_str()
+                    )
+                }
+            ).collect_vec();
+        list.sort_unstable_by_key(|item| Reverse(item.0));
+
+        let which = match without_unconnected.direction{
+            Direction::ExportTo => "export",
+            Direction::ImportFrom => "import"
+        };
+        to_file_helper(
+            opt,
+            without_unconnected.year,
+            which,
+            &list,
+            country_id_map
+        );
+
+        if let Some(t) = top{
             //first just print list out
             print!("TOP countries: ");
             for (_, id) in list.iter().take(t.get() as usize)
@@ -1579,36 +1627,89 @@ pub fn print_network_info(opt: OnlyNetworks)
             }
             eprintln!("Could not find ID {id}");
         }
-
     }
 
     let country_id_map = opt.country_name_file
+        .clone()
         .map(id_map);
 
-    let mut networks = LazyNetworks::Filename(opt.in_file);
+    let mut networks = LazyNetworks::Filename(opt.in_file.clone());
     networks.assure_availability();
+
+    // production
+    let production_to_file = |network: &Network|
+    {
+        if let (Some(enrichment), true) = (&enriched, opt.out.is_some()) {
+
+            // now create list
+            let production_idx = enrichment.extra_info_idmap_unchecked().get(PRODUCTION);
+            let mut list = network
+                .nodes
+                .iter()
+                .filter_map(
+                    |n|
+                    {
+                        let id = n.identifier.as_str();
+                        let info = enrichment
+                            .get_year_unchecked(network.year)
+                            .get(id);
+                        match info {
+                            Some(info) => {
+                                let production = info.map.get(&production_idx);
+                                production.map(
+                                    |extra|
+                                    {
+                                        (
+                                            OrderedFloat(extra.amount),
+                                            id
+                                        )
+                                    }
+                                )
+                            },
+                            None => None
+                        }
+                    }
+                ).collect_vec();
+            // sort list
+            list.sort_unstable_by_key(|item| Reverse(item.0));
+            to_file_helper(
+                &opt,
+                network.year,
+                "production",
+                &list,
+                &country_id_map
+            );
+        }
+    };
+
     println!("Export:");
     if let Some(y) = opt.year{
         let network = networks.get_export_network_unchecked(y);
+        production_to_file(network);
         print_info(
             network,
             opt.top,
             &opt.ids,
             &enriched,
-            country_id_map.as_ref()
+            &opt,
+            &country_id_map
         );
     } else {
         let export = networks.export_networks_unchecked();
         export.iter()
             .for_each(
                 |e|
-                print_info(
-                    e,
-                    opt.top,
-                    &opt.ids,
-                    &enriched,
-                    country_id_map.as_ref()
-                )
+                {
+                    production_to_file(e);
+                    print_info(
+                        e,
+                        opt.top,
+                        &opt.ids,
+                        &enriched,
+                        &opt,
+                        &country_id_map
+                    );
+                }
             );
     }
 
@@ -1620,7 +1721,8 @@ pub fn print_network_info(opt: OnlyNetworks)
             opt.top,
             &opt.ids,
             &enriched,
-            country_id_map.as_ref()
+            &opt,
+            &country_id_map
         );
     } else {
         let import = networks.import_networks_unchecked();
@@ -1632,7 +1734,8 @@ pub fn print_network_info(opt: OnlyNetworks)
                     opt.top,
                     &opt.ids,
                     &enriched,
-                    country_id_map.as_ref()
+                    &opt,
+                    &country_id_map
                 )
             );
     }
