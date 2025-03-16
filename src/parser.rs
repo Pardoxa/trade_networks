@@ -2,7 +2,7 @@ use std::{path::Path, collections::*};
 
 use itertools::Itertools;
 
-use crate::{config::ReadType, misc::*, UNIT_TESTER};
+use crate::{config::{ReadType, StockOpt}, misc::*, UNIT_TESTER};
 
 use{
     std::{
@@ -925,6 +925,24 @@ where P: AsRef<Path>
 
 }
 
+
+pub fn analyze_stock(opt: StockOpt)
+{
+    let lines = open_as_unwrapped_lines(opt.file)
+        .skip(1);
+    let mut stock_set = HashSet::new();
+    for line in lines {
+        let mut col_iter = LineIter{line: &line};
+        let item = col_iter.nth(5).unwrap();
+        let what = col_iter.nth(1).unwrap();
+        if what.contains("Stocks") {
+            stock_set.insert(item.to_owned());
+        }
+    }
+    for entry in stock_set.iter() {
+        println!("{entry}");
+    }
+}
 
 
 #[cfg(test)]

@@ -236,7 +236,16 @@ pub enum CmdChooser{
     /// Sort the averages and print out order
     SortAverages(sort_year_cmps::AverageSortOpt),
     /// Print maximal difference between reported import and corresponding reported export
-    ImportExportDiff(ImportExportDiffOpts)
+    ImportExportDiff(ImportExportDiffOpts),
+    /// Analyze stocks of FAO file
+    StockAnalysis(StockOpt)
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct StockOpt{
+    /// FAO file
+    #[arg(short, long)]
+    pub file: String
 }
 
 #[derive(Debug, Clone, Parser)]

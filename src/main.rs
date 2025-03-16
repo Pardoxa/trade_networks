@@ -7,7 +7,7 @@ mod network;
 mod misc;
 use network::main_execs::{self, *};
 mod units;
-use parser::parse_all_extras;
+use parser::{analyze_stock, parse_all_extras};
 pub use units::*;
 mod other_exec;
 pub use other_exec::*;
@@ -91,6 +91,9 @@ fn main() {
         CmdChooser::TradeCount(opt) => trade_count::trade_count(opt),
         CmdChooser::SortAverages(opt) => {
             sort_year_cmps::sort_averages(opt);
+        },
+        CmdChooser::StockAnalysis(opt) => {
+            analyze_stock(opt);
         }
     }
 }
