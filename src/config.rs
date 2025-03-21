@@ -10,6 +10,7 @@ use crate::{
 use serde::{Serialize, Deserialize};
 use camino::Utf8PathBuf;
 use crate::group_cmp::GroupCompMultiOpts;
+use main_execs::SimulationMode;
 
 #[derive(Parser, Debug)]
 pub struct ParseEnrichOpts{
@@ -177,7 +178,12 @@ pub struct MultiShockOpt{
 
     /// Compare successive years and output file
     #[arg(long, short, requires("group_files"))]
-    pub compare_successive_years: bool
+    pub compare_successive_years: bool,
+
+    #[arg(long, short)]
+    /// Decide if we want classic mode or
+    /// if we want to include stock variation data
+    pub mode: SimulationMode
 }
 
 /// Created by Yannick Feld
@@ -293,7 +299,12 @@ pub struct ShockCloudAllCmdOpt{
 
     #[arg(long, short)]
     #[derivative(Default(value="NonZeroUsize::new(5).unwrap()"))]
-    pub threads: NonZeroUsize
+    pub threads: NonZeroUsize,
+
+    #[arg(long, short)]
+    /// Decide if we want classic mode or
+    /// if we want to include stock variation data
+    pub mode: SimulationMode
 }
 
 #[derive(Debug, Parser)]

@@ -5,22 +5,54 @@ use{
         HistF64, 
         Histogram
     }, serde::{Deserialize, Serialize}, std::{
-        cmp::Reverse, 
-        collections::*, 
-        fmt::Display, 
-        io::{
+        cmp::Reverse, collections::*, fmt::Display, io::{
             BufWriter, 
             Write
-        }, 
-        num::NonZeroUsize, 
-        ops::{
+        }, num::NonZeroUsize, ops::{
             AddAssign, 
             Deref, 
             RangeInclusive
-        }, 
-        path::Path, sync::Mutex
+        }, path::Path, str::FromStr, sync::{Mutex, RwLock}
     }
 };
+
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum SimulationMode{
+    #[default]
+    Classic,
+    WithStockVariation
+}
+
+
+impl FromStr for SimulationMode{
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "c" | "classic" => {
+                Ok(Self::Classic)
+            },
+            "withstockvariation" | "wsv" | "with_stock_variation" => {
+                Ok(Self::WithStockVariation)
+            },
+            _ => {
+                Err(
+                    "Unknown option for Simulation Mode. Try 'classic' or 'with_stock_variation'"
+                        .to_owned()
+                )
+            }
+        }
+    }
+}
+
+// Not pretty, but this was the easiest way to retrofit it in
+static MODE: RwLock<SimulationMode> = RwLock::new(SimulationMode::Classic);
+
+
+pub fn set_global_simulation_mode(mode: SimulationMode){
+    let mut lock = MODE.write().unwrap();
+    *lock = mode;
+    drop(lock);
+}
 
 const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
 const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
@@ -89,13 +121,20 @@ pub fn flow_calc(
     extra: &BTreeMap<String, ExtraInfo>
 ) -> Flow
 {
+    let mode_lock = MODE.read()
+        .unwrap();
+    let mode = mode_lock.deref();
+
+
     let info_map = crate::network::enriched_digraph::GLOBAL_NODE_INFO_MAP.deref();
     let unit_tester = crate::UNIT_TESTER.deref();
-    let info_idx = info_map.get(PRODUCTION);
+    let production_index = info_map.get(PRODUCTION);
+    let stock_variation_idx = info_map.get(STOCK_VARIATION);
     let mut percent = vec![0.0; net.node_count()];
     let mut new_percent = percent.clone();
 
     let mut production = Vec::new();
+    let mut stock_variation_vec = Vec::new();
     let mut map = BTreeMap::new();
     for (i, n) in net.nodes.iter().enumerate()
     {
@@ -103,7 +142,24 @@ pub fn flow_calc(
         let pr = match extra.get(n.identifier.as_str()){
             None => 0.0,
             Some(e) => {
-                match e.map.get(&info_idx){
+                match mode {
+                    SimulationMode::Classic => {
+                        // Classic needs nothing additional:
+                        // Do Nothing
+                    }
+                    SimulationMode::WithStockVariation => {
+                        let stock_variation = match e.map.get(&stock_variation_idx){
+                            None => 0.0,
+                            Some(variation) => {
+                                variation.amount
+                            }
+                        };
+                        stock_variation_vec.push(stock_variation);
+                    }
+                }
+
+
+                match e.map.get(&production_index){
                     None => 0.0,
                     Some(pr) => {
                         assert!(
@@ -116,6 +172,7 @@ pub fn flow_calc(
             }
         };
         production.push(pr);
+
     }
     let focus_idx = map.get(focus).unwrap();
     percent[*focus_idx] = 1.0;
@@ -128,6 +185,18 @@ pub fn flow_calc(
             let new_p = new_percent.get_mut(i).unwrap();
             let n = &import_from.nodes[i];
             let mut total = production[i];
+            match mode {
+                SimulationMode::Classic => {
+                    // Noting additional needs to be done in classic case
+                },
+                SimulationMode::WithStockVariation => {
+                    // negative sign 
+                    // -> negative stock variation means 
+                    //    that the country took something out of the stock and into
+                    //    the market (or whatever else)
+                    total -= stock_variation_vec[i];
+                }
+            }
             *new_p = 0.0;
             for e in n.adj.iter(){
                 *new_p += e.amount * percent[e.index];

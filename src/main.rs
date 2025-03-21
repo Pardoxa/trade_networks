@@ -26,6 +26,8 @@ fn main() {
         CmdChooser::ParseEnrichment(o) => enrich_to_bin(o),
         CmdChooser::ParseAllEnrichments(opt) => parse_all_extras(opt.in_files, opt.only_unit),
         CmdChooser::ShockCloudAll(opt) => {
+            let mode = opt.mode;
+            set_global_simulation_mode(mode);
             main_execs::all_random_cloud_shocks(
                 opt.json,
                 &opt.out_stub,
@@ -43,6 +45,8 @@ fn main() {
             sort_year_cmps::sort_compare_multiple_years(opt);
         },
         CmdChooser::MultiShocks(opt) => {
+            let mode = opt.mode;
+            set_global_simulation_mode(mode);
             measure_multi_shock(
                 opt.json,
                 opt.which, 

@@ -19,8 +19,10 @@ pub const PRODUCTION: &str = "Production";
 pub const TOTAL_POPULATION: &str = "Total Population - Both sexes";
 pub const EXPORT_QUANTITY: &str = "Export Quantity";
 pub const IMPORT_QUANTITY: &str = "Import Quantity";
+pub const STOCK_VARIATION: &str = "Stock Variation";
+pub const STOCK: &str = "Stocks";
 
-const POSSIBLE_NODE_INFO: [&str; 29] = [
+const POSSIBLE_NODE_INFO: [&str; 38] = [
     "Area harvested",
     "Domestic supply quantity",
     EXPORT_QUANTITY,
@@ -44,13 +46,34 @@ const POSSIBLE_NODE_INFO: [&str; 29] = [
     "Protein supply quantity (t)",
     "Residuals",
     "Seed",
-    "Stocks",
-    "Stock Variation",
+    STOCK,
+    STOCK_VARIATION,
     "Tourist consumption",
     TOTAL_POPULATION,
     "Yield",
-    "Yield/Carcass Weight"
+    "Yield/Carcass Weight",
+    "Calories/Year",
+    "Fats/Year",
+    "Food supply quantity (tonnes)",
+    "Food supply quantity (g/capita/day)",
+    "Loss",
+    "Opening stocks",
+    "Processed",
+    "Proteins/Year",
+    "Total Population - Both sexes"
 ];
+
+const EQUIV_LIST: [(&str, &str); 2] = [
+    ("Export quantity", EXPORT_QUANTITY),
+    ("Import quantity", IMPORT_QUANTITY)
+];
+
+lazy_static! {
+    pub static ref PARSE_EQUIV_MAP: BTreeMap<&'static str, &'static str> = {
+        EQUIV_LIST.into_iter()
+            .collect()
+    };
+}
 
 pub struct ExtraInfoMap<'a>{
     pub map: BTreeMap<&'a str, u8>
@@ -74,9 +97,21 @@ impl<'a> ExtraInfoMap<'a>{
 
     pub fn get(&self, key: &str) -> u8
     {
-        *self.map
-            .get(key)
-            .expect(key)
+        match self.map.get(key)
+        {
+            Some(id) => *id,
+            None => {
+                match PARSE_EQUIV_MAP.get(key)
+                {
+                    Some(equiv_key) => {
+                        self.get(equiv_key)
+                    }, 
+                    None => {
+                        panic!("Unknown key: {key}")
+                    }
+                }
+            }   
+        }
     }
 }
 
