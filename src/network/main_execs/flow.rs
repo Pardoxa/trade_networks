@@ -50,11 +50,13 @@ static MODE: RwLock<SimulationMode> = RwLock::new(SimulationMode::Classic);
 fn simulation_mode_str() -> &'static str
 {
     let lock = MODE.read().unwrap();
-    match lock.deref()
+    let s = match lock.deref()
     {
         SimulationMode::Classic => "CLASSIC",
         SimulationMode::WithStockVariation => "W_Stock_Variation"
-    }
+    };
+    drop(lock);
+    s
 }
 
 
