@@ -20,7 +20,8 @@ use{
 pub enum SimulationMode{
     #[default]
     Classic,
-    WithStockVariation
+    WithStockVariation,
+    OnlyStock
 }
 
 
@@ -33,6 +34,9 @@ impl FromStr for SimulationMode{
             },
             "withstockvariation" | "wsv" | "with_stock_variation" => {
                 Ok(Self::WithStockVariation)
+            },
+            "only_stock" | "onlystock" | "os" => {
+                Ok(Self::OnlyStock)
             },
             _ => {
                 Err(
@@ -47,13 +51,14 @@ impl FromStr for SimulationMode{
 // Not pretty, but this was the easiest way to retrofit it in
 static MODE: RwLock<SimulationMode> = RwLock::new(SimulationMode::Classic);
 
-fn simulation_mode_str() -> &'static str
+fn global_simulation_mode_as_str() -> &'static str
 {
     let lock = MODE.read().unwrap();
     let s = match lock.deref()
     {
         SimulationMode::Classic => "CLASSIC",
-        SimulationMode::WithStockVariation => "W_Stock_Variation"
+        SimulationMode::WithStockVariation => "W_Stock_Variation",
+        SimulationMode::OnlyStock => "OnlyStock",
     };
     drop(lock);
     s
@@ -67,7 +72,13 @@ pub fn set_global_simulation_mode(mode: SimulationMode){
 }
 
 const ORIGINAL_AVAIL_FILTER_MIN: f64 = 1e-9;
-const HIST_HEADER: [&str; 5] = ["left", "right", "center", "hits", "normalized"];
+const HIST_HEADER: [&str; 5] = [
+    "left",
+    "right",
+    "center",
+    "hits",
+    "normalized"
+];
 
 fn derivative(data: &[f64]) -> Vec<f64>
 {
@@ -142,11 +153,13 @@ pub fn flow_calc(
     let unit_tester = crate::UNIT_TESTER.deref();
     let production_index = info_map.get(PRODUCTION);
     let stock_variation_idx = info_map.get(STOCK_VARIATION);
+    let stock_idx = info_map.get(STOCK);
     let mut percent = vec![0.0; net.node_count()];
     let mut new_percent = percent.clone();
 
     let mut production = Vec::new();
     let mut stock_variation_vec = Vec::new();
+    let mut stock_vec = Vec::new();
     let mut map = BTreeMap::new();
     for (i, n) in net.nodes.iter().enumerate()
     {
@@ -167,9 +180,18 @@ pub fn flow_calc(
                             }
                         };
                         stock_variation_vec.push(stock_variation);
+                    },
+                    SimulationMode::OnlyStock => {
+                        let stock = match e.map.get(&stock_idx)
+                        {
+                            None =>  0.0,
+                            Some(stock) => {
+                                stock.amount
+                            }
+                        };
+                        stock_vec.push(stock);
                     }
                 }
-
 
                 match e.map.get(&production_index){
                     None => 0.0,
@@ -192,7 +214,6 @@ pub fn flow_calc(
     let import_from = net.get_network_with_direction(Direction::ImportFrom);
 
     for _ in 0..iterations{
-        #[allow(clippy::needless_range_loop)]
         for i in 0..production.len(){
             let new_p = new_percent.get_mut(i).unwrap();
             let n = &import_from.nodes[i];
@@ -207,6 +228,12 @@ pub fn flow_calc(
                     //    that the country took something out of the stock and into
                     //    the market (or whatever else)
                     total -= stock_variation_vec[i];
+                },
+                SimulationMode::OnlyStock => {
+                    // In this mode we tread the stock similar to 
+                    // production. It is completely available and
+                    // we can IGNORE the STOCK VARIATION
+                    total += stock_vec[i];
                 }
             }
             *new_p = 0.0;
@@ -920,7 +947,7 @@ pub fn random_cloud_shock_helper(
         "num_of_countries"
     ];
 
-    let mode_str = simulation_mode_str();
+    let mode_str = global_simulation_mode_as_str();
 
     let mut rng = Pcg64::seed_from_u64(opt.seed);
 
@@ -1187,7 +1214,7 @@ where P: AsRef<Path>
     let enrichment_infos = lazy_enrichments.enrichment_infos_unchecked();
     let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
 
-    let mode_str = simulation_mode_str();
+    let mode_str = global_simulation_mode_as_str();
     let header = [
         "disrupting_countries",
         "disruption_percent",
