@@ -47,6 +47,16 @@ impl FromStr for SimulationMode{
 // Not pretty, but this was the easiest way to retrofit it in
 static MODE: RwLock<SimulationMode> = RwLock::new(SimulationMode::Classic);
 
+fn simulation_mode_str() -> &'static str
+{
+    let lock = MODE.read().unwrap();
+    match lock.deref()
+    {
+        SimulationMode::Classic => "CLASSIC",
+        SimulationMode::WithStockVariation => "W_Stock_Variation"
+    }
+}
+
 
 pub fn set_global_simulation_mode(mode: SimulationMode){
     let mut lock = MODE.write().unwrap();
@@ -908,6 +918,8 @@ pub fn random_cloud_shock_helper(
         "num_of_countries"
     ];
 
+    let mode_str = simulation_mode_str();
+
     let mut rng = Pcg64::seed_from_u64(opt.seed);
 
     let years_and_rngs = opt.years
@@ -963,12 +975,12 @@ pub fn random_cloud_shock_helper(
             |
             {
                 let out_name = format!(
-                    "{folder}{out_stub}_Y{year}_Th{}_R{}.dat", 
+                    "{folder}{out_stub}_Y{year}_Th{}_R{}_{mode_str}.dat", 
                     opt.unstable_country_threshold,
                     opt.reducing_factor
                 );
                 let av_name = format!(
-                    "{folder}{out_stub}_Y{year}_Th{}_R{}.average", 
+                    "{folder}{out_stub}_Y{year}_Th{}_R{}_{mode_str}.average", 
                     opt.unstable_country_threshold,
                     opt.reducing_factor
                 );
@@ -1173,6 +1185,7 @@ where P: AsRef<Path>
     let enrichment_infos = lazy_enrichments.enrichment_infos_unchecked();
     let node_info_map = lazy_enrichments.extra_info_idmap_unchecked();
 
+    let mode_str = simulation_mode_str();
     let header = [
         "disrupting_countries",
         "disruption_percent",
@@ -1195,7 +1208,10 @@ where P: AsRef<Path>
         .map(
             |year|
             {
-                let mut out_stub = format!("{out_stub}_Y{year}_Th{}_", common_opt.unstable_country_threshold);
+                let mut out_stub = format!(
+                    "{out_stub}_Y{year}_Th{}_{mode_str}_", 
+                    common_opt.unstable_country_threshold
+                );
                 let export_without_unconnected = lazy_networks
                     .get_export_network_unchecked(year)
                     .without_unconnected_nodes();
@@ -1375,7 +1391,7 @@ where P: AsRef<Path>
         for (a, b) in files.iter().tuple_windows()
         {
             let output = format!(
-                "{out_stub}_Y{}_vs_Y{}_Th{}.dat",
+                "{out_stub}_Y{}_vs_Y{}_Th{}_{mode_str}.dat",
                 a.1,
                 b.1,
                 common_opt.unstable_country_threshold
@@ -1398,7 +1414,7 @@ where P: AsRef<Path>
             .collect_vec();
         
         let name = format!(
-            "{out_stub}_Y{}-Y{}_{}.dat",
+            "{out_stub}_Y{}-Y{}_{}_{mode_str}.dat",
             common_opt.years.start(),
             common_opt.years.end(),
             x.str()
