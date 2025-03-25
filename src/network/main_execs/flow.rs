@@ -2556,7 +2556,6 @@ fn calc_available(
 {
     let mode_lock = MODE.read().unwrap();
     let mode = mode_lock.deref();
-    dbg!(mode);
     let inverted = network.invert();
     let (import, export) = match network.direction{
         Direction::ExportTo => (&inverted, network),
