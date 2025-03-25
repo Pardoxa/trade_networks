@@ -22,7 +22,7 @@ pub const IMPORT_QUANTITY: &str = "Import Quantity";
 pub const STOCK_VARIATION: &str = "Stock Variation";
 pub const STOCK: &str = "Stocks";
 
-const POSSIBLE_NODE_INFO: [&str; 38] = [
+const POSSIBLE_NODE_INFO: [&str; 37] = [
     "Area harvested",
     "Domestic supply quantity",
     EXPORT_QUANTITY,
@@ -57,15 +57,15 @@ const POSSIBLE_NODE_INFO: [&str; 38] = [
     "Food supply quantity (tonnes)",
     "Food supply quantity (g/capita/day)",
     "Loss",
-    "Opening stocks",
     "Processed",
     "Proteins/Year",
     "Total Population - Both sexes"
 ];
 
-const EQUIV_LIST: [(&str, &str); 2] = [
+const EQUIV_LIST: [(&str, &str); 3] = [
     ("Export quantity", EXPORT_QUANTITY),
-    ("Import quantity", IMPORT_QUANTITY)
+    ("Import quantity", IMPORT_QUANTITY),
+    ("Opening stocks", STOCK)
 ];
 
 lazy_static! {

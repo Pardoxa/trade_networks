@@ -16,7 +16,7 @@ use{
     }
 };
 
-#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default, Debug)]
 pub enum SimulationMode{
     #[default]
     Classic,
@@ -208,6 +208,8 @@ pub fn flow_calc(
         production.push(pr);
 
     }
+    dbg!(mode);
+    dbg!(&stock_vec);
     let focus_idx = map.get(focus).unwrap();
     percent[*focus_idx] = 1.0;
 
@@ -418,7 +420,8 @@ pub struct CalculatedShocks{
     pub available_after_shock: Vec<f64>,
     pub focus_index: usize,
     pub network: Network,
-    after_export_fract: Vec<f64>
+    after_export_fract: Vec<f64>,
+    pub flow_status: FlowStatus
 }
 
 impl CalculatedShocks{
@@ -517,7 +520,7 @@ pub fn calc_shock(
 
     let node_info_map = lazy_enrichment.extra_info_idmap_unchecked();
 
-    let avail_after_shock = calc_available(
+    let (avail_after_shock, _) = calc_available(
         &export, 
         enrich, 
         &fracts, 
@@ -530,7 +533,7 @@ pub fn calc_shock(
         export_fracs: vec![1.0; fracts.import_fracs.len()]
     };
 
-    let available_before_shock = calc_available(
+    let (available_before_shock, flow_status) = calc_available(
         &export, 
         enrich, 
         &no_shock, 
@@ -553,7 +556,8 @@ pub fn calc_shock(
         available_before_shock,
         focus_index: focus,
         network: export,
-        after_export_fract: fracts.export_fracs
+        after_export_fract: fracts.export_fracs,
+        flow_status
     }
 }
 
@@ -1003,20 +1007,8 @@ pub fn random_cloud_shock_helper(
                 )
             |
             {
-                let out_name = format!(
-                    "{folder}{out_stub}_Y{year}_Th{}_R{}_{mode_str}.dat", 
-                    opt.unstable_country_threshold,
-                    opt.reducing_factor
-                );
-                let av_name = format!(
-                    "{folder}{out_stub}_Y{year}_Th{}_R{}_{mode_str}.average", 
-                    opt.unstable_country_threshold,
-                    opt.reducing_factor
-                );
-                
-            
-                let mut buf = create_buf_with_command_and_version_and_header(out_name, header);
-                let no_shock = {
+
+                let (no_shock, flow_status) = {
                     let one = vec![1.0; import_without_unconnected.node_count()];
                     let no_shock = ShockRes{
                         import_fracs: one.clone(),
@@ -1030,6 +1022,23 @@ pub fn random_cloud_shock_helper(
                         quiet
                     )
                 };
+
+                let flow_status_name_addition = flow_status.name_addition();
+
+                let out_name = format!(
+                    "{folder}{}{out_stub}_Y{year}_Th{}_R{}_{mode_str}.dat", 
+                    flow_status_name_addition,
+                    opt.unstable_country_threshold,
+                    opt.reducing_factor
+                );
+                let av_name = format!(
+                    "{folder}{}{out_stub}_Y{year}_Th{}_R{}_{mode_str}.average", 
+                    flow_status_name_addition,
+                    opt.unstable_country_threshold,
+                    opt.reducing_factor
+                );
+            
+                let mut buf = create_buf_with_command_and_version_and_header(out_name, header);
 
                 let len = export_without_unconnected.node_count();
                 let countries_where_country_count_is_applicable = 
@@ -1098,7 +1107,7 @@ pub fn random_cloud_shock_helper(
                 
                         let percent = remaining_export / total_export;
                 
-                        let avail_after_shock = calc_available(
+                        let (avail_after_shock, _) = calc_available(
                             &export_without_unconnected, 
                             enrich, 
                             &shock_result, 
@@ -1321,18 +1330,10 @@ where P: AsRef<Path>
                         (Box::new(fun), job, 1)
                     }
                 };
-                let mut group_out_name = "".to_owned();
-                let mut group_buf = group_files.then(
-                    ||
-                    {
-                        group_out_name = format!("{out_stub}.group");
-                        create_buf_with_command_and_version(&group_out_name)
-                    }
-                );
-                out_stub.push_str(".dat");
+
             
-                let mut buf = create_buf_with_command_and_version_and_header(&out_stub, header);
-                let no_shock = {
+
+                let (no_shock, flow_status) = {
                     let one = vec![1.0; import_without_unconnected.node_count()];
                     let no_shock = ShockRes{
                         import_fracs: one.clone(),
@@ -1346,6 +1347,17 @@ where P: AsRef<Path>
                         quiet
                     )
                 };
+                let flow_status_name_addition = flow_status.name_addition();
+                let mut group_out_name = "".to_owned();
+                let mut group_buf = group_files.then(
+                    ||
+                    {
+                        group_out_name = format!("{flow_status_name_addition}{out_stub}.group");
+                        create_buf_with_command_and_version(&group_out_name)
+                    }
+                );
+                out_stub = format!("{flow_status_name_addition}{out_stub}.dat");
+                let mut buf = create_buf_with_command_and_version_and_header(&out_stub, header);
 
                 // filter out countries that have a very small total of the item in question
                 let countries_where_country_count_is_applicable = job.unrestricted_node_idxs
@@ -1367,7 +1379,7 @@ where P: AsRef<Path>
             
                     let percent = remaining_export / total_export;
             
-                    let avail_after_shock = calc_available(
+                    let (avail_after_shock, _) = calc_available(
                         &export_without_unconnected, 
                         enrich, 
                         &shock_result, 
@@ -1485,7 +1497,12 @@ where P: AsRef<Utf8Path>
     println!("after: {total_after:e}");
     println!("difference: {:e}", total_before - total_after);
 
-    let file = File::create(opt.out)
+    let mut out = opt.out.clone();
+    if let FlowStatus::Missing(missing) = res.flow_status{
+        out = format!("MIS_{missing}_{out}");
+    }
+
+    let file = File::create(out)
         .unwrap();
     let mut buf = BufWriter::new(file);
     write_commands_and_version(&mut buf).unwrap();
@@ -1531,10 +1548,12 @@ where P: AsRef<Utf8Path>
         opt.top.get_string(),
         lazy_enrichments.item_codes_as_string_unchecked()
     );
+    // missing is None if nothing is missing
     let header = [
         "Export_fraction",
         "sum",
-        "sum_without_focus"
+        "sum_without_focus",
+        "missing"
     ];
     let mut buf = create_buf_with_command_and_version_and_header(&file_name, header);
 
@@ -1553,6 +1572,7 @@ where P: AsRef<Utf8Path>
     {
         let mut sum = KahanSum::new();
         let mut sum_without = KahanSum::new();
+        let mut flow_status = FlowStatus::AllGood;
         for s in specifiers.iter(){
             let res = calc_shock(
                 &mut lazy_networks, 
@@ -1574,11 +1594,16 @@ where P: AsRef<Utf8Path>
                     |val| sum_without.add_assign(*val)
                 );
             sum += slice_b[0];
+            flow_status = res.flow_status;
         }
         let av_without = sum_without.sum() * recip;
         sum += sum_without;
         let av = sum.sum() * recip;
-        writeln!(buf, "{e} {av} {av_without}").unwrap();
+        let status = match flow_status{
+            FlowStatus::AllGood => "None".to_owned(),
+            FlowStatus::Missing(missing) => missing
+        };
+        writeln!(buf, "{e} {av} {av_without} {status}").unwrap();
     }
     println!("created {file_name}");
 }
@@ -1765,6 +1790,9 @@ where P: AsRef<Utf8Path>
         let mut min = vec![f64::INFINITY; sum.len()];
         let mut after_shock_avail_total = vec![0.0; sum.len()];
         let mut is_top = true;
+        // Keep the warning for unused variable as reminder that
+        let mut flow_status = FlowStatus::AllGood;
+        // CURRENTLY FLOW STATUS IS IGNORED HERE!
         for (s_index, s) in specifiers.iter().enumerate(){
             let res = calc_shock(
                 &mut lazy_networks, 
@@ -1790,7 +1818,7 @@ where P: AsRef<Utf8Path>
             if is_top{
                 is_top = false;
                 let mut export = export_without_unconnected.clone();
-                // remove links that are no linger present
+                // remove links that are no longer present
                 export
                     .nodes
                     .iter_mut()
@@ -1855,7 +1883,7 @@ where P: AsRef<Utf8Path>
                     }
                 );
             write_res(&mut buf_import, e, import_iter);
-
+            flow_status = res.flow_status;
         }
         is_first = false;
         sum.iter_mut()
@@ -1928,9 +1956,6 @@ where P: AsRef<Utf8Path>
             write_sorted(&max, &name);
             max_names.push((e, name));
         }
-        
-
-        
 
         write_res(&mut buf_abs, e, abs);
         write_res(&mut buf_var, e, variance);
@@ -2264,9 +2289,15 @@ where P: AsRef<Utf8Path>
                 &mut lazy_enrichment
             );
 
+            let mut flow_status_name_addition = "";
+            if matches!(res.flow_status, FlowStatus::Missing(_)){
+                flow_status_name_addition = "MIS_";
+            }
+
             
             let name_stub = format!(
-                "{}_{}_y{}_e{e}.dat", 
+                "{}{}_{}_y{}_e{e}.dat",
+                flow_status_name_addition, 
                 s.get_string(), 
                 enrich_item_name_string, 
                 opt.year
@@ -2277,7 +2308,8 @@ where P: AsRef<Utf8Path>
             if is_first{
                 gp_names.push(
                     format!(
-                        "{}_item{}_y{}_e{e}", 
+                        "{}{}_item{}_y{}_e{e}",
+                        flow_status_name_addition, 
                         s.get_short_str(), 
                         enrich_item_name_string, 
                         opt.year
@@ -2493,14 +2525,38 @@ where I: IntoIterator<Item = GnuplotHelper>
     writeln!(buf, "\nset output")
 }
 
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum FlowStatus{
+    AllGood,
+    Missing(String)
+}
+
+impl FlowStatus{
+    fn name_addition(&self) -> &'static str
+    {
+        match self{
+            Self::AllGood => {
+                ""
+            },
+            Self::Missing(_) => {
+                "MIS_"
+            }
+        }
+    }
+}
+
 fn calc_available(
     network: &Network,
     enrich: &BTreeMap<String, ExtraInfo>,
     shock: &ShockRes,
     node_map: &ExtraInfoMap,
     quiet: bool
-) -> Vec<f64>
+) -> (Vec<f64>, FlowStatus)
 {
+    let mode_lock = MODE.read().unwrap();
+    let mode = mode_lock.deref();
+    dbg!(mode);
     let inverted = network.invert();
     let (import, export) = match network.direction{
         Direction::ExportTo => (&inverted, network),
@@ -2512,12 +2568,13 @@ fn calc_available(
 
 
     let production_id = node_map.get(PRODUCTION);
+    let stock_id = node_map.get(STOCK);
+    let stock_variation_id = node_map.get(STOCK_VARIATION);
+    let mut at_least_some_stock = false;
+    let mut at_least_some_stock_variation = false;
     let mut at_least_some_production = false;
     let unit = &import.unit;
     let unit_tester = UNIT_TESTER.deref();
-
-    //let stock_id = node_map.get("Stocks");
-    //let mut at_least_some_stock = false;
 
 
     let res =(0..original_export.len())
@@ -2537,13 +2594,33 @@ fn calc_available(
                         total += production.amount;
                         at_least_some_production = true;
                     }
-                    //if let Some(stock) = extra.map.get(&stock_id){
-                    //    assert!(unit_tester.is_equiv(unit, &stock.unit));
-                    //    total += stock.amount;
-                    //    at_least_some_stock = true;
-                    //}
 
-                    // TODO Stock variation
+                    match mode {
+                        SimulationMode::Classic => {
+                            // Noting additional needs to be done in classic case
+                        },
+                        SimulationMode::WithStockVariation => {
+                            // negative sign 
+                            // -> negative stock variation means 
+                            //    that the country took something out of the stock and into
+                            //    the market (or whatever else)
+                            if let Some(stock_variation) = extra.map.get(&stock_variation_id){
+                                assert!(unit_tester.is_equiv(unit, &stock_variation.unit));
+                                at_least_some_stock_variation = true;
+                                total -= stock_variation.amount;
+                            }
+                        },
+                        SimulationMode::OnlyStock => {
+                            // In this mode we tread the stock similar to 
+                            // production. It is completely available and
+                            // we can IGNORE the STOCK VARIATION
+                            if let Some(stock) = extra.map.get(&stock_id){
+                                assert!(unit_tester.is_equiv(unit, &stock.unit));
+                                at_least_some_stock = true;
+                                total += stock.amount;
+                            }
+                        }
+                    }
                 }
                 // think about what to do if total is negative
                 if !quiet && total < 0.0 {
@@ -2554,19 +2631,43 @@ fn calc_available(
             }
         ).collect();
 
-    
-    //if !at_least_some_stock{
-    //    eprintln!("WARNING: NO STOCK DATA")
-    //}
-    if !quiet{
-        if !at_least_some_production{
+    let mut missing = String::new();
+
+    if !at_least_some_production{
+        missing.push_str("Production");
+        if !quiet{
             eprintln!("No production data!")
         }
-        assert!(at_least_some_production, "No production data!");
-        eprintln!("Stock Variation data is unimplemented! STOCK data unimplemented!");
     }
-    
-    res
+    match mode{
+        SimulationMode::Classic => {
+            // ignore
+        },
+        SimulationMode::OnlyStock => {
+            if !at_least_some_stock{
+                missing.push_str("Stock");
+                if !quiet{
+                    eprintln!("No stock data!")
+                }
+            }
+        },
+        SimulationMode::WithStockVariation => {
+            if !at_least_some_stock_variation{
+                missing.push_str("Stockvariation");
+                if !quiet{
+                    eprintln!("No stock variation data!")
+                }
+            } 
+        }
+    }
+
+    drop(mode_lock);
+    let status = if missing.is_empty(){
+        FlowStatus::AllGood
+    } else {
+        FlowStatus::Missing(missing)
+    };
+    (res, status)
 
 }
 
