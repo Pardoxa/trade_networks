@@ -2865,15 +2865,19 @@ pub fn check_quick_and_dirty(
     year: i32
 ) -> bool
 {
+    let mode_lock = MODE.read().unwrap();
+    let mode = mode_lock.deref();
     eprint!("Y {year} - ");
     let import_dir = network.get_network_with_direction(Direction::ImportFrom);
     let production_key = GLOBAL_NODE_INFO_MAP.get(PRODUCTION);
+    let stock_key = GLOBAL_NODE_INFO_MAP.get(STOCK);
+    let stock_variation_key = GLOBAL_NODE_INFO_MAP.get(STOCK_VARIATION);
     let mut is_good = true;
     for idx in top{
         let id = network.nodes[*idx]
             .identifier
             .as_str();
-        let production = match enrich.get(id){
+        let extra = match enrich.get(id){
             Some(p) =>  p,
             None => {
                 eprintln!("product_ID {product_id} has no Extra - idx {idx}");
@@ -2881,7 +2885,7 @@ pub fn check_quick_and_dirty(
                 continue;
             }
         };
-        let production = production.map.get(&production_key);
+        let production = extra.map.get(&production_key);
         let production = match production{
             Some(e) => e.amount,
             None => {
@@ -2891,13 +2895,34 @@ pub fn check_quick_and_dirty(
             }
         };
         let vs = network.nodes[*idx].trade_amount();
-        if production < vs {
+
+        let item_available_from_self = match mode {
+            SimulationMode::Classic => {
+                production
+            },
+            SimulationMode::OnlyStock => {
+                let stock = match extra.map.get(&stock_key){
+                    None => 0.0,
+                    Some(extra_item) => extra_item.amount
+                };
+                stock + production
+            },
+            SimulationMode::WithStockVariation => {
+                let stock_variation = match extra.map.get(&stock_variation_key){
+                    None => 0.0,
+                    Some(extra_item) => extra_item.amount
+                };
+                stock_variation + production
+            }
+        };
+        if item_available_from_self < vs {
             let import = import_dir.nodes[*idx].trade_amount();
-            let frac = vs / production;
-            eprintln!("P < T  P: {production} E: {vs} I: {import} F: {frac} product_ID {product_id} - idx {idx}");
+            let frac = vs / item_available_from_self;
+            eprintln!("SELF < T  SELF: {item_available_from_self} E: {vs} I: {import} F: {frac} product_ID {product_id} - idx {idx}");
             is_good = false;
         }
     }
+    drop(mode_lock);
     if is_good{
         eprintln!("Product {product_id} is good");
     }
