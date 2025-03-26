@@ -2912,7 +2912,7 @@ pub fn check_quick_and_dirty(
                     None => 0.0,
                     Some(extra_item) => extra_item.amount
                 };
-                stock_variation + production
+                production - stock_variation
             }
         };
         if item_available_from_self < vs {
