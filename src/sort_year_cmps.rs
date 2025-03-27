@@ -98,14 +98,14 @@ pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
     
     dbg!(&glob);
     let mut list = utf8_path_iter(&glob)
-        .map(
+        .filter_map(
             |path|
             {
                 let item_id = path.parent().unwrap().as_str().to_owned();
                 let mut maximum: f64 = 0.0;
                 let mut abs_sum = 0.0;
                 let mut total: u32 = 0;
-                open_as_unwrapped_lines_filter_comments(path)
+                open_as_unwrapped_lines_filter_comments(path.as_path())
                     .for_each(
                         |line|
                         {
@@ -137,7 +137,13 @@ pub fn sorting_stuff(opt: Comparison) -> Vec<(String, NotNan<f64>)>
                     How::Max =>  maximum,
                     _ => abs_sum / total as f64
                 };
-                (item_id, NotNan::new(result).unwrap())
+                if result.is_nan(){
+                    eprintln!("error with {path:?}");
+                    None
+                } else {
+                    Some((item_id, NotNan::new(result).unwrap()))
+                }
+                
             }
         ).collect_vec();
 
