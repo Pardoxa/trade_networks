@@ -98,6 +98,9 @@ fn main() {
         },
         CmdChooser::StockAnalysis(opt) => {
             analyze_stock(opt);
+        },
+        CmdChooser::FilterAddTradeG(opt) => {
+            network::main_execs::g_filter(opt);
         }
     }
 }

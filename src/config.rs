@@ -244,7 +244,26 @@ pub enum CmdChooser{
     /// Print maximal difference between reported import and corresponding reported export
     ImportExportDiff(ImportExportDiffOpts),
     /// Analyze stocks of FAO file
-    StockAnalysis(StockOpt)
+    StockAnalysis(StockOpt),
+    /// Filter G values by trade volume - add trade volume to files
+    FilterAddTradeG(FilterAddTradeGOpts)
+}
+
+#[derive(Debug, Clone, Parser)]
+pub struct FilterAddTradeGOpts
+{
+    /// File containing the G data
+    #[arg(long, short)]
+    pub g_file: Utf8PathBuf,
+    /// The years used for filtering - using minimum
+    #[arg(long, short)]
+    pub years: Vec<i32>,
+    /// Trade matrix file used for the filtering
+    #[arg(long)]
+    pub trade_matrix_folder: Utf8PathBuf,
+    /// threshold value
+    #[arg(long)]
+    pub threshold: f64
 }
 
 #[derive(Debug, Clone, Parser)]
