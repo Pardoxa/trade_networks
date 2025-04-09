@@ -28,6 +28,10 @@ pub fn g_filter(opt: FilterAddTradeGOpts)
         header
     );
 
+    let mut counter = 0_u16;
+    let mut min_top_10 = f64::MAX;
+    let mut min_item_name = "".to_owned();
+
     for line in line_iter{
         if line.starts_with('#'){
             writeln!(out, "{line}").unwrap();
@@ -65,15 +69,23 @@ pub fn g_filter(opt: FilterAddTradeGOpts)
         if minimum.into_inner() < opt.threshold{
             continue;
         }
-
-        write!(out, "{g} {id} {minimum}").unwrap();
-        for other in cols{
-            write!(out, " {other}").unwrap();
+        let mut rest = String::new();
+        for other in cols {
+            rest.push(' ');
+            rest.push_str(other);
         }
-        writeln!(out).unwrap();
+
+        writeln!(out, "{g} {id} {minimum}{rest}").unwrap();
+
+        counter = counter.saturating_add(1);
+        if counter <= 10 && min_top_10 > minimum.into_inner() {
+            min_top_10 = minimum.into_inner();
+            min_item_name = rest;
+        }
 
     }
-    
 
+    writeln!(out, "#minimum trade of top 10: {min_top_10} of item {min_item_name}").unwrap();
+    println!("minimum trade of top 10: {min_top_10} of item {min_item_name}");
     
 }
