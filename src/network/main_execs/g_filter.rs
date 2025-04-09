@@ -8,6 +8,11 @@ use super::super::Node;
 pub fn g_filter(opt: FilterAddTradeGOpts)
 {
     
+    let stem = opt.g_file
+        .file_stem()
+        .unwrap();
+
+    let new_filename = format!("{stem}_{}.new", opt.threshold);
 
     let line_iter = open_as_unwrapped_lines(opt.g_file);
 
@@ -19,7 +24,7 @@ pub fn g_filter(opt: FilterAddTradeGOpts)
     ];
 
     let mut out = create_buf_with_command_and_version_and_header(
-        "test.dat",
+        new_filename,
         header
     );
 
@@ -38,7 +43,7 @@ pub fn g_filter(opt: FilterAddTradeGOpts)
 
         let mut network_path = opt.trade_matrix_folder.clone();
         network_path.push(format!("{id}.bincode"));
-        dbg!(&network_path);
+        
         let mut network = LazyNetworks::Filename(network_path);
         network.assure_availability();
 
