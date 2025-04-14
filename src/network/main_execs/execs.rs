@@ -2,7 +2,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use enriched_digraph::ExtraInfo;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
-use crate::{network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, TOTAL_POPULATION}, parser::{country_map, id_map, parse_all_networks}, partition};
+use crate::{network::enriched_digraph::{LazyEnrichmentInfos, PRODUCTION, STOCK, TOTAL_POPULATION}, parser::{country_map, id_map, parse_all_networks}, partition};
 use fs_err::File;
 use {
     std::{
@@ -1527,7 +1527,23 @@ pub fn print_network_info(opt: OnlyNetworks)
         let print_enrichment = |year: i32, id: &str|
         {
             if let Some(enrichment) = enriched{
+                let sorted_item_codes_enrich = enrichment.get_item_codes_unchecked();
+                let sorted_item_codes_network = &n.sorted_item_codes;
+                assert_eq!(
+                    sorted_item_codes_network.len(),
+                    sorted_item_codes_enrich.len(),
+                    "Item code error - number of item codes differs"
+                );
+                for (item_code_enrich, item_code_network) in sorted_item_codes_enrich.iter().zip(n.sorted_item_codes.iter()){
+                    assert_eq!(
+                        item_code_enrich, 
+                        item_code_network,
+                        "Item codes do not match!"
+                    );
+                }
+
                 let production_idx = enrichment.extra_info_idmap_unchecked().get(PRODUCTION);
+                
                 let info = enrichment
                     .get_year_unchecked(year)
                     .get(id);
@@ -1551,19 +1567,42 @@ pub fn print_network_info(opt: OnlyNetworks)
             without_unconnected.node_count()
         );
 
+        let mut total_trade_amount = 0.0;
+
         let mut list = without_unconnected
             .nodes
             .iter()
             .map(
                 |n|
                 {
+                    let trade_amount = n.trade_amount();
+                    total_trade_amount += trade_amount;
                     (
-                        OrderedFloat(n.trade_amount()),
+                        OrderedFloat(trade_amount),
                         n.identifier.as_str()
                     )
                 }
             ).collect_vec();
         list.sort_unstable_by_key(|item| Reverse(item.0));
+
+        // compare stock and trade
+        if let Some(enrichment) = enriched
+        {
+            let stock_idx = enrichment.extra_info_idmap_unchecked()
+                .get(STOCK);
+            let mut total_stock = 0.0;
+            let extra_list = enrichment.get_year_unchecked(n.year);
+            for info in extra_list.values()
+            {
+                if let Some(stock_extra) = info.map.get(&stock_idx)
+                {
+                    total_stock += stock_extra.amount;
+                }
+            }
+            let stock_div_trade = total_stock / total_trade_amount;
+            println!("STOCK SUM: {total_stock}; Total stock / Total trade: {stock_div_trade}");
+        }
+
 
         let which = match without_unconnected.direction{
             Direction::ExportTo => "export",
@@ -1598,8 +1637,9 @@ pub fn print_network_info(opt: OnlyNetworks)
                     let country = c_map.get(*id).unwrap();
                     print!("{country} ");
                 }
+                let relative_trade = trade / total_trade_amount;
                 print!(
-                    "ID: {id}, trade_amount: {trade} "
+                    "ID: {id}, trade_amount: {trade} relative_to_total_trade: {relative_trade}"
                 );
                 print_infos(node, &without_unconnected);
                 top_trade_sum += node.trade_amount();
@@ -1607,7 +1647,8 @@ pub fn print_network_info(opt: OnlyNetworks)
                 println!();
             }
             if top_trade_sum != 0.0 {
-                println!("Top trade sum: {top_trade_sum}");
+                let relative_trade = top_trade_sum / total_trade_amount;
+                println!("Top trade sum: {top_trade_sum}; Top trade corresponds to fraction {relative_trade}");
             }
         }
 
